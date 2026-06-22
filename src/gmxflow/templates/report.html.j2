@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Relatório gmxflow - {{ project.name | default("-") }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 32px; color: #1f2933; }
+    h1, h2 { color: #102a43; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0 24px; }
+    .summary-card { border: 1px solid #d9e2ec; padding: 12px; background: #f8fafc; }
+    .summary-card strong { display: block; color: #52606d; font-size: 0.85rem; margin-bottom: 6px; }
+    .warning { border-left: 4px solid #d97706; background: #fff7ed; padding: 10px 12px; margin: 8px 0; }
+    table { border-collapse: collapse; width: 100%; margin: 16px 0 28px; }
+    th, td { border: 1px solid #d9e2ec; padding: 8px 10px; text-align: left; }
+    th { background: #f0f4f8; }
+    figure { margin: 0 0 28px; }
+    img { max-width: 100%; height: auto; border: 1px solid #d9e2ec; }
+    figcaption { color: #52606d; font-size: 0.9rem; margin-top: 6px; }
+    .file-list { columns: 2; padding-left: 18px; }
+  </style>
+</head>
+<body>
+  <h1>{{ project.name | default("-") }}</h1>
+  <p>{{ project.description | default("-") }}</p>
+  <h2>Resumo executivo</h2>
+  <div class="summary-grid">
+    {% for metric in executive_summary.metrics %}
+    <div class="summary-card">
+      <strong>{{ metric.label }}</strong>
+      <span>{{ metric.value }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% if executive_summary.warnings %}
+  <h3>Avisos</h3>
+  {% for warning in executive_summary.warnings %}
+  <div class="warning">{{ warning }}</div>
+  {% endfor %}
+  {% endif %}
+  <h2>Execução</h2>
+  <p>{{ execution.completed_steps }}/{{ execution.total_steps }} etapas concluídas; {{ execution.failed_steps | length }} falhas.</p>
+  {% if execution.steps %}
+  <table>
+    <thead>
+      <tr>
+        <th>Etapa</th>
+        <th>Status</th>
+        <th>Ignorada</th>
+        <th>Duração</th>
+        <th>Retorno</th>
+        <th>Log</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for step in execution.steps %}
+      <tr>
+        <td>{{ step.name }}</td>
+        <td>{{ step.status }}</td>
+        <td>{{ "sim" if step.skipped else "não" }}</td>
+        <td>{{ "%.3f" | format(step.elapsed_seconds) }}s</td>
+        <td>{{ step.returncode }}</td>
+        <td>
+          {% if step.log_path %}
+          <a href="{{ step.log_path }}">{{ step.log_path }}</a>
+          {% else %}
+          -
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <h2>Resumo das análises</h2>
+  {% for section in sections %}
+  <h3>{{ section.title }}</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Métrica</th>
+        <th>Média</th>
+        <th>Desvio</th>
+        <th>Mínimo</th>
+        <th>Máximo</th>
+        <th>N</th>
+        <th>Fração &gt; 0</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for summary in section.metrics %}
+      <tr>
+        <td>{{ summary.label }}</td>
+        <td>{{ "%.3f" | format(summary.mean) }} {{ summary.unit }}</td>
+        <td>{{ "%.3f" | format(summary.std) }}</td>
+        <td>{{ "%.3f" | format(summary.minimum) }}</td>
+        <td>{{ "%.3f" | format(summary.maximum) }}</td>
+        <td>{{ summary.points }}</td>
+        <td>
+          {% if summary.fraction_positive is none %}
+          -
+          {% else %}
+          {{ "%.3f" | format(summary.fraction_positive) }}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+  <h2>Figuras</h2>
+  {% for path in plots %}
+  <figure>
+    <img src="{{ path }}" alt="{{ path }}">
+    <figcaption>{{ path }}</figcaption>
+  </figure>
+  {% endfor %}
+  {% if data_files %}
+  <h2>Dados</h2>
+  <ul class="file-list">
+    {% for path in data_files %}
+    <li><a href="{{ path }}">{{ path }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</body>
+</html>

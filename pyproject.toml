@@ -1,0 +1,32 @@
+[project]
+name = "gmxflow"
+version = "0.1.0"
+description = "CLI para preparar, executar e analisar pipelines de dinâmica molecular com GROMACS"
+readme = "README.md"
+authors = [
+    { name = "Michel Lacerda", email = "michel.lacerda@ufv.br" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "jinja2>=3.1.6",
+    "matplotlib>=3.10.9",
+    "networkx>=3.6.1",
+    "numpy>=2.4.6",
+    "pydantic>=2.13.4",
+    "rich>=15.0.0",
+    "typer>=0.25.1",
+]
+
+[project.scripts]
+gmxflow = "gmxflow.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.14",
+]
