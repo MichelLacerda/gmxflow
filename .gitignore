@@ -16,6 +16,4 @@ pytest_cache/
 
 
 # Temp
-docs/
-examples/
 misc/

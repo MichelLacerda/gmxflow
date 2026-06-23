@@ -96,6 +96,42 @@ def test_prepare_complex_uses_charmm_histidine_names(tmp_path: Path) -> None:
     assert "HSD A   1" in result.receptor_pdb.read_text(encoding="utf-8")
 
 
+def test_prepare_complex_removes_small_molecule_from_receptor_input(tmp_path: Path) -> None:
+    receptor = tmp_path / "receptor.pdb"
+    ligand = tmp_path / "ligand.pdb"
+    output_dir = tmp_path / "prep"
+    receptor.write_text(
+        "\n".join(
+            [
+                _atom(1, "N", "MET", "A", 1, 0, 0, 0, "N"),
+                _atom(2, "C4", "JZ4", "A", 167, 1, 1, 1, "C", record_type="HETATM"),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    ligand.write_text(
+        _atom(1, "C4", "JZ4", "A", 167, 1, 1, 1, "C", record_type="HETATM") + "\n",
+        encoding="utf-8",
+    )
+
+    result = prepare_complex(
+        receptor,
+        ligand,
+        output_dir,
+        ph=7.4,
+        ligand_kind="small_molecule",
+        ligand_resname="JZ4",
+    )
+
+    receptor_text = result.receptor_pdb.read_text(encoding="utf-8")
+    complex_text = result.complex_pdb.read_text(encoding="utf-8")
+    assert "JZ4 A" not in receptor_text
+    assert complex_text.count("JZ4 B") == 1
+    assert result.receptor_atoms == 1
+    assert result.ligand_atoms == 1
+
+
 def test_prepare_complex_refuses_overwrite_without_force(tmp_path: Path) -> None:
     receptor = tmp_path / "receptor.pdb"
     ligand = tmp_path / "ligand.pdb"
@@ -143,8 +179,9 @@ def _atom(
     y: float,
     z: float,
     element: str,
+    record_type: str = "ATOM",
 ) -> str:
     return (
-        f"ATOM  {serial:5d} {atom:<4} {residue:<3} {chain}{resid:4d}"
+        f"{record_type:<6}{serial:5d} {atom:<4} {residue:<3} {chain}{resid:4d}"
         f"    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           {element:>2}"
     )

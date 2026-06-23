@@ -166,6 +166,44 @@ def test_small_molecule_pipeline_adds_ligand_topology_step(tmp_path: Path) -> No
     ]
 
 
+def test_charmm_small_molecule_protein_topology_selects_standard_termini(
+    tmp_path: Path,
+) -> None:
+    config = default_config("charmm_termini_test")
+    config.input.ligand_kind = "small_molecule"
+    config.input.ligand_mol2 = "inputs/jz4.mol2"
+    config.input.ligand_str = "inputs/jz4.str"
+    config.force_field.name = "charmm36-feb2026_cgenff-5.0"
+
+    steps = build_pipeline(config, config_dir=tmp_path)
+    protein_topology = next(step for step in steps if step.name == "protein-topology")
+
+    assert protein_topology.stdin == "1\n0\n"
+
+
+def test_charmm_peptide_topology_selects_standard_termini_for_two_chains(
+    tmp_path: Path,
+) -> None:
+    config = default_config("charmm_peptide_termini_test")
+    config.force_field.name = "charmm36-feb2026_cgenff-5.0"
+
+    steps = build_pipeline(config, config_dir=tmp_path)
+    topology = next(step for step in steps if step.name == "topology")
+
+    assert topology.stdin == "1\n0\n1\n0\n"
+
+
+def test_pdb2gmx_terminal_selections_override_auto_policy(tmp_path: Path) -> None:
+    config = default_config("custom_termini_test")
+    config.force_field.name = "charmm36-feb2026_cgenff-5.0"
+    config.pdb2gmx.terminal_selections = ["8", "7"]
+
+    steps = build_pipeline(config, config_dir=tmp_path)
+    topology = next(step for step in steps if step.name == "topology")
+
+    assert topology.stdin == "8\n7\n"
+
+
 def test_small_molecule_strict_inputs_requires_mol2_and_stream(
     tmp_path: Path,
 ) -> None:

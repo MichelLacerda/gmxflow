@@ -153,6 +153,34 @@ def test_prepare_ligand_rejects_atom_mismatch_between_mol2_and_stream(
         prepare_ligand(config, project_root=tmp_path, force_field_dir=force_field)
 
 
+def test_prepare_ligand_allows_cgenff_hydrogen_renaming(
+    tmp_path: Path, monkeypatch
+) -> None:
+    inputs = tmp_path / "inputs"
+    inputs.mkdir()
+    _write_mol2(inputs / "lig.mol2", atoms=("C1", "H", "H"))
+    _write_stream(inputs / "lig.str", atoms=("C1", "H1", "H2"))
+    force_field = tmp_path / "charmm36.ff"
+    force_field.mkdir()
+
+    def fake_run(command, cwd, text, capture_output, check):
+        cwd.joinpath("jz4.itp").write_text("itp", encoding="utf-8")
+        cwd.joinpath("jz4.prm").write_text("prm", encoding="utf-8")
+        cwd.joinpath("jz4.top").write_text("top", encoding="utf-8")
+        _write_pdb(cwd.joinpath("jz4_ini.pdb"), atoms=("C1", "H1", "H2"))
+        return SimpleNamespace(stdout="ok", stderr="", returncode=0)
+
+    monkeypatch.setattr("gmxflow.ligand.subprocess.run", fake_run)
+    config = default_config("ligand_hydrogen_rename_test")
+    config.input.ligand_mol2 = "inputs/lig.mol2"
+    config.input.ligand_str = "inputs/lig.str"
+    config.input.ligand_resname = "JZ4"
+
+    result = prepare_ligand(config, project_root=tmp_path, force_field_dir=force_field)
+
+    assert "Nomes de hidrogênios diferem" in result.warnings[0]
+
+
 def test_prepare_ligand_warns_for_high_cgenff_penalty(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -33,6 +33,8 @@ def prepare_complex(
     output_dir: Path,
     ph: float,
     force_field_name: str = "",
+    ligand_kind: str = "peptide",
+    ligand_resname: str = "",
     disulfide_cutoff_angstrom: float = 2.5,
     force: bool = False,
 ) -> PreparedComplex:
@@ -48,6 +50,17 @@ def prepare_complex(
     ligand_out_path = output_dir / "ligante_fixed.pdb"
     complex_out_path = output_dir / "complexo.pdb"
     _check_overwrite([receptor_out_path, ligand_out_path, complex_out_path], force)
+
+    receptor_records = _filter_receptor_records(
+        receptor_records,
+        ligand_kind=ligand_kind,
+        ligand_resname=ligand_resname,
+    )
+    if not receptor_records:
+        raise ValueError(
+            f"Receptor sem registros ATOM/HETATM após remover ligante {ligand_resname}: "
+            f"{receptor_pdb}"
+        )
 
     disulfides = detect_disulfides(receptor_records, disulfide_cutoff_angstrom)
     histidine_form = histidine_form_for_ph(ph, force_field_name=force_field_name)
@@ -96,6 +109,17 @@ def prepare_complex(
         disulfide_residues=sorted(disulfides),
         histidine_form=histidine_form,
     )
+
+
+def _filter_receptor_records(
+    records: list[str],
+    ligand_kind: str,
+    ligand_resname: str,
+) -> list[str]:
+    if ligand_kind != "small_molecule" or not ligand_resname.strip():
+        return records
+    wanted = ligand_resname.strip()
+    return [record for record in records if residue_name(record) != wanted]
 
 
 def _prepare_receptor(records: list[str], disulfides: set[int], histidine_form: str) -> list[str]:

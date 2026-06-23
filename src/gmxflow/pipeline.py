@@ -75,6 +75,8 @@ def build_pipeline(
             ],
             state={
                 "input.ph": config.input.ph,
+                "input.ligand_kind": config.input.ligand_kind,
+                "input.ligand_resname": config.input.ligand_resname,
                 "force_field.name": config.force_field.name,
             },
         ),
@@ -122,7 +124,7 @@ def build_pipeline(
                         "-ignh",
                         "-ter",
                     ],
-                    stdin="0\n0\n",
+                    stdin=_terminal_selection_stdin(config, chains=1),
                     inputs=[prep / "receptor_fixed.pdb"],
                     outputs=[
                         topo / "protein.gro",
@@ -188,7 +190,7 @@ def build_pipeline(
                     "-merge",
                     "no",
                 ],
-                stdin="0\n0\n0\n0\n",
+                stdin=_terminal_selection_stdin(config, chains=2),
                 inputs=[prep / "complexo.pdb"],
                 outputs=[
                     topo / "complexo.gro",
@@ -757,6 +759,16 @@ def _local_force_field_dir(force_field_name: str, project_root: Path) -> Path | 
 
 def _neutralize_args(config: GmxFlowConfig) -> list[str]:
     return ["-neutral"] if config.solvent.neutralize else []
+
+
+def _terminal_selection_stdin(config: GmxFlowConfig, chains: int) -> str:
+    if config.pdb2gmx.terminal_selections:
+        return "\n".join(config.pdb2gmx.terminal_selections) + "\n"
+    if config.force_field.name.lower().startswith("charmm"):
+        selections = ["1", "0"] * chains
+    else:
+        selections = ["0", "0"] * chains
+    return "\n".join(selections) + "\n"
 
 
 def _mdrun_command(config: GmxFlowConfig, gmx: str, deffnm: str) -> list[str]:

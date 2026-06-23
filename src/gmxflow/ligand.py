@@ -262,13 +262,21 @@ def _validate_ligand_inputs(
         raise ValueError(f"Não foi possível detectar átomos no arquivo .mol2: {mol2_path}")
     if not stream_atoms:
         raise ValueError(f"Não foi possível detectar átomos ATOM no arquivo .str: {str_path}")
+    warnings = _stream_penalty_warnings(str_path)
     if mol2_atoms != stream_atoms:
+        if _atom_names_compatible(mol2_atoms, stream_atoms):
+            warnings.append(
+                "Nomes de hidrogênios diferem entre .mol2 e .str, mas a ordem "
+                "e os átomos pesados são compatíveis. Isso é comum quando Open Babel "
+                "gera hidrogênios genéricos como H e CGenFF renomeia para H1, H2, ..."
+            )
+            return warnings
         raise ValueError(
             "A lista de átomos do .mol2 não corresponde ao arquivo .str.\n"
             f"mol2 ({len(mol2_atoms)}): {', '.join(mol2_atoms)}\n"
             f"str ({len(stream_atoms)}): {', '.join(stream_atoms)}"
         )
-    return _stream_penalty_warnings(str_path)
+    return warnings
 
 
 def _validate_stream_resname(str_path: Path, expected_resname: str) -> None:
@@ -326,6 +334,24 @@ def _stream_atom_names(str_path: Path) -> list[str]:
             if len(parts) >= 2:
                 atoms.append(parts[1])
     return atoms
+
+
+def _atom_names_compatible(mol2_atoms: list[str], stream_atoms: list[str]) -> bool:
+    if len(mol2_atoms) != len(stream_atoms):
+        return False
+    for mol2_atom, stream_atom in zip(mol2_atoms, stream_atoms, strict=True):
+        if mol2_atom == stream_atom:
+            continue
+        if _atom_name_element(mol2_atom) != "H" or _atom_name_element(stream_atom) != "H":
+            return False
+    return True
+
+
+def _atom_name_element(name: str) -> str:
+    for char in name.strip():
+        if char.isalpha():
+            return char.upper()
+    return ""
 
 
 def _validate_generated_ligand_pdb(pdb_path: Path, expected_atoms: int) -> None:

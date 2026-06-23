@@ -75,6 +75,10 @@ class MdrunConfig(BaseModel):
     pin: str = "auto"
 
 
+class Pdb2gmxConfig(BaseModel):
+    terminal_selections: list[str] = Field(default_factory=list)
+
+
 class AnalysisConfig(BaseModel):
     ligand_chain: str = "B"
     fit_group: str = "Backbone"
@@ -104,6 +108,7 @@ class GmxFlowConfig(BaseModel):
     solvent: SolventConfig = Field(default_factory=SolventConfig)
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
     mdrun: MdrunConfig = Field(default_factory=MdrunConfig)
+    pdb2gmx: Pdb2gmxConfig = Field(default_factory=Pdb2gmxConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     plots: PlotsConfig = Field(default_factory=PlotsConfig)
 
@@ -141,6 +146,8 @@ def _toml_value(value: object) -> str:
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return str(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
     return f'"{value}"'
 
 

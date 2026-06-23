@@ -369,6 +369,43 @@ Pendente:
 - documentação detalhada do fluxo CGenFF;
 - política de compatibilidade com versões do GROMACS.
 
+## Fase 8: Notificações De Execução
+
+Status: proposta.
+
+Objetivo: avisar o usuário quando pipelines longas terminarem ou falharem, sem exigir que ele monitore o terminal durante horas ou dias.
+
+Escopo inicial proposto:
+
+- configuração opcional em TOML:
+
+```toml
+[notifications]
+email = false
+smtp_host = ""
+smtp_port = 587
+smtp_user = ""
+smtp_password_env = "GMXFLOW_SMTP_PASSWORD"
+from_email = ""
+to_email = ""
+on_success = true
+on_failure = true
+```
+
+- envio por SMTP usando `smtplib`, sem dependência extra;
+- senha lida por variável de ambiente, nunca salva diretamente no `config.toml`;
+- e-mail em sucesso final e/ou falha fatal;
+- corpo com projeto, status, etapa final ou etapa com erro, duração, host e caminho do log;
+- falha de envio tratada como aviso, nunca como falha da simulação;
+- testes com monkeypatch de `smtplib.SMTP`;
+- documentação com exemplo para servidor institucional e Gmail com app password.
+
+Evoluções futuras:
+
+- notificações por webhook;
+- integração com Telegram, Slack ou Discord;
+- envio de resumo com caminho para `outputs/report.html`.
+
 ## Prioridade Recomendada
 
 Ordem prática para os próximos passos:
@@ -386,7 +423,8 @@ Ordem prática para os próximos passos:
 11. Implementar protonação manual por resíduo.
 12. Avaliar Biopython.
 13. Avaliar PDBFixer/OpenMM.
-14. Avaliar clustering opcional e métricas avançadas, sem chamar score próprio de `HADDOCK score`.
+14. Implementar notificações opcionais de execução por e-mail.
+15. Avaliar clustering opcional e métricas avançadas, sem chamar score próprio de `HADDOCK score`.
 
 ## Critério De Maturidade
 

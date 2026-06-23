@@ -360,6 +360,8 @@ def prepare_complex(
             output_dir=output_dir,
             ph=loaded.input.ph,
             force_field_name=loaded.force_field.name,
+            ligand_kind=loaded.input.ligand_kind,
+            ligand_resname=loaded.input.ligand_resname,
             force=force,
         )
     except (FileExistsError, FileNotFoundError, ValueError) as error:

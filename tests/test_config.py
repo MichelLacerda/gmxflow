@@ -38,6 +38,7 @@ def test_config_round_trip_through_toml(tmp_path: Path) -> None:
     assert loaded.project.name == "roundtrip"
     assert loaded.input.receptor_pdb == "inputs/receptor.pdb"
     assert loaded.solvent.neutralize is True
+    assert loaded.pdb2gmx.terminal_selections == []
     assert loaded.plots.receptor_color == "#1f77b4"
     assert loaded.plots.ligand_color == "#C2185B"
 
@@ -48,6 +49,8 @@ def test_generated_toml_documents_advanced_paths_without_enabling_them() -> None
     assert "# [paths]" in toml
     assert '# work_dir = "work"' in toml
     assert "\n[paths]\n" not in toml
+    assert "\n[pdb2gmx]\n" in toml
+    assert "terminal_selections = []" in toml
     assert "\n[plots]\n" in toml
     assert 'receptor_color = "#1f77b4"' in toml
 
