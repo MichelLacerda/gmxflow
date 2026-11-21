@@ -69,6 +69,12 @@ class GmxFlowProject:
         """Return the directory containing the project's configuration."""
         return self.config_path.parent
 
+    def show_report(self) -> None:
+        """Display the generated report inline in a Jupyter notebook."""
+        from gmxflow.notebook import show_report
+
+        show_report(self.root, self.config)
+
     def plan(
         self,
         *,

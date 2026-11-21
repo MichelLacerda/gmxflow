@@ -169,7 +169,7 @@ Valores aceitos:
 
 Essas opções gravam o `project.toml` inicial. Quando `--profile smoke` é usado, os `.mdp` iniciais também já são renderizados com 10 passos para NVT, NPT e produção.
 
-Todo projeto criado também inclui `project.ipynb`, um ponto de entrada para validar, executar e consultar o relatório no Jupyter. Selecione um kernel Conda/Micromamba com `gmxflow` e GROMACS instalados. A API usada pelo notebook ainda é experimental.
+Todo projeto criado também inclui `project.ipynb`, um ponto de entrada para validar, executar e consultar o relatório no Jupyter. O relatório é exibido no notebook com resumo, tabelas nativas e gráficos Matplotlib interativos, com toolbar; a versão distribuível fica em `outputs/report.html`. Selecione um kernel Conda/Micromamba com `gmxflow` e GROMACS instalados. A API usada pelo notebook ainda é experimental.
 
 Para criar em outro diretório:
 

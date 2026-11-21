@@ -138,7 +138,7 @@ def _render_readme(config: GmxFlowConfig) -> str:
 
 Este projeto contém a configuração e a estrutura de diretórios para uma pipeline de dinâmica molecular com GROMACS.
 
-Para trabalhar no Jupyter, abra `project.ipynb` usando um kernel que tenha `gmxflow` e GROMACS instalados. A API usada pelo notebook ainda é experimental.
+Para trabalhar no Jupyter, abra `project.ipynb` usando um kernel que tenha `gmxflow` e GROMACS instalados. Após `project.run()`, `project.show_report()` exibe resumo, tabelas nativas e gráficos Matplotlib interativos com toolbar; o HTML distribuível fica em `outputs/report.html`. A API usada pelo notebook ainda é experimental.
 
 ## Como usar
 

@@ -20,6 +20,9 @@ dependencies = [
 [project.scripts]
 gmxflow = "gmxflow.cli:app"
 
+[project.optional-dependencies]
+notebook = ["ipython>=8", "ipympl>=0.9", "pandas>=2"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

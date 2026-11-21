@@ -49,6 +49,7 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     assert "GmxFlowProject.open('project.toml')" in notebook_code
     assert "project.validate()" in notebook_code
     assert "project.run()" in notebook_code
+    assert "project.show_report()" in notebook_code
     assert all(not cell.get("outputs") for cell in notebook["cells"])
     assert (project_dir / "README.md").is_file()
     assert (project_dir / ".gitignore").is_file()
@@ -74,6 +75,8 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     readme_text = (project_dir / "README.md").read_text(encoding="utf-8")
     assert "## Como usar" in readme_text
     assert "## Configuração" in readme_text
+    assert "project.show_report()" in readme_text
+    assert "outputs/report.html" in readme_text
     assert "gmxflow prepare-complex --config project.toml" in readme_text
     assert "gmxflow run --config project.toml --until prepare" in readme_text
     assert "gmxflow clean --config project.toml" in readme_text

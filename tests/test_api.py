@@ -36,6 +36,22 @@ def test_open_defaults_to_project_toml_in_current_directory(
     assert project.config_path == config_path.resolve()
 
 
+def test_show_report_delegates_using_project_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
+    shown_projects: list[tuple[Path, object]] = []
+
+    monkeypatch.setattr(
+        "gmxflow.notebook.show_report",
+        lambda root, config: shown_projects.append((root, config)),
+    )
+
+    project.show_report()
+
+    assert shown_projects == [(project.root, project.config)]
+
+
 def test_plan_returns_pipeline_steps_without_creating_project_outputs(
     tmp_path: Path,
 ) -> None:

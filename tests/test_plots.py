@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from gmxflow.config import default_config
-from gmxflow.plots import generate_analysis_plots
+from gmxflow.plots import create_analysis_figures, generate_analysis_plots
 
 
 def test_generate_analysis_plots_writes_panel_and_individual_pngs(tmp_path: Path) -> None:
@@ -39,6 +39,25 @@ def test_generate_analysis_plots_writes_panel_and_individual_pngs(tmp_path: Path
     for result in results:
         assert result.output_path.is_file()
         assert result.output_path.stat().st_size > 0
+
+
+def test_create_analysis_figures_returns_matplotlib_objects_without_saving(
+    tmp_path: Path,
+) -> None:
+    analysis = tmp_path / "work" / "analysis"
+    analysis.mkdir(parents=True)
+    _write_xvg(analysis / "rmsd_backbone.xvg")
+
+    figures = create_analysis_figures(
+        default_config("plots_test"),
+        project_root=tmp_path,
+        names={"rmsd_bb"},
+    )
+
+    assert [name for name, _ in figures] == ["rmsd_bb"]
+    figure = figures[0][1]
+    assert figure.axes[0].lines
+    assert not list(analysis.glob("*.png"))
 
 
 def _write_xvg(path: Path) -> None:

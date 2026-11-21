@@ -13,10 +13,8 @@ _matplotlib_cache = Path(tempfile.gettempdir()) / "gmxflow-matplotlib"
 _matplotlib_cache.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(_matplotlib_cache))
 
-import matplotlib  # noqa: E402
-
-matplotlib.use("Agg")
 from matplotlib import pyplot as plt  # noqa: E402
+from matplotlib.figure import Figure  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
 
@@ -29,6 +27,22 @@ def generate_analysis_plots(
     config: GmxFlowConfig,
     project_root: Path,
 ) -> list[PlotResult]:
+    results: list[PlotResult] = []
+    analysis = project_root.expanduser().resolve() / "work" / "analysis"
+    for name, figure in create_analysis_figures(config, project_root):
+        output = analysis / f"{name}.png"
+        figure.savefig(output, dpi=150, bbox_inches="tight")
+        plt.close(figure)
+        results.append(PlotResult(name=name, output_path=output))
+    return results
+
+
+def create_analysis_figures(
+    config: GmxFlowConfig,
+    project_root: Path,
+    names: set[str] | None = None,
+) -> list[tuple[str, Figure]]:
+    """Build analysis figures in memory without saving or changing the data."""
     project_root = project_root.expanduser().resolve()
     analysis = project_root / "work" / "analysis"
     title = config.project.description or config.project.name
@@ -48,8 +62,10 @@ def generate_analysis_plots(
         "catalytic_occupancy": _load_xvg(analysis / "catalytic_occupancy.xvg"),
     }
 
-    results = [_plot_panel(analysis, title, datasets, config)]
-    results.extend(_plot_individuals(analysis, datasets, config))
+    results = []
+    if names is None or "painel_completo" in names:
+        results.append(_plot_panel(title, datasets, config))
+    results.extend(_plot_individuals(datasets, config, names))
     return results
 
 
@@ -71,11 +87,10 @@ def _load_xvg(path: Path) -> np.ndarray | None:
 
 
 def _plot_panel(
-    analysis: Path,
     title: str,
     datasets: dict[str, np.ndarray | None],
     config: GmxFlowConfig,
-) -> PlotResult:
+) -> tuple[str, Figure]:
     fig, axes = plt.subplots(4, 2, figsize=(14, 15))
     fig.suptitle(title, fontsize=14, fontweight="bold")
 
@@ -127,19 +142,16 @@ def _plot_panel(
         _plot_missing(axes[3, 0], "(sasa nao encontrado)")
     _plot_catalytic_distance(axes[3, 1], datasets["catalytic_distance"], config)
 
-    output = analysis / "painel_completo.png"
     fig.tight_layout()
-    fig.savefig(output, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return PlotResult(name="painel_completo", output_path=output)
+    return "painel_completo", fig
 
 
 def _plot_individuals(
-    analysis: Path,
     datasets: dict[str, np.ndarray | None],
     config: GmxFlowConfig,
-) -> list[PlotResult]:
-    results: list[PlotResult] = []
+    names: set[str] | None,
+) -> list[tuple[str, Figure]]:
+    results: list[tuple[str, Figure]] = []
     specs = {
         "rmsd_bb": ("RMSD do Backbone", "RMSD (nm)", config.plots.receptor_color),
         "rmsd_lig": ("RMSD do Ligante", "RMSD (nm)", config.plots.ligand_color),
@@ -176,6 +188,8 @@ def _plot_individuals(
     ]
 
     for name in ordered_names:
+        if names is not None and name not in names:
+            continue
         data = datasets.get(name)
         if data is None and name not in {"sasa_complexo"}:
             continue
@@ -194,10 +208,7 @@ def _plot_individuals(
         else:
             title, ylabel, color = specs[name]
             _plot_line(ax, data, ylabel=ylabel, color=color, title=title, config=config)
-        output = analysis / f"{name}.png"
-        fig.savefig(output, dpi=150, bbox_inches="tight")
-        plt.close(fig)
-        results.append(PlotResult(name=name, output_path=output))
+        results.append((name, fig))
     return results
 
 

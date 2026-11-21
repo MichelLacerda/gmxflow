@@ -56,10 +56,10 @@ gmxflow --help
 
 ## Usar O `gmxflow` Em Jupyter
 
-Instale Jupyter no mesmo ambiente onde estão GROMACS e `gmxflow`, ative esse ambiente e inicie o notebook por ele:
+Instale Jupyter e as bibliotecas para exibir os relatórios no mesmo ambiente onde estão GROMACS e `gmxflow`, ative esse ambiente e inicie o notebook por ele:
 
 ```sh
-micromamba install -n gmx_compile -c conda-forge jupyterlab python-lsp-server jupyterlab-lsp ipykernel -y
+micromamba install -n gmx_compile -c conda-forge jupyterlab python-lsp-server jupyterlab-lsp ipykernel ipython ipympl pandas -y
 micromamba activate gmx_compile
 jupyter lab
 ```
@@ -70,7 +70,7 @@ Assim, o kernel iniciado pelo Jupyter encontra os mesmos comandos `gmx` e `gmxfl
 python -m ipykernel install --user --name gmx_compile --display-name "Python (gmx_compile)"
 ```
 
-No notebook, selecione o kernel **Python (gmx_compile)**. O repositório mantém projetos prontos para abrir em [examples/smoke_peptide_complex/project.ipynb](../../examples/smoke_peptide_complex/project.ipynb) e [examples/protein_ligand_complex/project.ipynb](../../examples/protein_ligand_complex/project.ipynb). Cada pasta contém fisicamente o notebook, `project.toml` e `inputs/`; o notebook trabalha diretamente no exemplo, sem copiar arquivos em tempo de execução. O exemplo `smoke` é apenas um teste de integração, não uma simulação cientificamente interpretável. A API usada pelos notebooks ainda é experimental. Projetos criados com `gmxflow startproject` também incluem `project.ipynb`.
+No notebook, selecione o kernel **Python (gmx_compile)**. O repositório mantém projetos prontos para abrir em [examples/smoke_peptide_complex/project.ipynb](../../examples/smoke_peptide_complex/project.ipynb) e [examples/protein_ligand_complex/project.ipynb](../../examples/protein_ligand_complex/project.ipynb). Cada pasta contém fisicamente o notebook, `project.toml` e `inputs/`; o notebook trabalha diretamente no exemplo, sem copiar arquivos em tempo de execução. Após a execução, `project.show_report()` exibe resumo, tabelas nativas do pandas e gráficos Matplotlib interativos gerados a partir dos dados da análise, com controles de navegação e salvamento; não são carregados os PNGs usados no relatório distribuível. O HTML compartilhável fica em `outputs/report.html`. O extra opcional `gmxflow[notebook]` instala IPython, ipympl e pandas quando o pacote é instalado com pip. Se instalou essas bibliotecas com o Jupyter aberto, reinicie o kernel antes de consultar o relatório. O exemplo `smoke` é apenas um teste de integração, não uma simulação cientificamente interpretável. A API usada pelos notebooks ainda é experimental. Projetos criados com `gmxflow startproject` também incluem `project.ipynb`.
 
 Atualizar:
 

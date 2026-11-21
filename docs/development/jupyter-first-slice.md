@@ -23,7 +23,7 @@ Como cientista com Jupyter, Python, `gmxflow` e GROMACS disponíveis no mesmo am
 - Prever uma etapa explícita de validação antes de iniciar a execução; por ser um exemplo smoke fixo, não exigir a inspeção manual dos detalhes internos de cada etapa.
 - Executar o fluxo `smoke` por meio da API experimental `GmxFlowProject`, sem invocar a CLI ou `subprocess` diretamente no notebook.
 - A execução da API valida entradas, force field e executável GROMACS antes de preparar o workspace; preserva templates existentes e reutiliza logs e estado do executor.
-- Mostrar sucesso/falha e acesso ao relatório e aos arquivos gerados; falhas devem apontar a etapa e o log correspondente.
+- Mostrar sucesso/falha, apresentar resumo, tabelas e figuras do relatório no notebook e indicar o HTML distribuível; falhas devem apontar a etapa e o log correspondente.
 - Preservar configuração e entradas do projeto ao executar; arquivos gerados devem ficar em `work/` e `outputs/`, que são regeneráveis e ignorados pelo Git.
 - Permitir executar o notebook de cima a baixo em um kernel Conda/Micromamba limpo, com células curtas e falhas compreensíveis.
 
