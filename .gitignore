@@ -11,6 +11,5 @@ pytest_cache/
 .virtual_documents/
 .vscode/
 **/*.ipynb_checkpoints/
-.agents/
 .aws/
 .codex/

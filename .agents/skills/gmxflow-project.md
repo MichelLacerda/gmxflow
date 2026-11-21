@@ -30,18 +30,21 @@ Use this skill when working in this repository. Treat source code and tests as t
 ## Working on changes
 
 1. Inspect the relevant implementation, tests, and documentation before editing. For behavior changes, derive the contract from code and tests; use the roadmap only to understand intent.
-2. Make the smallest coherent change. When adding or changing behavior, update focused tests and relevant docs/examples in the same change.
-3. Prefer tests that verify outcomes and safety properties: config validation, command construction, pipeline state/resume behavior, file placement, and clear failures. Do not require a GPU or a full production simulation for ordinary unit tests.
-4. Run focused tests first, then the project checks appropriate to the change. The documented developer commands are `uv run pytest`, `uv run ruff check .`, and `uv run mypy src`; if `uv` is unavailable, use the active project environment’s equivalent commands and report what was run.
-5. Review the final diff for unintended changes and whitespace errors. Preserve unrelated user changes and untracked files.
+2. For a broad or multi-phase objective, first propose independently reviewable tasks. State the scope, non-goals, acceptance criteria, verification, and scientific decisions for each. Unless asked to execute the whole plan, implement only the approved/current slice and leave later phases untouched.
+3. Keep each change focused on one coherent outcome. Do not combine API design, core refactoring, notebook UX, and packaging into one implementation step unless they are inseparable for the requested outcome.
+4. Treat the human contributor as accountable for every submitted line, including AI-assisted code: the contributor must understand and be able to explain its behavior, assumptions, failure paths, and limitations. Do not recommend accepting generated code without review and verification.
+5. When scientific choices are not already specified, surface them rather than silently choosing force fields, protonation, simulation parameters, analysis methods, or interpretation of results.
+6. When adding or changing behavior, update focused tests and relevant docs/examples in the same change. Prefer tests for outcomes and safety properties: config validation, command construction, pipeline state/resume behavior, file placement, and clear failures. Do not require a GPU or full production simulation for ordinary unit tests.
+7. Run focused tests first, then project checks appropriate to the change. The documented developer commands are `uv run pytest`, `uv run ruff check .`, and `uv run mypy src`; if `uv` is unavailable, use the active project environment’s equivalent commands and report what was run.
+8. Review the final diff for unintended changes and whitespace errors. Preserve unrelated user changes and untracked files. Summarize changed behavior, verification evidence, limitations, and decisions needing human review.
 
 ## Relevant references
 
 Read only the references needed for the task:
 
-- Installation and Conda/Micromamba/Jupyter user workflow: [`docs/how-to/install-gmxflow-without-uv.md`](../../how-to/install-gmxflow-without-uv.md).
-- Configuration schema and meanings: [`docs/reference/config.md`](../../reference/config.md) and `src/gmxflow/config.py`.
-- GROMACS/CUDA environment setup: [`docs/how-to/install-gromacs-cuda.md`](../../how-to/install-gromacs-cuda.md).
-- CGenFF inputs, force-field installation, and scientific caveats: [`docs/how-to/cgenff-paramchem.md`](../../how-to/cgenff-paramchem.md), `src/gmxflow/forcefields.py`, and `src/gmxflow/ligand.py`.
-- Current implemented scope versus future work: [`ROADMAP.md`](../../../ROADMAP.md).
-- User-facing workflows and sample project: [`docs/tutorials/protein-ligand-complex.md`](../../tutorials/protein-ligand-complex.md) and `examples/`.
+- Installation and Conda/Micromamba/Jupyter user workflow: [`docs/how-to/install-gmxflow-without-uv.md`](../../docs/how-to/install-gmxflow-without-uv.md).
+- Configuration schema and meanings: [`docs/reference/config.md`](../../docs/reference/config.md) and `src/gmxflow/config.py`.
+- GROMACS/CUDA environment setup: [`docs/how-to/install-gromacs-cuda.md`](../../docs/how-to/install-gromacs-cuda.md).
+- CGenFF inputs, force-field installation, and scientific caveats: [`docs/how-to/cgenff-paramchem.md`](../../docs/how-to/cgenff-paramchem.md), `src/gmxflow/forcefields.py`, and `src/gmxflow/ligand.py`.
+- Current implemented scope versus future work: [`ROADMAP.md`](../../ROADMAP.md).
+- User-facing workflows and sample project: [`docs/tutorials/protein-ligand-complex.md`](../../docs/tutorials/protein-ligand-complex.md) and `examples/`.
