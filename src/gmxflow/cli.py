@@ -11,8 +11,9 @@ from rich.console import Console
 from rich.table import Table
 
 from gmxflow.analysis import run_analysis, run_interaction_energy, run_sasa_analysis
+from gmxflow.api import GmxFlowProject
 from gmxflow.config import load_config
-from gmxflow.executor import run_steps, run_workspace_setup, select_steps
+from gmxflow.executor import run_steps, run_workspace_setup
 from gmxflow.forcefields import (
     FORCEFIELD_ENV,
     install_forcefield,
@@ -22,7 +23,7 @@ from gmxflow.forcefields import (
     validate_forcefield_directory,
 )
 from gmxflow.ligand import prepare_ligand as prepare_ligand_files
-from gmxflow.pipeline import PipelineStep, build_pipeline
+from gmxflow.pipeline import PipelineStep
 from gmxflow.preparation import prepare_complex as prepare_complex_files
 from gmxflow.project import available_templates, create_project
 from gmxflow.report import generate_report
@@ -689,17 +690,16 @@ def run(
     ] = None,
 ) -> None:
     """Executa a pipeline ou mostra o plano detalhado em modo dry-run."""
-    loaded = load_config(config)
+    project = GmxFlowProject.open(config)
+    loaded = project.config
+    config_path = project.config_path
 
     try:
-        config_path = config.expanduser().resolve()
-        all_steps = build_pipeline(
-            loaded,
-            config_dir=config_path.parent,
-            config_path=config_path,
+        steps = project.plan(
             strict_inputs=strict_inputs,
+            from_step=from_step,
+            until=until,
         )
-        steps = select_steps(all_steps, from_step=from_step, until=until)
     except (FileNotFoundError, ValueError) as error:
         raise typer.BadParameter(str(error)) from error
 

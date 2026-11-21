@@ -41,7 +41,13 @@ def test_topology_command_uses_force_field_and_water(tmp_path: Path) -> None:
     ]
 
 
-def test_gromacs_steps_use_gmxlib_for_project_force_field(tmp_path: Path) -> None:
+def test_gromacs_steps_use_gmxlib_for_project_force_field(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("gmxflow.forcefields._installed_roots", lambda: [])
+    monkeypatch.setenv(
+        "GMXFLOW_FORCEFIELD_DIR", str(tmp_path / "user-forcefields")
+    )
     config = default_config("local_force_field_test")
     config.force_field.name = "charmm36-feb2026_cgenff-5.0"
     forcefield = tmp_path / "charmm36-feb2026_cgenff-5.0.ff"
