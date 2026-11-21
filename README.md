@@ -1,6 +1,6 @@
 # gmxflow
 
-CLI para preparar, executar e analisar pipelines de dinâmica molecular com GROMACS.
+Ferramenta para preparar, executar e analisar pipelines de dinâmica molecular com GROMACS. Hoje a interface disponível é a CLI; a direção do projeto é priorizar uma API Python simples para uso em Jupyter, mantendo a CLI como opção complementar.
 
 O foco inicial é substituir scripts shell rígidos por uma ferramenta com configuração TOML, geração de projeto, validação, dry-run, execução real, logs e testes automatizados.
 
@@ -31,10 +31,16 @@ Implementado:
 
 Ainda em evolução:
 
+- API Python orientada a projetos, simulações e resultados, com experiência guiada em Jupyter;
+- fluxo Conda/Micromamba como caminho principal de instalação e uso por cientistas;
 - parametrização automática CGenFF/ParamChem/SilcsBio;
 - validação das métricas opcionais em simulações reais completas;
 - documentação detalhada do fluxo CGenFF/ParamChem/CHARMM-GUI;
 - CI remoto, licença e política de compatibilidade com versões do GROMACS.
+
+## Contribuições
+
+Contribuições desenvolvidas com auxílio de ferramentas de inteligência artificial são bem-vindas. A pessoa que submete a contribuição é responsável por compreender integralmente o código enviado, saber explicar como ele funciona e verificar que atende ao objetivo proposto. Código gerado por IA não deve ser submetido sem revisão, compreensão e validação por quem o apresenta.
 
 ## Instalação para desenvolvimento
 
@@ -66,7 +72,7 @@ uv run gmxflow --help
 
 Para instalar como usuário final sem `uv`, veja:
 
-- [Como instalar o gmxflow sem usar uv](docs/how-to/install-gmxflow-without-uv.md).
+- [Como instalar o gmxflow em Conda/Micromamba sem usar uv](docs/how-to/install-gmxflow-without-uv.md).
 
 ## Tutoriais
 
@@ -77,7 +83,7 @@ O primeiro fluxo recomendado para usuários novos é o tutorial de complexo prot
 - [Referência do `config.toml`](docs/reference/config.md);
 - [Como preparar ligante pequeno com CGenFF/ParamChem](docs/how-to/cgenff-paramchem.md);
 - [Como instalar force fields externos no diretório central do usuário](docs/how-to/cgenff-paramchem.md#como-obter-o-charmm36cgenff-para-gromacs);
-- [Como instalar o gmxflow sem usar uv](docs/how-to/install-gmxflow-without-uv.md);
+- [Como instalar o gmxflow em Conda/Micromamba sem usar uv](docs/how-to/install-gmxflow-without-uv.md);
 - [Como instalar GROMACS com CUDA usando Micromamba](docs/how-to/install-gromacs-cuda.md).
 
 ## Comandos disponíveis

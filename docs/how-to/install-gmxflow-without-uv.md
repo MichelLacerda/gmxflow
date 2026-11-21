@@ -1,21 +1,19 @@
-# Como Instalar O gmxflow Sem Usar uv
+# Instalar O gmxflow Em Ambiente Conda/Micromamba
 
-Este guia é para usuários finais que querem usar o comando `gmxflow`, mas não querem instalar nem aprender `uv`.
+Este guia é para cientistas que usam Conda ou Micromamba e querem começar a usar o `gmxflow` sem precisar aprender `uv` ou detalhes de empacotamento Python.
 
-Para desenvolvimento do projeto, `uv` continua sendo recomendado. Para uso normal dentro de um ambiente científico, use `micromamba` e instale o `gmxflow` com `pip` dentro desse ambiente.
+Pense no ambiente Micromamba como o lugar único que reúne as ferramentas do trabalho: Python, GROMACS, `gmxflow` e, se desejado, Jupyter. Não é necessário criar uma instalação separada para “desenvolvimento” e outra para “produção”. Se você já tem um ambiente onde `gmx --version` funciona, pode instalar o `gmxflow` nele.
 
 ## Pré-Requisitos
 
 - Micromamba instalado.
 - Ambiente Micromamba com Python 3.12 ou mais novo.
 - GROMACS instalado no mesmo ambiente e acessível como `gmx`.
-- Git instalado.
 
 Confira:
 
 ```sh
 python --version
-git --version
 gmx --version
 ```
 
@@ -23,7 +21,7 @@ Se você precisa instalar GROMACS com CUDA/NVIDIA, veja:
 
 - [Como instalar GROMACS com CUDA usando Micromamba](install-gromacs-cuda.md)
 
-## Opção Recomendada: Ambiente Micromamba
+## Instalar No Ambiente Que Já Tem GROMACS
 
 Ative o ambiente onde você já usa GROMACS:
 
@@ -31,7 +29,7 @@ Ative o ambiente onde você já usa GROMACS:
 micromamba activate gmx_compile
 ```
 
-Instale dependências úteis no mesmo ambiente, se ainda não existirem:
+Se ainda não houver Python e `pip` nesse ambiente, instale-os junto com as ferramentas comuns para preparar ligantes:
 
 ```sh
 micromamba install -c conda-forge python=3.12 pip git openbabel -y
@@ -43,6 +41,8 @@ Se o GROMACS também será instalado por Micromamba, instale-o ou compile-o ness
 
 Depois instale o `gmxflow` direto do GitHub com `pip`:
 
+`python -m pip` instala no Python do ambiente Micromamba que está ativo; não cria outro ambiente.
+
 ```sh
 python -m pip install --upgrade pip
 python -m pip install "git+https://github.com/MichelLacerda/gmxflow.git"
@@ -53,6 +53,24 @@ Verifique:
 ```sh
 gmxflow --help
 ```
+
+## Usar O `gmxflow` Em Jupyter
+
+Instale Jupyter no mesmo ambiente onde estão GROMACS e `gmxflow`, ative esse ambiente e inicie o notebook por ele:
+
+```sh
+micromamba install -n gmx_compile -c conda-forge jupyterlab python-lsp-server jupyterlab-lsp ipykernel -y
+micromamba activate gmx_compile
+jupyter lab
+```
+
+Assim, o kernel iniciado pelo Jupyter encontra os mesmos comandos `gmx` e `gmxflow` disponíveis no terminal. Se você já inicia Jupyter por outro ambiente, registre o kernel uma vez enquanto `gmx_compile` estiver ativo:
+
+```sh
+python -m ipykernel install --user --name gmx_compile --display-name "Python (gmx_compile)"
+```
+
+No notebook, selecione o kernel **Python (gmx_compile)**. A interface Python/Jupyter simplificada do `gmxflow` está em desenvolvimento; por enquanto, este passo apenas garante que o notebook usa a instalação correta.
 
 Atualizar:
 
@@ -79,9 +97,9 @@ python -m pip install "git+https://github.com/MichelLacerda/gmxflow.git@v0.1.0"
 
 Enquanto o projeto estiver em `0.x`, a interface ainda pode mudar entre versões minor.
 
-## Instalação Editável Para Testar Mudanças Locais
+## Opcional: Modificar O Código Do gmxflow
 
-Use esta opção se você clonou o repositório e quer modificar o código.
+Ignore esta seção se seu objetivo é apenas usar o `gmxflow` em simulações. Ela só é necessária para quem pretende editar o próprio software.
 
 ```sh
 git clone https://github.com/MichelLacerda/gmxflow.git

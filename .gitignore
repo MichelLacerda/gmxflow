@@ -1,6 +1,3 @@
-# Global
-.*/
-
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -11,9 +8,9 @@ wheels/
 .venv
 pytest_cache/
 .ruff_cache/
-
-!/.gitignore
-
-
-# Temp
-misc/
+.virtual_documents/
+.vscode/
+**/*.ipynb_checkpoints/
+.agents/
+.aws/
+.codex/

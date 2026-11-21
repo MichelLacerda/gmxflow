@@ -2,6 +2,8 @@
 
 Este roadmap organiza a evolução do `gmxflow` de uma CLI para uma ferramenta mais robusta de preparação, execução e análise de pipelines de dinâmica molecular com GROMACS.
 
+A CLI é a interface disponível hoje. A direção de produto proposta é priorizar cientistas que trabalham em ambientes Conda/Micromamba e oferecer uma API Python de domínio, simples e voltada a pessoas, usada principalmente dentro de Jupyter; a CLI permanece como interface complementar para automação e usuários avançados.
+
 O estado atual já é adequado para desenvolvimento e para experimentos controlados de proteína + peptídeo. O fluxo proteína + ligante pequeno também está integrado para casos com parametrização externa CGenFF já disponível, mas ainda não deve ser tratado como ferramenta geral para qualquer sistema molecular.
 
 ## Estado Atual
@@ -45,6 +47,8 @@ Implementado:
 
 Limitações atuais:
 
+- a interação pública está concentrada na CLI; ainda não há API Python estável nem fluxo guiado para notebooks;
+- a instalação para usuários exige instalar o pacote Python manualmente e entender como iniciar Jupyter no ambiente correto;
 - foco principal em receptor + ligante peptídico;
 - preparação estrutural ainda simples;
 - protonação de histidina por regra fixa de pH;
@@ -374,6 +378,8 @@ Pendente:
 - documentação de instalação de GROMACS via micromamba;
 - documentação detalhada do fluxo CGenFF;
 - política de compatibilidade com versões do GROMACS.
+- instruções de usuário centradas em Conda/Micromamba e início do Jupyter pelo ambiente correto;
+- receita e canal de distribuição Conda, após estabilizar dependências e API.
 
 ## Fase 8: Notificações De Execução
 
@@ -412,23 +418,78 @@ Evoluções futuras:
 - integração com Telegram, Slack ou Discord;
 - envio de resumo com caminho para `outputs/report.html`.
 
+## Fase 9: API Python E Experiência Jupyter
+
+Status: proposta; prioridade de produto.
+
+Objetivo: permitir que cientistas configurem, executem e inspecionem um fluxo de dinâmica molecular no notebook usando conceitos e mensagens do domínio científico, sem precisar conhecer comandos internos, TOML ou detalhes do executor.
+
+Princípios:
+
+- criar uma API Python de domínio original, inspirada em boas práticas de interfaces científicas como gmxapi, sem copiar sua API nem sua arquitetura;
+- expor objetos e métodos com nomes científicos explícitos, mantendo a CLI como interface complementar para automação e usuários avançados;
+- oferecer configuração progressiva e compreensível, sem esconder parâmetros que alterem decisões científicas;
+- tornar resultados verificáveis no próprio notebook: validações, progresso por etapa, logs, figuras, tabelas, relatório e arquivos exportáveis;
+- apresentar erros acionáveis em linguagem clara, com a etapa e a correção provável;
+- priorizar Jupyter Notebook/JupyterLab local; Colab fica fora do escopo inicial.
+
+Fluxo conceitual desejado — nomes e assinaturas ainda serão definidos:
+
+```python
+project = GmxFlowProject.from_files(receptor="receptor.pdb", ligand="ligand.pdb")
+project.configure(profile="smoke", force_field="amber99sb-ildn")
+validation = project.validate()
+run = project.run()
+run.results.show()
+run.results.save("results/")
+```
+
+Entregas propostas:
+
+- separar uma camada Python pública da camada Typer, para CLI e notebooks usarem o mesmo núcleo;
+- definir ciclo de vida e modelos públicos para projeto, configuração, validação, execução e resultados;
+- criar notebook introdutório com seleção de arquivos, configuração guiada e execução de ponta a ponta;
+- pré-validar entradas, dependências e plano antes de iniciar tarefas longas;
+- incluir um exemplo `smoke` e um exemplo científico representativo, distinguindo teste de fluxo e simulação interpretável;
+- documentar estabilidade, versionamento e exemplos da API pública.
+
+## Fase 10: Distribuição Conda/Micromamba Para Usuários
+
+Status: proposta.
+
+Objetivo: fazer de Conda/Micromamba o caminho padrão de instalação e suporte para usuários científicos, sem exigir que aprendam conceitos de ambientes de desenvolvimento versus produção.
+
+Entregas propostas:
+
+- documentar uma instalação curta no ambiente que já contém GROMACS e uma configuração guiada para quem ainda não tem esse ambiente;
+- fornecer especificação de ambiente reproduzível para `gmxflow`, Python e ferramentas Jupyter, sem forçar uma build de GROMACS incompatível com o hardware disponível;
+- testar instalação e seleção do kernel Jupyter em Conda e Micromamba;
+- avaliar empacotamento e publicação Conda depois de estabilizar a API e as dependências;
+- explicar instalação, atualização e remoção como tarefas simples de usuário, sem separar a documentação em fluxos de desenvolvimento e produção.
+
+Fora do escopo inicial:
+
+- hospedar uma API HTTP;
+- prometer disponibilidade de GPU ou executar jobs em infraestrutura gerenciada pelo `gmxflow`;
+- automatizar compilação de GROMACS com CUDA para qualquer máquina.
+
 ## Prioridade Recomendada
 
 Ordem prática para os próximos passos:
 
-1. Validar energia de interação, SASA/BSA e métricas catalíticas em simulações reais completas.
-2. Documentar um fluxo HADDOCK -> gmxflow para triagem por pose representativa de cluster.
-3. Documentar fluxo CGenFF/ParamChem/CHARMM-GUI em detalhe.
-4. Melhorar validações de ligante pequeno, incluindo consistência geométrica entre `ligand.pdb` original e PDB gerado pelo conversor.
-5. Melhorar mensagens para force field CHARMM/CGenFF ausente.
-6. Expor parâmetros adicionais dos `.mdp` no TOML.
-7. Melhorar mensagens de erro e recomendações de `clean`, `--from-step` e reruns parciais.
-8. Configurar CI remoto.
-9. Adicionar licença e política de versionamento semântico.
-10. Documentar instalação para Windows + WSL e GROMACS via micromamba.
-11. Implementar protonação manual por resíduo.
-12. Avaliar Biopython.
-13. Avaliar PDBFixer/OpenMM.
+1. Definir a API Python pública de domínio para projeto, configuração, validação, execução e resultados.
+2. Separar essa API do Typer, fazendo CLI e Jupyter compartilharem o mesmo núcleo.
+3. Construir o primeiro notebook Jupyter/JupyterLab de ponta a ponta com validação, progresso e inspeção dos resultados.
+4. Consolidar a instalação Conda/Micromamba para usuário final e testar kernel, GROMACS e `gmxflow` no mesmo ambiente.
+5. Validar energia de interação, SASA/BSA e métricas catalíticas em simulações reais completas.
+6. Melhorar validações de ligante pequeno, incluindo consistência geométrica entre `ligand.pdb` original e PDB gerado pelo conversor.
+7. Documentar fluxo CGenFF/ParamChem/CHARMM-GUI em detalhe e melhorar mensagens para force field ausente.
+8. Expor parâmetros adicionais dos `.mdp` no TOML e aprimorar erros/recomendações de retomada e limpeza.
+9. Preparar empacotamento Conda depois de estabilizar a API e as dependências.
+10. Configurar CI remoto, licença e política de versionamento semântico.
+11. Documentar instalação para Windows + WSL e compatibilidade com versões do GROMACS.
+12. Documentar um fluxo HADDOCK -> gmxflow para triagem por pose representativa de cluster.
+13. Implementar protonação manual por resíduo; avaliar Biopython e PDBFixer/OpenMM.
 14. Implementar notificações opcionais de execução por e-mail.
 15. Avaliar clustering opcional e métricas avançadas, sem chamar score próprio de `HADDOCK score`.
 
