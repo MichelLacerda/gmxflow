@@ -20,6 +20,7 @@ from gmxflow.pipeline import (
     PipelineStep,
     build_pipeline,
 )
+from gmxflow.workspace import CleanResult, clean_workspace
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,24 @@ class GmxFlowProject:
         from gmxflow.notebook import show_report
 
         show_report(self.root, self.config)
+
+    def clean(
+        self,
+        *,
+        remove_templates: bool = False,
+        all_work: bool = False,
+    ) -> CleanResult:
+        """Remove generated files from ``work/`` without touching inputs or outputs.
+
+        By default, rendered ``.mdp`` templates are preserved. Set
+        ``remove_templates=True`` to remove them, or ``all_work=True`` to remove
+        and recreate the entire ``work/`` directory tree.
+        """
+        return clean_workspace(
+            project_root=self.root,
+            remove_templates=remove_templates,
+            all_work=all_work,
+        )
 
     def plan(
         self,

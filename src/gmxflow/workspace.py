@@ -30,6 +30,7 @@ class CleanResult(BaseModel):
 
 WORK_DIRS = (
     "prep",
+    "ligand",
     "topo",
     "box",
     "em",

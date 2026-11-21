@@ -44,7 +44,18 @@ def test_prepare_workspace_creates_work_directories(tmp_path: Path) -> None:
 
     prepare_workspace(config=config, project_root=tmp_path)
 
-    for directory in ("prep", "topo", "box", "em", "nvt", "npt", "prod", "analysis", "logs"):
+    for directory in (
+        "prep",
+        "ligand",
+        "topo",
+        "box",
+        "em",
+        "nvt",
+        "npt",
+        "prod",
+        "analysis",
+        "logs",
+    ):
         assert (tmp_path / "work" / directory).is_dir()
 
 
@@ -79,6 +90,18 @@ def test_clean_workspace_preserves_templates_by_default(tmp_path: Path) -> None:
     assert not state.exists()
     assert (tmp_path / "work" / "prod" / "md.mdp").is_file()
     assert tmp_path / "work" / "prod" / "md.mdp" in result.preserved_paths
+
+
+def test_clean_workspace_removes_ligand_artifacts(tmp_path: Path) -> None:
+    ligand_artifact = tmp_path / "work" / "ligand" / "jz4.itp"
+    ligand_artifact.parent.mkdir(parents=True)
+    ligand_artifact.write_text("; generated topology\n", encoding="utf-8")
+
+    result = clean_workspace(project_root=tmp_path)
+
+    assert ligand_artifact in result.removed_paths
+    assert not ligand_artifact.exists()
+    assert (tmp_path / "work" / "ligand").is_dir()
 
 
 def test_clean_workspace_removes_templates_when_requested(tmp_path: Path) -> None:

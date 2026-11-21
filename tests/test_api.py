@@ -52,6 +52,34 @@ def test_show_report_delegates_using_project_root(
     assert shown_projects == [(project.root, project.config)]
 
 
+def test_clean_removes_work_artifacts_and_preserves_project_data(tmp_path: Path) -> None:
+    project_dir = tmp_path / "api_project"
+    project = GmxFlowProject.open(_write_project_config(project_dir))
+    (project_dir / "inputs").mkdir()
+    input_file = project_dir / "inputs" / "receptor.pdb"
+    input_file.write_text("ATOM\n", encoding="utf-8")
+    outputs_dir = project_dir / "outputs"
+    outputs_dir.mkdir()
+    report = outputs_dir / "report.html"
+    report.write_text("<html></html>", encoding="utf-8")
+    artifact = project_dir / "work" / "ligand" / "ligand.itp"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("; generated\n", encoding="utf-8")
+    template = project_dir / "work" / "prod" / "md.mdp"
+    template.parent.mkdir(parents=True)
+    template.write_text("nsteps = 10\n", encoding="utf-8")
+
+    result = project.clean()
+
+    assert artifact in result.removed_paths
+    assert not artifact.exists()
+    assert template in result.preserved_paths
+    assert template.is_file()
+    assert input_file.is_file()
+    assert report.is_file()
+    assert project.config_path.is_file()
+
+
 def test_plan_returns_pipeline_steps_without_creating_project_outputs(
     tmp_path: Path,
 ) -> None:
