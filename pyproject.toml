@@ -1,6 +1,6 @@
 [project]
 name = "gmxflow"
-version = "0.1.0"
+version = "1.0.0"
 description = "CLI para preparar, executar e analisar pipelines de dinâmica molecular com GROMACS"
 readme = "README.md"
 authors = [
