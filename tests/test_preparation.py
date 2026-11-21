@@ -150,7 +150,7 @@ def test_prepare_complex_cli(tmp_path: Path) -> None:
     project = tmp_path / "project"
     inputs = project / "inputs"
     inputs.mkdir(parents=True)
-    (project / "config.toml").write_text(to_toml(default_config("cli_prepare")), encoding="utf-8")
+    (project / "project.toml").write_text(to_toml(default_config("cli_prepare")), encoding="utf-8")
     (inputs / "receptor.pdb").write_text(
         _atom(1, "N", "HIS", "A", 1, 0, 0, 0, "N") + "\n",
         encoding="utf-8",
@@ -162,7 +162,7 @@ def test_prepare_complex_cli(tmp_path: Path) -> None:
 
     from gmxflow.cli import app
 
-    result = runner.invoke(app, ["prepare-complex", "--config", str(project / "config.toml")])
+    result = runner.invoke(app, ["prepare-complex", "--config", str(project / "project.toml")])
 
     assert result.exit_code == 0
     assert "Complexo preparado:" in result.output

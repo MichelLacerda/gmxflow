@@ -30,7 +30,7 @@ def test_smoke_profile_uses_tiny_step_counts() -> None:
 
 
 def test_config_round_trip_through_toml(tmp_path: Path) -> None:
-    config_path = tmp_path / "config.toml"
+    config_path = tmp_path / "project.toml"
     config_path.write_text(to_toml(default_config("roundtrip")), encoding="utf-8")
 
     loaded = load_config(config_path)
@@ -61,7 +61,7 @@ def test_invalid_ph_is_rejected() -> None:
 
 
 def test_smoke_example_config_is_valid() -> None:
-    config = load_config(Path("examples/smoke_peptide_complex/config.toml"))
+    config = load_config(Path("examples/smoke_peptide_complex/project.toml"))
 
     assert config.project.name == "smoke_peptide_complex"
     assert config.simulation.profile == "smoke"

@@ -186,7 +186,7 @@ def validate(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
 ) -> None:
     """Valida o arquivo de configuração TOML."""
     loaded = load_config(config)
@@ -201,7 +201,7 @@ def list_residues(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
     chain: Annotated[
         str | None,
         typer.Option("--chain", help="Filtra por cadeia, por exemplo A."),
@@ -220,7 +220,7 @@ def list_residues(
     if not pdb_path.is_file():
         raise typer.BadParameter(
             f"Complexo preparado não encontrado: {pdb_path}. "
-            "Rode primeiro: gmxflow run --config config.toml --until prepare"
+            "Rode primeiro: gmxflow run --config project.toml --until prepare"
         )
 
     residues = _read_pdb_residues(pdb_path)
@@ -265,7 +265,7 @@ def plan(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
 ) -> None:
     """Mostra o plano de execução sem rodar GROMACS."""
     loaded = load_config(config)
@@ -308,7 +308,7 @@ def render_templates_command(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
     force: Annotated[
         bool,
         typer.Option(
@@ -338,7 +338,7 @@ def setup_workspace(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
 ) -> None:
     """Garante work/ e renderiza apenas templates .mdp ausentes."""
     loaded = load_config(config)
@@ -359,7 +359,7 @@ def clean(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
     templates: Annotated[
         bool,
         typer.Option("--templates", help="Remove também os .mdp renderizados."),
@@ -394,7 +394,7 @@ def prepare_complex(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
     force: Annotated[
         bool,
         typer.Option("--force", help="Permite sobrescrever arquivos de preparação."),
@@ -434,7 +434,7 @@ def prepare_ligand(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
     force_field_dir: Annotated[
         Path | None,
         typer.Option(
@@ -470,7 +470,7 @@ def assemble_complex(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
 ) -> None:
     """Monta complexo .gro e topologia para ligante pequeno."""
     loaded = load_config(config)
@@ -495,7 +495,7 @@ def solvate_system(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
 ) -> None:
     """Normaliza a topologia e adiciona solvente."""
     loaded = load_config(config)
@@ -536,7 +536,7 @@ def analyze(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
 ) -> None:
     """Executa análises principais sobre a trajetória alinhada."""
     loaded = load_config(config)
@@ -558,7 +558,7 @@ def interaction_energy(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
 ) -> None:
     """Calcula energia aproximada de interação receptor-ligante por rerun."""
     loaded = load_config(config)
@@ -580,7 +580,7 @@ def sasa(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
 ) -> None:
     """Calcula SASA e BSA aproximado para receptor-ligante."""
     loaded = load_config(config)
@@ -602,7 +602,7 @@ def plot_analysis(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
 ) -> None:
     """Gera figuras PNG a partir dos arquivos .xvg de análise."""
     from gmxflow.plots import generate_analysis_plots
@@ -622,7 +622,7 @@ def report(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
 ) -> None:
     """Gera relatório consolidado em outputs/."""
     loaded = load_config(config)
@@ -639,7 +639,7 @@ def run(
     config: Annotated[
         Path,
         typer.Option("--config", "-c", help="Arquivo TOML da pipeline."),
-    ] = Path("config.toml"),
+    ] = Path("project.toml"),
     dry_run: Annotated[
         bool,
         typer.Option(

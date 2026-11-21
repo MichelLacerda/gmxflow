@@ -1,4 +1,4 @@
-# Referência Do config.toml
+# Referência Do project.toml
 
 Exemplo gerado pelo `startproject`:
 
@@ -8,7 +8,7 @@ name = "example"
 description = "Simulação de dinâmica molecular com GROMACS"
 
 # [paths]
-# Uso avançado: por padrão, o gmxflow usa a pasta onde está o config.toml
+# Uso avançado: por padrão, o gmxflow usa a pasta onde está o project.toml
 # como raiz do projeto. Os arquivos intermediários ficam em ./work e os
 # resultados finais ficam em ./outputs. Futuramente estes campos poderão
 # redirecionar dados pesados para outro disco, SSD externo ou scratch de HPC.
@@ -100,8 +100,8 @@ Enquanto estiver comentado, não tem efeito.
 
 ### `[input]`
 
-- `receptor_pdb`: caminho do PDB do receptor, relativo ao `config.toml` ou absoluto.
-- `ligand_pdb`: caminho do PDB do ligante, relativo ao `config.toml` ou absoluto.
+- `receptor_pdb`: caminho do PDB do receptor, relativo ao `project.toml` ou absoluto.
+- `ligand_pdb`: caminho do PDB do ligante, relativo ao `project.toml` ou absoluto.
 - `ligand_kind`: tipo do ligante. Use `peptide` para ligante peptídico ou `small_molecule` para molécula pequena com topologia externa CGenFF.
 - `ligand_mol2`: arquivo `.mol2` enviado ao CGenFF/ParamChem/SilcsBio, usado por `prepare-ligand`.
 - `ligand_str`: arquivo `.str` produzido externamente pelo CGenFF/ParamChem/SilcsBio, usado por `prepare-ligand`.
@@ -197,11 +197,11 @@ terminal_selections = ["1", "0"]
 Para descobrir os números dos resíduos no complexo preparado:
 
 ```sh
-gmxflow run --config config.toml --until prepare
-gmxflow list-residues --config config.toml --chain A --resnames HIS,ASP,SER
+gmxflow run --config project.toml --until prepare
+gmxflow list-residues --config project.toml --chain A --resnames HIS,ASP,SER
 ```
 
-O comando imprime uma tabela e uma linha pronta para copiar para o `config.toml`, por exemplo:
+O comando imprime uma tabela e uma linha pronta para copiar para o `project.toml`, por exemplo:
 
 ```toml
 catalytic_residues = "57,102,195"

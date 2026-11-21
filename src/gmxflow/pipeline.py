@@ -63,7 +63,7 @@ def build_pipeline(
     ligand_pdb = _resolve_from_config(config.input.ligand_pdb, project_root)
     ligand_mol2 = _resolve_from_config(config.input.ligand_mol2, project_root)
     ligand_str = _resolve_from_config(config.input.ligand_str, project_root)
-    config_path = (config_path or (project_root / "config.toml")).expanduser().resolve()
+    config_path = (config_path or (project_root / "project.toml")).expanduser().resolve()
 
     if strict_inputs:
         _require_file(receptor_pdb)

@@ -200,7 +200,7 @@ Ative o ambiente antes de rodar:
 ```sh
 micromamba activate gmx_compile
 cd /caminho/para/gmxflow
-gmxflow validate --config examples/protein_ligand_complex/config.toml
+gmxflow validate --config examples/protein_ligand_complex/project.toml
 ```
 
 Para CPU:

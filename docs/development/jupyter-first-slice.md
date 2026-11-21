@@ -1,8 +1,8 @@
 # Primeiro Recorte: Fluxo Jupyter De Validação
 
-Status: primeiro fluxo implementado. O projeto [smoke para Jupyter](../../notebooks/smoke_peptide_complex/project.ipynb)
-está fisicamente disponível em `notebooks/`, junto com seu `config.toml` e os
-arquivos de entrada. O notebook trabalha diretamente nessa cópia versionada,
+Status: primeiro fluxo implementado. O projeto [smoke para Jupyter](../../examples/smoke_peptide_complex/project.ipynb)
+está fisicamente disponível em `examples/`, junto com seu `project.toml` e os
+arquivos de entrada. O notebook trabalha diretamente no exemplo versionado,
 sem copiar projetos durante a execução. `gmxflow startproject` também gera
 `project.ipynb` em novos projetos. O fluxo foi executado de ponta a ponta com
 Python 3.12.16 e GROMACS 2026.3. A API e o notebook continuam experimentais; o
@@ -18,8 +18,8 @@ Como cientista com Jupyter, Python, `gmxflow` e GROMACS disponíveis no mesmo am
 
 ## Dentro Do Escopo
 
-- Manter cópias físicas de projetos de `examples/` sob `notebooks/`, prontas para abrir; `examples/` continua sendo a referência de origem e suas cópias devem ser sincronizadas quando houver mudanças.
-- Gerar `project.ipynb` junto com `config.toml` pelo comando `gmxflow startproject`.
+- Manter os notebooks junto dos projetos em `examples/`, sem cópias paralelas em `notebooks/`.
+- Gerar `project.ipynb` junto com `project.toml` pelo comando `gmxflow startproject`.
 - Prever uma etapa explícita de validação antes de iniciar a execução; por ser um exemplo smoke fixo, não exigir a inspeção manual dos detalhes internos de cada etapa.
 - Executar o fluxo `smoke` por meio da API experimental `GmxFlowProject`, sem invocar a CLI ou `subprocess` diretamente no notebook.
 - A execução da API valida entradas, force field e executável GROMACS antes de preparar o workspace; preserva templates existentes e reutiliza logs e estado do executor.
@@ -40,7 +40,7 @@ Como cientista com Jupyter, Python, `gmxflow` e GROMACS disponíveis no mesmo am
 
 1. O notebook informa os pré-requisitos e valida GROMACS, force field e arquivos necessários antes da execução.
 2. Os projetos para notebook incluem fisicamente a configuração e as entradas; não há cópia de projeto em tempo de execução.
-3. A execução preserva `config.toml` e os arquivos de entrada, mantendo artefatos gerados em `work/` e `outputs/`.
+3. A execução preserva `project.toml` e os arquivos de entrada, mantendo artefatos gerados em `work/` e `outputs/`.
 4. `startproject` cria `project.ipynb` e não sobrescreve arquivos existentes sem `--force`.
 5. A interface do notebook usa a API do pacote; não exige que a pessoa conheça comandos da CLI nem esconde uma invocação de shell como se fosse API Python.
 6. O notebook expõe sucesso/falha e acesso ao relatório sem exigir que a pessoa interprete detalhes internos da pipeline.

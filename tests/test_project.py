@@ -36,7 +36,8 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     )
 
     assert project_dir == tmp_path / "mastoparan_dm"
-    assert (project_dir / "config.toml").is_file()
+    assert (project_dir / "project.toml").is_file()
+    assert not (project_dir / "config.toml").exists()
     notebook_path = project_dir / "project.ipynb"
     assert notebook_path.is_file()
     notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
@@ -45,7 +46,7 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     )
-    assert "GmxFlowProject.open('config.toml')" in notebook_code
+    assert "GmxFlowProject.open('project.toml')" in notebook_code
     assert "project.validate()" in notebook_code
     assert "project.run()" in notebook_code
     assert all(not cell.get("outputs") for cell in notebook["cells"])
@@ -61,7 +62,7 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     assert not (project_dir / "work" / ".gitkeep").exists()
     assert not (project_dir / "outputs" / ".gitkeep").exists()
 
-    config_text = (project_dir / "config.toml").read_text(encoding="utf-8")
+    config_text = (project_dir / "project.toml").read_text(encoding="utf-8")
     assert 'name = "mastoparan_dm"' in config_text
     assert 'description = "Simulação de dinâmica molecular com GROMACS"' in config_text
     assert "# [paths]" in config_text
@@ -73,13 +74,13 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     readme_text = (project_dir / "README.md").read_text(encoding="utf-8")
     assert "## Como usar" in readme_text
     assert "## Configuração" in readme_text
-    assert "gmxflow prepare-complex --config config.toml" in readme_text
-    assert "gmxflow run --config config.toml --until prepare" in readme_text
-    assert "gmxflow clean --config config.toml" in readme_text
-    assert "gmxflow render-templates --config config.toml" in readme_text
-    assert "gmxflow report --config config.toml" in readme_text
+    assert "gmxflow prepare-complex --config project.toml" in readme_text
+    assert "gmxflow run --config project.toml --until prepare" in readme_text
+    assert "gmxflow clean --config project.toml" in readme_text
+    assert "gmxflow render-templates --config project.toml" in readme_text
+    assert "gmxflow report --config project.toml" in readme_text
     assert "gmxflow startproject novo_projeto --ligand-kind small_molecule --profile smoke --gpu off" in readme_text
-    assert "gmxflow prepare-ligand --config config.toml" in readme_text
+    assert "gmxflow prepare-ligand --config project.toml" in readme_text
     assert "sudo apt install openbabel" in readme_text
     assert "obabel inputs/ligand.pdb -O inputs/ligand.mol2" in readme_text
     assert "valida a lista de átomos entre `.mol2` e `.str`" in readme_text
@@ -108,7 +109,7 @@ def test_create_project_accepts_initial_pipeline_options(tmp_path: Path) -> None
         profile="smoke",
     )
 
-    config_text = (project_dir / "config.toml").read_text(encoding="utf-8")
+    config_text = (project_dir / "project.toml").read_text(encoding="utf-8")
     assert 'ligand_kind = "small_molecule"' in config_text
     assert 'gpu = "off"' in config_text
     assert 'profile = "smoke"' in config_text

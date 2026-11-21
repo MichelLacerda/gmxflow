@@ -59,7 +59,7 @@ class GmxFlowProject:
     config: GmxFlowConfig
 
     @classmethod
-    def open(cls, config_path: str | Path = "config.toml") -> GmxFlowProject:
+    def open(cls, config_path: str | Path = "project.toml") -> GmxFlowProject:
         """Load and validate a project configuration from a TOML file."""
         path = Path(config_path).expanduser().resolve()
         return cls(config_path=path, config=load_config(path))

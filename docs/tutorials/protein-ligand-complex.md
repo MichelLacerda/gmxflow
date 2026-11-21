@@ -58,7 +58,7 @@ O diretório instalado por usuário fica, por padrão, em `~/.local/share/gmxflo
 charmm36-feb2026_cgenff-5.0.ff/
 ```
 
-e o `config.toml` deve usar:
+e o `project.toml` deve usar:
 
 ```toml
 [force_field]
@@ -76,7 +76,7 @@ examples/protein_ligand_complex/
 Arquivos centrais:
 
 ```text
-config.toml
+project.toml
 README.md
 inputs/3HTB.pdb
 inputs/JZ4.pdb
@@ -93,19 +93,19 @@ O PDB do receptor pode vir de uma estrutura cristalográfica que ainda contém o
 Valide a configuração:
 
 ```sh
-gmxflow validate --config examples/protein_ligand_complex/config.toml
+gmxflow validate --config examples/protein_ligand_complex/project.toml
 ```
 
 Inspecione o plano detalhado sem executar GROMACS:
 
 ```sh
-gmxflow run --config examples/protein_ligand_complex/config.toml --dry-run --strict-inputs
+gmxflow run --config examples/protein_ligand_complex/project.toml --dry-run --strict-inputs
 ```
 
 Execute a pipeline:
 
 ```sh
-gmxflow run --config examples/protein_ligand_complex/config.toml
+gmxflow run --config examples/protein_ligand_complex/project.toml
 ```
 
 Abra o relatório:
@@ -196,7 +196,7 @@ A pasta central esperada no Linux/macOS é:
 ~/.local/share/gmxflow/forcefields/charmm36-feb2026_cgenff-5.0.ff/
 ```
 
-Se a pasta tiver outro nome, ajuste `force_field.name`. Use `gmxflow forcefield locate charmm36-feb2026_cgenff-5.0` para verificar a cópia que será usada. Projetos antigos com a pasta `.ff` ao lado do `config.toml` continuam aceitos como fallback.
+Se a pasta tiver outro nome, ajuste `force_field.name`. Use `gmxflow forcefield locate charmm36-feb2026_cgenff-5.0` para verificar a cópia que será usada. Projetos antigos com a pasta `.ff` ao lado do `project.toml` continuam aceitos como fallback.
 
 Também confira a compatibilidade entre a versão CGenFF do force field e a versão usada para gerar o `.str` do ligante. O exemplo usa CGenFF 5.0.
 
@@ -220,7 +220,7 @@ Fatal error:
 atom C1 not found in buiding block 1MET while combining tdb and rtp
 ```
 
-O exemplo deixa essa escolha explícita no `config.toml`:
+O exemplo deixa essa escolha explícita no `project.toml`:
 
 ```toml
 [pdb2gmx]
@@ -259,7 +259,7 @@ O `gmxflow` usa `work/state.json` para registrar comandos, entradas e fingerprin
 Use:
 
 ```sh
-gmxflow run --config examples/protein_ligand_complex/config.toml --from-step ligand-topology
+gmxflow run --config examples/protein_ligand_complex/project.toml --from-step ligand-topology
 ```
 
 quando quiser refazer a partir de uma etapa específica.
@@ -267,7 +267,7 @@ quando quiser refazer a partir de uma etapa específica.
 Use:
 
 ```sh
-gmxflow clean --config examples/protein_ligand_complex/config.toml
+gmxflow clean --config examples/protein_ligand_complex/project.toml
 ```
 
 quando quiser limpar artefatos regeneráveis preservando templates `.mdp`.
@@ -309,6 +309,6 @@ catalytic_residues = ""
 Para resíduos catalíticos:
 
 ```sh
-gmxflow run --config examples/protein_ligand_complex/config.toml --until prepare
-gmxflow list-residues --config examples/protein_ligand_complex/config.toml --chain A --resnames HIS,ASP,SER
+gmxflow run --config examples/protein_ligand_complex/project.toml --until prepare
+gmxflow list-residues --config examples/protein_ligand_complex/project.toml --chain A --resnames HIS,ASP,SER
 ```

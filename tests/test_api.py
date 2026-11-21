@@ -9,7 +9,7 @@ from gmxflow.executor import StepResult
 
 def _write_project_config(project_dir: Path) -> Path:
     project_dir.mkdir(parents=True)
-    config_path = project_dir / "config.toml"
+    config_path = project_dir / "project.toml"
     config_path.write_text(to_toml(default_config(project_dir.name)), encoding="utf-8")
     return config_path
 
@@ -22,6 +22,18 @@ def test_open_loads_and_resolves_project_config(tmp_path: Path) -> None:
     assert project.config_path == config_path.resolve()
     assert project.root == config_path.parent.resolve()
     assert project.config.project.name == "api_project"
+
+
+def test_open_defaults_to_project_toml_in_current_directory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project_dir = tmp_path / "default_project"
+    config_path = _write_project_config(project_dir)
+    monkeypatch.chdir(project_dir)
+
+    project = GmxFlowProject.open()
+
+    assert project.config_path == config_path.resolve()
 
 
 def test_plan_returns_pipeline_steps_without_creating_project_outputs(

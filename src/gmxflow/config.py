@@ -154,7 +154,7 @@ def _toml_value(value: object) -> str:
 def _commented_paths_block() -> list[str]:
     return [
         "# [paths]",
-        "# Uso avançado: por padrão, o gmxflow usa a pasta onde está o config.toml",
+        "# Uso avançado: por padrão, o gmxflow usa a pasta onde está o project.toml",
         "# como raiz do projeto. Os arquivos intermediários ficam em ./work e os",
         "# resultados finais ficam em ./outputs. Futuramente estes campos poderão",
         "# redirecionar dados pesados para outro disco, SSD externo ou scratch de HPC.",

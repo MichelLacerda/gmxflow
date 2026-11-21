@@ -222,7 +222,7 @@ def _validate_stream_resname(str_path: Path, expected_resname: str) -> None:
     if actual_resname != expected_resname:
         raise ValueError(
             "input.ligand_resname não corresponde ao RESI do arquivo .str.\n"
-            f"config.toml: {expected_resname}\n"
+            f"project.toml: {expected_resname}\n"
             f"ligand.str: {actual_resname}"
         )
 

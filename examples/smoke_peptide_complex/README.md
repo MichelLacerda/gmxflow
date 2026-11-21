@@ -1,5 +1,8 @@
 # Smoke Peptide Complex
 
+Abra [`project.ipynb`](./project.ipynb) para executar este exemplo no Jupyter.
+O notebook, a configuração `project.toml` e as entradas ficam juntos nesta pasta.
+
 Exemplo mínimo para validar o executor, os logs e o encadeamento da pipeline.
 
 Este exemplo usa dois peptídeos curtos compostos apenas por glicina:
@@ -7,7 +10,7 @@ Este exemplo usa dois peptídeos curtos compostos apenas por glicina:
 - `inputs/receptor.pdb`: receptor sintético com 3 resíduos GLY.
 - `inputs/ligante.pdb`: ligante sintético com 2 resíduos GLY.
 
-O arquivo `config.toml` usa:
+O arquivo `project.toml` usa:
 
 ```toml
 [simulation]
@@ -19,9 +22,9 @@ Esse perfil força NVT, NPT e produção a usarem apenas 10 passos. O objetivo �
 Comandos úteis:
 
 ```sh
-uv run gmxflow validate --config examples/smoke_peptide_complex/config.toml
-uv run gmxflow run --config examples/smoke_peptide_complex/config.toml --dry-run --strict-inputs
-uv run gmxflow prepare-complex --config examples/smoke_peptide_complex/config.toml --force
+uv run gmxflow validate --config examples/smoke_peptide_complex/project.toml
+uv run gmxflow run --config examples/smoke_peptide_complex/project.toml --dry-run --strict-inputs
+uv run gmxflow prepare-complex --config examples/smoke_peptide_complex/project.toml --force
 ```
 
 O teste automatizado ponta a ponta da API exige GROMACS e o force field

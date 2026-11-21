@@ -245,7 +245,7 @@ water = "tip3p"
 Comando implementado:
 
 ```bash
-gmxflow prepare-ligand --config config.toml
+gmxflow prepare-ligand --config project.toml
 ```
 
 Responsabilidades esperadas:
@@ -405,7 +405,7 @@ on_failure = true
 ```
 
 - envio por SMTP usando `smtplib`, sem dependência extra;
-- senha lida por variável de ambiente, nunca salva diretamente no `config.toml`;
+- senha lida por variável de ambiente, nunca salva diretamente no `project.toml`;
 - e-mail em sucesso final e/ou falha fatal;
 - corpo com projeto, status, etapa final ou etapa com erro, duração, host e caminho do log;
 - falha de envio tratada como aviso, nunca como falha da simulação;
@@ -448,7 +448,7 @@ Entregas propostas:
 
 - separar uma camada Python pública da camada Typer, para CLI e notebooks usarem o mesmo núcleo (primeiro recorte implementado; contrato ainda experimental);
 - definir ciclo de vida e modelos públicos para projeto, configuração, validação, execução e resultados (parcialmente implementado);
-- gerar `project.ipynb` em `gmxflow startproject` e manter cópias físicas dos exemplos sob `notebooks/` (primeiro recorte implementado);
+- gerar `project.ipynb` em `gmxflow startproject` e manter cada notebook junto ao respectivo projeto em `examples/` (primeiro recorte implementado);
 - evoluir o notebook introdutório com seleção de arquivos e configuração guiada;
 - pré-validar entradas, dependências e plano antes de iniciar tarefas longas;
 - incluir um exemplo `smoke` e um exemplo científico representativo, distinguindo teste de fluxo e simulação interpretável;

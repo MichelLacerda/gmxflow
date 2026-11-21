@@ -83,7 +83,7 @@ def create_project(
         field_name="profile",
     )
 
-    _write_text(project_dir / "config.toml", to_toml(config), force)
+    _write_text(project_dir / "project.toml", to_toml(config), force)
     notebook_template = files("gmxflow").joinpath("templates", "project.ipynb")
     _write_text(
         project_dir / "project.ipynb",
@@ -142,24 +142,24 @@ Para trabalhar no Jupyter, abra `project.ipynb` usando um kernel que tenha `gmxf
 
 ## Como usar
 
-Coloque os arquivos PDB de entrada em `inputs/` e ajuste os caminhos em `config.toml`.
+Coloque os arquivos PDB de entrada em `inputs/` e ajuste os caminhos em `project.toml`.
 
 Valide a configuração:
 
 ```bash
-gmxflow validate --config config.toml
+gmxflow validate --config project.toml
 ```
 
 Veja o plano resumido:
 
 ```bash
-gmxflow plan --config config.toml
+gmxflow plan --config project.toml
 ```
 
 Veja o plano detalhado sem executar GROMACS:
 
 ```bash
-gmxflow run --config config.toml --dry-run
+gmxflow run --config project.toml --dry-run
 ```
 
 Crie projetos novos com presets iniciais quando necessário:
@@ -177,13 +177,13 @@ Valores aceitos:
 Prepare o complexo receptor-ligante:
 
 ```bash
-gmxflow prepare-complex --config config.toml
+gmxflow prepare-complex --config project.toml
 ```
 
 Para ligante pequeno já parametrizado externamente com CGenFF:
 
 ```bash
-gmxflow prepare-ligand --config config.toml
+gmxflow prepare-ligand --config project.toml
 ```
 
 Esse comando gera `work/ligand/<ligand_resname>.itp`, `.prm`, `.top` e `_ini.pdb`. Ele não acessa CGenFF/ParamChem/SilcsBio; esses arquivos externos devem ser obtidos antes e configurados em `input.ligand_mol2` e `input.ligand_str`.
@@ -212,38 +212,38 @@ O `.mol2` e o `.str` devem representar o mesmo ligante e a mesma lista de átomo
 Execute a pipeline até a preparação, com logs:
 
 ```bash
-gmxflow run --config config.toml --until prepare
+gmxflow run --config project.toml --until prepare
 ```
 
 Limpe artefatos regeneráveis preservando os `.mdp`:
 
 ```bash
-gmxflow clean --config config.toml
+gmxflow clean --config project.toml
 ```
 
 Renderize novamente os arquivos `.mdp` finais:
 
 ```bash
-gmxflow render-templates --config config.toml --force
+gmxflow render-templates --config project.toml --force
 ```
 
 Gere novamente o relatório consolidado em `outputs/`:
 
 ```bash
-gmxflow report --config config.toml
+gmxflow report --config project.toml
 ```
 
 Para também conferir se os PDBs configurados existem:
 
 ```bash
-gmxflow run --config config.toml --dry-run --strict-inputs
+gmxflow run --config project.toml --dry-run --strict-inputs
 ```
 
 ## Estrutura do projeto
 
 ```text
 .
-├── config.toml
+├── project.toml
 ├── project.ipynb
 ├── .gitignore
 ├── inputs/
@@ -265,14 +265,14 @@ gmxflow run --config config.toml --dry-run --strict-inputs
     └── logs/
 ```
 
-- `config.toml`: configuração principal da simulação.
+- `project.toml`: configuração principal da simulação.
 - `project.ipynb`: fluxo guiado para validar, executar e consultar o relatório no Jupyter.
 - `inputs/`: arquivos PDB de entrada.
 - `work/`: arquivos intermediários da pipeline.
 - `outputs/`: resultados finais e relatórios.
 - `.gitignore`: ignora `work/`, `outputs/`, caches Python e ambientes locais.
 
-O diretório raiz do projeto é a pasta onde está este `config.toml`. Por padrão, os arquivos intermediários e os `.mdp` renderizados ficam em `work/`.
+O diretório raiz do projeto é a pasta onde está este `project.toml`. Por padrão, os arquivos intermediários e os `.mdp` renderizados ficam em `work/`.
 
 Após `gmxflow prepare-complex`, a pasta `work/prep/` deve conter:
 
@@ -285,7 +285,7 @@ Após `gmxflow run --until prepare`, os logs devem ficar em:
 - `work/logs/00_workspace.log`;
 - `work/logs/01_prepare.log`.
 
-`gmxflow clean --config config.toml` remove artefatos regeneráveis em `work/` e preserva os `.mdp`. Use `--templates` para remover também os `.mdp`, ou `--all-work` para recriar `work/` vazio.
+`gmxflow clean --config project.toml` remove artefatos regeneráveis em `work/` e preserva os `.mdp`. Use `--templates` para remover também os `.mdp`, ou `--all-work` para recriar `work/` vazio.
 
 Os arquivos `.mdp` finais já são criados pelo `startproject` e ficam em `work/`. Eles podem ser recriados com `gmxflow render-templates --force`:
 
@@ -308,12 +308,12 @@ Como `work/` e `outputs/` são artefatos regeneráveis, eles são ignorados pelo
 
 Este bloco vem comentado por padrão e ainda não altera o comportamento da CLI.
 
-Ele documenta um uso avançado futuro: redirecionar arquivos pesados para outro disco, SSD externo ou diretório scratch em HPC. Enquanto as linhas estiverem comentadas, a raiz do projeto continua sendo a pasta do `config.toml`.
+Ele documenta um uso avançado futuro: redirecionar arquivos pesados para outro disco, SSD externo ou diretório scratch em HPC. Enquanto as linhas estiverem comentadas, a raiz do projeto continua sendo a pasta do `project.toml`.
 
 ### `[input]`
 
-- `receptor_pdb`: caminho do PDB do receptor. Pode ser relativo ao `config.toml` ou absoluto.
-- `ligand_pdb`: caminho do PDB do ligante. Pode ser relativo ao `config.toml` ou absoluto.
+- `receptor_pdb`: caminho do PDB do receptor. Pode ser relativo ao `project.toml` ou absoluto.
+- `ligand_pdb`: caminho do PDB do ligante. Pode ser relativo ao `project.toml` ou absoluto.
 - `ligand_kind`: tipo do ligante. Use `peptide` para ligante peptídico ou `small_molecule` para molécula pequena com topologia externa CGenFF.
 - `ligand_mol2`: arquivo `.mol2` do ligante pequeno, usado quando `ligand_kind = "small_molecule"`.
 - `ligand_str`: arquivo `.str` gerado externamente por CGenFF/ParamChem/SilcsBio.
@@ -331,7 +331,7 @@ Para CHARMM/CGenFF com ligante pequeno, uma pasta `.ff` pode ficar na raiz do pr
 
 ```text
 charmm36-feb2026_cgenff-5.0.ff/
-config.toml
+project.toml
 ```
 
 Nesse caso, use `name = "charmm36-feb2026_cgenff-5.0"`.
@@ -386,11 +386,11 @@ Com `profile = "smoke"`, NVT, NPT e produção usam apenas 10 passos. Esse perfi
 Para descobrir os números dos resíduos no complexo preparado:
 
 ```sh
-gmxflow run --config config.toml --until prepare
-gmxflow list-residues --config config.toml --chain A --resnames HIS,ASP,SER
+gmxflow run --config project.toml --until prepare
+gmxflow list-residues --config project.toml --chain A --resnames HIS,ASP,SER
 ```
 
-O comando imprime uma tabela e uma linha pronta para copiar para o `config.toml`.
+O comando imprime uma tabela e uma linha pronta para copiar para o `project.toml`.
 
 ### `[plots]`
 

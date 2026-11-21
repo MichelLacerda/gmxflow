@@ -16,7 +16,7 @@ def test_cli_startproject_creates_project(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Projeto criado em:" in result.output
-    assert (tmp_path / "cli_project" / "config.toml").is_file()
+    assert (tmp_path / "cli_project" / "project.toml").is_file()
     assert "Notebook Jupyter:" in result.output
     assert (tmp_path / "cli_project" / "project.ipynb").is_file()
 
@@ -41,7 +41,7 @@ def test_cli_startproject_accepts_initial_pipeline_options(tmp_path: Path) -> No
     )
 
     assert result.exit_code == 0
-    config_text = (tmp_path / "cli_project" / "config.toml").read_text(encoding="utf-8")
+    config_text = (tmp_path / "cli_project" / "project.toml").read_text(encoding="utf-8")
     assert 'ligand_kind = "small_molecule"' in config_text
     assert 'gpu = "off"' in config_text
     assert 'profile = "smoke"' in config_text
@@ -74,13 +74,28 @@ def test_cli_validate_accepts_generated_config(tmp_path: Path) -> None:
     )
     assert project_result.exit_code == 0
 
-    config_path = tmp_path / "cli_project" / "config.toml"
+    config_path = tmp_path / "cli_project" / "project.toml"
     validate_result = runner.invoke(app, ["validate", "--config", str(config_path)])
 
     assert validate_result.exit_code == 0
-    assert "config.toml" in validate_result.output
+    assert "project.toml" in validate_result.output
     assert "Projeto: cli_project" in validate_result.output
     assert "50000000" in validate_result.output
+
+
+def test_cli_validate_defaults_to_project_toml(tmp_path: Path, monkeypatch) -> None:
+    project_dir = tmp_path / "cli_project"
+    project_result = CliRunner().invoke(
+        app,
+        ["startproject", "cli_project", "--destination", str(tmp_path)],
+    )
+    assert project_result.exit_code == 0
+    monkeypatch.chdir(project_dir)
+
+    validate_result = CliRunner().invoke(app, ["validate"])
+
+    assert validate_result.exit_code == 0
+    assert "Configuração válida: project.toml" in validate_result.output
 
 
 def test_cli_list_residues_filters_and_prints_config_value(tmp_path: Path) -> None:
@@ -112,7 +127,7 @@ def test_cli_list_residues_filters_and_prints_config_value(tmp_path: Path) -> No
         [
             "list-residues",
             "--config",
-            str(project / "config.toml"),
+            str(project / "project.toml"),
             "--chain",
             "A",
             "--resnames",
@@ -136,7 +151,7 @@ def test_cli_run_dry_run_prints_pipeline_without_executing(tmp_path: Path) -> No
     )
     assert project_result.exit_code == 0
 
-    config_path = tmp_path / "cli_project" / "config.toml"
+    config_path = tmp_path / "cli_project" / "project.toml"
     result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0
@@ -189,7 +204,7 @@ def test_cli_run_without_until_executes_full_pipeline(tmp_path: Path, monkeypatc
     monkeypatch.setattr("gmxflow.cli.run_workspace_setup", fake_workspace_setup)
     monkeypatch.setattr("gmxflow.cli.run_steps", fake_run_steps)
 
-    result = runner.invoke(app, ["run", "--config", str(project / "config.toml")])
+    result = runner.invoke(app, ["run", "--config", str(project / "project.toml")])
 
     assert result.exit_code == 0
     assert calls["workspace_project"] == project
@@ -269,7 +284,7 @@ def test_cli_run_until_analysis_is_allowed(
         [
             "run",
             "--config",
-            str(project / "config.toml"),
+            str(project / "project.toml"),
             "--until",
             "analysis",
         ],
@@ -319,7 +334,7 @@ def test_cli_run_until_prepare_sets_up_workspace_and_logs(tmp_path: Path) -> Non
         encoding="utf-8",
     )
 
-    result = runner.invoke(app, ["run", "--config", str(project / "config.toml"), "--until", "prepare"])
+    result = runner.invoke(app, ["run", "--config", str(project / "project.toml"), "--until", "prepare"])
 
     assert result.exit_code == 0
     assert "Etapa concluída: workspace" in result.output
@@ -337,7 +352,7 @@ def test_cli_run_dry_run_strict_inputs_rejects_missing_files(tmp_path: Path) -> 
     )
     assert project_result.exit_code == 0
 
-    config_path = tmp_path / "cli_project" / "config.toml"
+    config_path = tmp_path / "cli_project" / "project.toml"
     result = runner.invoke(
         app,
         ["run", "--config", str(config_path), "--dry-run", "--strict-inputs"],
@@ -355,7 +370,7 @@ def test_cli_render_templates_writes_mdp_files(tmp_path: Path) -> None:
     )
     assert project_result.exit_code == 0
 
-    config_path = tmp_path / "cli_project" / "config.toml"
+    config_path = tmp_path / "cli_project" / "project.toml"
     result = runner.invoke(
         app, ["render-templates", "--config", str(config_path), "--force"]
     )
@@ -374,7 +389,7 @@ def test_cli_prepare_ligand_prints_generated_files(tmp_path: Path, monkeypatch) 
     assert project_result.exit_code == 0
 
     project = tmp_path / "cli_project"
-    config_path = project / "config.toml"
+    config_path = project / "project.toml"
     config_path.write_text(
         config_path.read_text(encoding="utf-8")
         .replace('ligand_mol2 = ""', 'ligand_mol2 = "inputs/lig.mol2"')
@@ -414,7 +429,7 @@ def test_cli_clean_removes_artifacts_and_preserves_templates(tmp_path: Path) -> 
     artifact = project / "work" / "prep" / "complexo.pdb"
     artifact.write_text("pdb", encoding="utf-8")
 
-    result = runner.invoke(app, ["clean", "--config", str(project / "config.toml")])
+    result = runner.invoke(app, ["clean", "--config", str(project / "project.toml")])
 
     assert result.exit_code == 0
     assert "Workspace limpo:" in result.output
@@ -437,7 +452,7 @@ def test_cli_setup_workspace_renders_only_missing_templates(tmp_path: Path) -> N
     missing_template.unlink()
 
     result = runner.invoke(
-        app, ["setup-workspace", "--config", str(project / "config.toml")]
+        app, ["setup-workspace", "--config", str(project / "project.toml")]
     )
 
     assert result.exit_code == 0

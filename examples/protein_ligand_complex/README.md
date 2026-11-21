@@ -1,5 +1,8 @@
 # Protein-Ligand Complex
 
+Abra [`project.ipynb`](./project.ipynb) para executar este exemplo no Jupyter.
+O notebook, a configuração `project.toml` e as entradas ficam juntos nesta pasta.
+
 Exemplo de complexo proteína-ligante pequeno para o `gmxflow`, estruturado para seguir a lógica do tutorial clássico **Protein-Ligand Complex** de Justin A. Lemkul para GROMACS.
 
 Referência original:
@@ -122,7 +125,7 @@ Esse `.mol2` é usado para parametrização no CGenFF. A pose simulada continua 
 
 ## Configuração Principal
 
-O `config.toml` usa:
+O `project.toml` usa:
 
 ```toml
 [input]
@@ -145,17 +148,17 @@ O `gmxflow` define `GMXLIB` automaticamente para que as etapas GROMACS encontrem
 Na raiz do repositório:
 
 ```sh
-gmxflow validate --config examples/protein_ligand_complex/config.toml
-gmxflow run --config examples/protein_ligand_complex/config.toml --dry-run --strict-inputs
-gmxflow run --config examples/protein_ligand_complex/config.toml
+gmxflow validate --config examples/protein_ligand_complex/project.toml
+gmxflow run --config examples/protein_ligand_complex/project.toml --dry-run --strict-inputs
+gmxflow run --config examples/protein_ligand_complex/project.toml
 ```
 
 Para rodar de dentro deste diretório:
 
 ```sh
-gmxflow validate --config config.toml
-gmxflow run --config config.toml --dry-run --strict-inputs
-gmxflow run --config config.toml
+gmxflow validate --config project.toml
+gmxflow run --config project.toml --dry-run --strict-inputs
+gmxflow run --config project.toml
 ```
 
 O relatório final fica em:
@@ -224,7 +227,7 @@ Este exemplo usa o force field instalado no diretório central do usuário:
 charmm36-feb2026_cgenff-5.0.ff/
 ```
 
-e o `config.toml` usa:
+e o `project.toml` usa:
 
 ```toml
 name = "charmm36-feb2026_cgenff-5.0"
@@ -254,50 +257,50 @@ Correção:
 
 - após mudar arquivos de entrada, rode normalmente; o estado deve detectar mudanças rastreadas;
 - se quiser forçar reexecução parcial, use `--from-step`;
-- se estiver em dúvida, use `gmxflow clean --config config.toml` para remover artefatos regeneráveis preservando templates.
+- se estiver em dúvida, use `gmxflow clean --config project.toml` para remover artefatos regeneráveis preservando templates.
 
 ## Comandos Úteis
 
 Validar:
 
 ```sh
-gmxflow validate --config config.toml
+gmxflow validate --config project.toml
 ```
 
 Dry-run estrito:
 
 ```sh
-gmxflow run --config config.toml --dry-run --strict-inputs
+gmxflow run --config project.toml --dry-run --strict-inputs
 ```
 
 Preparar apenas ligante:
 
 ```sh
-gmxflow prepare-ligand --config config.toml
+gmxflow prepare-ligand --config project.toml
 ```
 
 Rodar até montagem do complexo:
 
 ```sh
-gmxflow run --config config.toml --until assemble-complex
+gmxflow run --config project.toml --until assemble-complex
 ```
 
 Rodar pipeline completa:
 
 ```sh
-gmxflow run --config config.toml
+gmxflow run --config project.toml
 ```
 
 Regenerar relatório a partir de análises existentes:
 
 ```sh
-gmxflow report --config config.toml
+gmxflow report --config project.toml
 ```
 
 Limpar artefatos regeneráveis:
 
 ```sh
-gmxflow clean --config config.toml
+gmxflow clean --config project.toml
 ```
 
 ## Próximo Passo

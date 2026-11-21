@@ -86,7 +86,7 @@ gmxflow forcefield list
 gmxflow forcefield locate charmm36-feb2026_cgenff-5.0
 ```
 
-O nome da pasta sem o sufixo `.ff` precisa bater com `force_field.name`. Se você usar outra versão, ajuste o `config.toml`. Exemplos:
+O nome da pasta sem o sufixo `.ff` precisa bater com `force_field.name`. Se você usar outra versão, ajuste o `project.toml`. Exemplos:
 
 ```toml
 name = "charmm36-feb2026_cgenff-5.0"
@@ -258,7 +258,7 @@ O `.mol2` usado para gerar o `.str` deve ser o mesmo configurado em `ligand_mol2
 
 ### `RESI` diferente do `ligand_resname`
 
-Corrija o `config.toml` ou gere novamente os arquivos com o resname correto.
+Corrija o `project.toml` ou gere novamente os arquivos com o resname correto.
 
 ### Átomos diferentes entre `.mol2` e `.str`
 

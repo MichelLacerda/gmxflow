@@ -13,3 +13,5 @@ pytest_cache/
 **/*.ipynb_checkpoints/
 .aws/
 .codex/
+.mypy_cache/
+.pytest_cache/

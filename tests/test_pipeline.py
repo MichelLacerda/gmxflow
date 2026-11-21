@@ -93,7 +93,7 @@ def test_gromacs_steps_do_not_set_gmxlib_for_installed_force_field(tmp_path: Pat
 
 
 def test_prepare_step_uses_internal_cli_command(tmp_path: Path) -> None:
-    config_path = tmp_path / "config.toml"
+    config_path = tmp_path / "project.toml"
 
     steps = build_pipeline(default_config("prepare_test"), config_dir=tmp_path, config_path=config_path)
     prepare = steps[0]
@@ -108,7 +108,7 @@ def test_prepare_step_uses_internal_cli_command(tmp_path: Path) -> None:
 
 
 def test_small_molecule_pipeline_adds_ligand_topology_step(tmp_path: Path) -> None:
-    config_path = tmp_path / "config.toml"
+    config_path = tmp_path / "project.toml"
     config = default_config("small_molecule_test")
     config.input.ligand_kind = "small_molecule"
     config.input.ligand_mol2 = "inputs/jz4.mol2"
@@ -264,7 +264,7 @@ def test_em_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
 
 
 def test_solvate_uses_internal_topology_reset_command(tmp_path: Path) -> None:
-    config_path = tmp_path / "config.toml"
+    config_path = tmp_path / "project.toml"
     steps = build_pipeline(default_config("solvate_test"), config_dir=tmp_path, config_path=config_path)
     solvate = next(step for step in steps if step.name == "solvate")
 

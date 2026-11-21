@@ -70,7 +70,7 @@ Assim, o kernel iniciado pelo Jupyter encontra os mesmos comandos `gmx` e `gmxfl
 python -m ipykernel install --user --name gmx_compile --display-name "Python (gmx_compile)"
 ```
 
-No notebook, selecione o kernel **Python (gmx_compile)**. O repositório mantém projetos prontos para abrir em [notebooks/smoke_peptide_complex/project.ipynb](../../notebooks/smoke_peptide_complex/project.ipynb) e [notebooks/protein_ligand_complex/project.ipynb](../../notebooks/protein_ligand_complex/project.ipynb). Cada pasta contém fisicamente os arquivos do exemplo, incluindo `config.toml` e `inputs/`; executar o notebook usa essa cópia, sem copiar arquivos em tempo de execução. O exemplo `smoke` é apenas um teste de integração, não uma simulação cientificamente interpretável. A API usada pelos notebooks ainda é experimental. Projetos criados com `gmxflow startproject` também incluem `project.ipynb`.
+No notebook, selecione o kernel **Python (gmx_compile)**. O repositório mantém projetos prontos para abrir em [examples/smoke_peptide_complex/project.ipynb](../../examples/smoke_peptide_complex/project.ipynb) e [examples/protein_ligand_complex/project.ipynb](../../examples/protein_ligand_complex/project.ipynb). Cada pasta contém fisicamente o notebook, `project.toml` e `inputs/`; o notebook trabalha diretamente no exemplo, sem copiar arquivos em tempo de execução. O exemplo `smoke` é apenas um teste de integração, não uma simulação cientificamente interpretável. A API usada pelos notebooks ainda é experimental. Projetos criados com `gmxflow startproject` também incluem `project.ipynb`.
 
 Atualizar:
 

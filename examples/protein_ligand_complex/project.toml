@@ -3,7 +3,7 @@ name = "protein_ligand_complex"
 description = "Tutorial protein-ligand complex inspirado no fluxo Lemkul/GROMACS"
 
 # [paths]
-# Uso avançado: por padrão, o gmxflow usa a pasta onde está o config.toml
+# Uso avançado: por padrão, o gmxflow usa a pasta onde está o project.toml
 # como raiz do projeto. Os arquivos intermediários ficam em ./work e os
 # resultados finais ficam em ./outputs. Futuramente estes campos poderão
 # redirecionar dados pesados para outro disco, SSD externo ou scratch de HPC.

@@ -17,9 +17,9 @@ torna a API atual estável.
   estruturados com caminhos de logs; a API permanece experimental. O smoke
   passou em uma execução de ponta a ponta com Python 3.12.16 e GROMACS 2026.3,
   mas a matriz de ambientes ainda precisa ser validada.
-- O projeto [smoke para Jupyter](../../notebooks/smoke_peptide_complex/project.ipynb)
-  foi executado de cima a baixo com o kernel Micromamba. A pasta contém uma
-  cópia física do exemplo; o notebook não copia arquivos em tempo de execução.
+- O projeto [smoke para Jupyter](../../examples/smoke_peptide_complex/project.ipynb)
+  foi executado de cima a baixo com o kernel Micromamba. O notebook e os dados
+  ficam juntos na pasta do exemplo; o notebook não copia arquivos em tempo de execução.
 - O executor executa cada etapa por `subprocess.run`. Algumas etapas invocam
   comandos internos `gmxflow`; outras invocam ferramentas GROMACS.
 - As análises também chamam ferramentas GROMACS por `subprocess.run`, incluindo

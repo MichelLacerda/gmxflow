@@ -22,7 +22,7 @@ def test_smoke_project_runs_and_resumes_in_an_isolated_copy(
     )
     project_dir = tmp_path / "smoke_peptide_complex"
     shutil.copytree(example, project_dir)
-    project = GmxFlowProject.open(project_dir / "config.toml")
+    project = GmxFlowProject.open(project_dir / "project.toml")
 
     first_run = project.run()
     second_run = project.run()
