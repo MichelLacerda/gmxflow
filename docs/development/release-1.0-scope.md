@@ -14,8 +14,9 @@ torna a API atual estável.
 - `GmxFlowProject.open()`, `plan()`, `validate()` e `run()` permitem abrir a
   configuração, inspecionar o plano, validar pré-requisitos e executar etapas
   liberadas usando o executor compartilhado. `run()` retorna resultados
-  estruturados com caminhos de logs; a API permanece experimental e a
-  integração de ponta a ponta com GROMACS ainda precisa de teste reproduzível.
+  estruturados com caminhos de logs; a API permanece experimental. O smoke
+  passou em uma execução de ponta a ponta com Python 3.12.16 e GROMACS 2026.3,
+  mas a matriz de ambientes ainda precisa ser validada.
 - O executor executa cada etapa por `subprocess.run`. Algumas etapas invocam
   comandos internos `gmxflow`; outras invocam ferramentas GROMACS.
 - As análises também chamam ferramentas GROMACS por `subprocess.run`, incluindo
@@ -131,13 +132,11 @@ ou experimental.
 
 ## Próximas Tarefas De Implementação
 
-1. Testar integração da execução da API com GROMACS em ambiente reproduzível,
-   incluindo retomada e logs, mantendo `subprocess` da biblioteca padrão.
-2. Construir e executar o notebook smoke ponta a ponta em cópia isolada do
+1. Construir e executar o notebook smoke ponta a ponta em cópia isolada do
    exemplo, com revisão do plano, progresso, falhas e localização de resultados.
-3. Atualizar a documentação de instalação/uso Conda para a API Jupyter e
+2. Atualizar a documentação de instalação/uso Conda para a API Jupyter e
    definir a matriz de versões de Python e GROMACS testada.
-4. Avaliar `gmxapi` futuramente como extensão opcional para `mdrun`, em um
+3. Avaliar `gmxapi` futuramente como extensão opcional para `mdrun`, em um
    protótipo isolado; não é dependência nem requisito da versão 1.0.
 
 Cada tarefa deve preservar a retomada, a trilha de logs, os nomes das etapas e

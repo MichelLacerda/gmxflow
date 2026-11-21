@@ -23,3 +23,16 @@ uv run gmxflow validate --config examples/smoke_peptide_complex/config.toml
 uv run gmxflow run --config examples/smoke_peptide_complex/config.toml --dry-run --strict-inputs
 uv run gmxflow prepare-complex --config examples/smoke_peptide_complex/config.toml --force
 ```
+
+O teste automatizado ponta a ponta da API exige GROMACS e o force field
+`amber99sb-ildn` disponíveis no ambiente ativo. Ele copia este exemplo para um
+diretório temporário, executa a pipeline duas vezes para verificar retomada e
+logs, e não altera os arquivos versionados. Para executá-lo:
+
+```sh
+uv run pytest -m gromacs tests/integration/test_api_gromacs.py
+```
+
+Os testes unitários comuns excluem essa integração por padrão. O teste continua
+sendo apenas uma verificação de integração do software; não produz resultados
+cientificamente interpretáveis.
