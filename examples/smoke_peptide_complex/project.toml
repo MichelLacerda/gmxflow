@@ -4,7 +4,7 @@ description = "Exemplo mínimo para testar executor e logs do gmxflow"
 
 [input]
 receptor_pdb = "inputs/receptor.pdb"
-ligand_pdb = "inputs/ligante.pdb"
+ligand_pdb = "inputs/ligand.pdb"
 ligand_kind = "peptide"
 ph = 7.4
 
