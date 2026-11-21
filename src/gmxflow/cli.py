@@ -178,6 +178,7 @@ def startproject(
         raise typer.BadParameter(str(error)) from error
 
     console.print(f"Projeto criado em: [bold]{project_dir}[/bold]")
+    console.print(f"Notebook Jupyter: [bold]{project_dir / 'project.ipynb'}[/bold]")
 
 
 @app.command()

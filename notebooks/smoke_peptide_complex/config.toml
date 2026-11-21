@@ -1,0 +1,47 @@
+[project]
+name = "smoke_peptide_complex"
+description = "Exemplo mínimo para testar executor e logs do gmxflow"
+
+[input]
+receptor_pdb = "inputs/receptor.pdb"
+ligand_pdb = "inputs/ligante.pdb"
+ligand_kind = "peptide"
+ph = 7.4
+
+[force_field]
+name = "amber99sb-ildn"
+water = "tip3p"
+
+[box]
+type = "dodecahedron"
+distance_nm = 0.8
+
+[solvent]
+water_structure = "spc216.gro"
+salt_concentration_m = 0.0
+positive_ion = "NA"
+negative_ion = "CL"
+neutralize = true
+
+[simulation]
+profile = "smoke"
+temperature_k = 300
+pressure_bar = 1.0
+dt_ps = 0.002
+production_ns = 1
+nvt_ps = 1
+npt_ps = 1
+
+[mdrun]
+engine = "auto"
+gpu = "off"
+gpu_id = "0"
+ntomp = 1
+pin = "auto"
+
+[analysis]
+ligand_chain = "B"
+fit_group = "Backbone"
+center_group = "Protein"
+output_group = "System"
+contact_cutoff_nm = 0.4

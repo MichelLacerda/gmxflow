@@ -1,0 +1,73 @@
+[project]
+name = "protein_ligand_complex"
+description = "Tutorial protein-ligand complex inspirado no fluxo Lemkul/GROMACS"
+
+# [paths]
+# Uso avançado: por padrão, o gmxflow usa a pasta onde está o config.toml
+# como raiz do projeto. Os arquivos intermediários ficam em ./work e os
+# resultados finais ficam em ./outputs. Futuramente estes campos poderão
+# redirecionar dados pesados para outro disco, SSD externo ou scratch de HPC.
+# work_dir = "work"
+# output_dir = "outputs"
+
+[input]
+receptor_pdb = "inputs/3HTB.pdb"
+ligand_pdb = "inputs/JZ4.pdb"
+ligand_kind = "small_molecule"
+ligand_mol2 = "inputs/JZ4.mol2"
+ligand_str = "inputs/JZ4.str"
+ligand_resname = "JZ4"
+ph = 7.4
+
+[force_field]
+name = "charmm36-feb2026_cgenff-5.0"
+water = "tip3p"
+
+[box]
+type = "dodecahedron"
+distance_nm = 1.2
+
+[solvent]
+water_structure = "spc216.gro"
+salt_concentration_m = 0.15
+positive_ion = "NA"
+negative_ion = "CL"
+neutralize = true
+
+[simulation]
+profile = "smoke"
+temperature_k = 300
+pressure_bar = 1.0
+dt_ps = 0.002
+production_ns = 100
+nvt_ps = 100
+npt_ps = 100
+
+[mdrun]
+engine = "auto"
+gpu = "off"
+gpu_id = "0"
+ntomp = 8
+pin = "auto"
+
+[pdb2gmx]
+terminal_selections = ["1", "0"]
+
+[analysis]
+ligand_chain = "B"
+fit_group = "Backbone"
+center_group = "Protein"
+output_group = "System"
+contact_cutoff_nm = 0.4
+interaction_energy = false
+sasa = false
+catalytic_residues = ""
+catalytic_distance_cutoff_nm = 0.4
+
+[plots]
+receptor_color = "#1f77b4"
+ligand_color = "#C2185B"
+band_window = 25
+band_std = 2.0
+raw_alpha = 0.18
+band_alpha = 0.22

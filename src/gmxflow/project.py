@@ -84,6 +84,12 @@ def create_project(
     )
 
     _write_text(project_dir / "config.toml", to_toml(config), force)
+    notebook_template = files("gmxflow").joinpath("templates", "project.ipynb")
+    _write_text(
+        project_dir / "project.ipynb",
+        notebook_template.read_text(encoding="utf-8"),
+        force,
+    )
     _write_text(project_dir / "README.md", _render_readme(config), force)
     _write_text(project_dir / ".gitignore", _render_gitignore(), force)
 
@@ -131,6 +137,8 @@ def _render_readme(config: GmxFlowConfig) -> str:
 {config.project.description}
 
 Este projeto contém a configuração e a estrutura de diretórios para uma pipeline de dinâmica molecular com GROMACS.
+
+Para trabalhar no Jupyter, abra `project.ipynb` usando um kernel que tenha `gmxflow` e GROMACS instalados. A API usada pelo notebook ainda é experimental.
 
 ## Como usar
 
@@ -236,6 +244,7 @@ gmxflow run --config config.toml --dry-run --strict-inputs
 ```text
 .
 ├── config.toml
+├── project.ipynb
 ├── .gitignore
 ├── inputs/
 ├── outputs/
@@ -257,6 +266,7 @@ gmxflow run --config config.toml --dry-run --strict-inputs
 ```
 
 - `config.toml`: configuração principal da simulação.
+- `project.ipynb`: fluxo guiado para validar, executar e consultar o relatório no Jupyter.
 - `inputs/`: arquivos PDB de entrada.
 - `work/`: arquivos intermediários da pipeline.
 - `outputs/`: resultados finais e relatórios.

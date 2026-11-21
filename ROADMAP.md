@@ -47,7 +47,7 @@ Implementado:
 
 Limitações atuais:
 
-- a interação pública está concentrada na CLI; ainda não há API Python estável nem fluxo guiado para notebooks;
+- a CLI continua sendo a interface estável; há uma API Python experimental e notebooks iniciais por projeto, mas ainda não há fluxo Jupyter estável e completo;
 - a instalação para usuários exige instalar o pacote Python manualmente e entender como iniciar Jupyter no ambiente correto;
 - foco principal em receptor + ligante peptídico;
 - preparação estrutural ainda simples;
@@ -420,7 +420,7 @@ Evoluções futuras:
 
 ## Fase 9: API Python E Experiência Jupyter
 
-Status: proposta; prioridade de produto.
+Status: implementação inicial; API e notebooks seguem experimentais.
 
 Objetivo: permitir que cientistas configurem, executem e inspecionem um fluxo de dinâmica molecular no notebook usando conceitos e mensagens do domínio científico, sem precisar conhecer comandos internos, TOML ou detalhes do executor.
 
@@ -446,9 +446,10 @@ run.results.save("results/")
 
 Entregas propostas:
 
-- separar uma camada Python pública da camada Typer, para CLI e notebooks usarem o mesmo núcleo;
-- definir ciclo de vida e modelos públicos para projeto, configuração, validação, execução e resultados;
-- criar notebook introdutório com seleção de arquivos, configuração guiada e execução de ponta a ponta;
+- separar uma camada Python pública da camada Typer, para CLI e notebooks usarem o mesmo núcleo (primeiro recorte implementado; contrato ainda experimental);
+- definir ciclo de vida e modelos públicos para projeto, configuração, validação, execução e resultados (parcialmente implementado);
+- gerar `project.ipynb` em `gmxflow startproject` e manter cópias físicas dos exemplos sob `notebooks/` (primeiro recorte implementado);
+- evoluir o notebook introdutório com seleção de arquivos e configuração guiada;
 - pré-validar entradas, dependências e plano antes de iniciar tarefas longas;
 - incluir um exemplo `smoke` e um exemplo científico representativo, distinguindo teste de fluxo e simulação interpretável;
 - documentar estabilidade, versionamento e exemplos da API pública.
@@ -479,7 +480,7 @@ Ordem prática para os próximos passos:
 
 1. Definir a API Python pública de domínio para projeto, configuração, validação, execução e resultados.
 2. Separar essa API do Typer, fazendo CLI e Jupyter compartilharem o mesmo núcleo.
-3. Construir o primeiro notebook Jupyter/JupyterLab de ponta a ponta com validação, progresso e inspeção dos resultados.
+3. Validar o notebook gerado e os exemplos físicos em ambientes Conda/Micromamba suportados; revisar e estabilizar o contrato da API antes de ampliar a experiência guiada.
 4. Consolidar a instalação Conda/Micromamba para usuário final e testar kernel, GROMACS e `gmxflow` no mesmo ambiente.
 5. Validar energia de interação, SASA/BSA e métricas catalíticas em simulações reais completas.
 6. Melhorar validações de ligante pequeno, incluindo consistência geométrica entre `ligand.pdb` original e PDB gerado pelo conversor.

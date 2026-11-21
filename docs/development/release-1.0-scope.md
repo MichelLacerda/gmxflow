@@ -17,6 +17,9 @@ torna a API atual estável.
   estruturados com caminhos de logs; a API permanece experimental. O smoke
   passou em uma execução de ponta a ponta com Python 3.12.16 e GROMACS 2026.3,
   mas a matriz de ambientes ainda precisa ser validada.
+- O projeto [smoke para Jupyter](../../notebooks/smoke_peptide_complex/project.ipynb)
+  foi executado de cima a baixo com o kernel Micromamba. A pasta contém uma
+  cópia física do exemplo; o notebook não copia arquivos em tempo de execução.
 - O executor executa cada etapa por `subprocess.run`. Algumas etapas invocam
   comandos internos `gmxflow`; outras invocam ferramentas GROMACS.
 - As análises também chamam ferramentas GROMACS por `subprocess.run`, incluindo
@@ -132,10 +135,9 @@ ou experimental.
 
 ## Próximas Tarefas De Implementação
 
-1. Construir e executar o notebook smoke ponta a ponta em cópia isolada do
-   exemplo, com revisão do plano, progresso, falhas e localização de resultados.
-2. Atualizar a documentação de instalação/uso Conda para a API Jupyter e
-   definir a matriz de versões de Python e GROMACS testada.
+1. Validar a experiência Jupyter em outras combinações de Python/GROMACS e
+   documentar uma matriz suportada de ambientes Conda/Micromamba.
+2. Revisar o contrato da API experimental antes de estabilizá-lo para a 1.0.
 3. Avaliar `gmxapi` futuramente como extensão opcional para `mdrun`, em um
    protótipo isolado; não é dependência nem requisito da versão 1.0.
 

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -36,6 +37,18 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
 
     assert project_dir == tmp_path / "mastoparan_dm"
     assert (project_dir / "config.toml").is_file()
+    notebook_path = project_dir / "project.ipynb"
+    assert notebook_path.is_file()
+    notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+    notebook_code = "\n".join(
+        "".join(cell["source"])
+        for cell in notebook["cells"]
+        if cell["cell_type"] == "code"
+    )
+    assert "GmxFlowProject.open('config.toml')" in notebook_code
+    assert "project.validate()" in notebook_code
+    assert "project.run()" in notebook_code
+    assert all(not cell.get("outputs") for cell in notebook["cells"])
     assert (project_dir / "README.md").is_file()
     assert (project_dir / ".gitignore").is_file()
     assert not (project_dir / "templates").exists()

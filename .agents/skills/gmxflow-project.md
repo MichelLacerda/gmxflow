@@ -12,7 +12,7 @@ Use this skill when working in this repository. Treat source code and tests as t
 ## Project context
 
 - `gmxflow` is a Python package (Python `>=3.12`) for preparing, running, and analyzing molecular-dynamics workflows using GROMACS.
-- The current public interface is a Typer CLI (`gmxflow.cli:app`). A stable scientist-oriented Python API and guided Jupyter experience are planned, not implemented. Do not invent or document planned classes/methods as working functionality.
+- The supported public interface is the Typer CLI (`gmxflow.cli:app`). An experimental Python API (`GmxFlowProject`) and initial project notebooks exist; `startproject` generates `project.ipynb`, but the notebook API is not yet stable. Distinguish implemented experimental behavior from planned functionality; do not imply scientific validity for smoke outputs.
 - User-facing installation prioritizes Conda/Micromamba environments containing Python, `gmxflow`, and an accessible GROMACS executable. `uv` is the current developer workflow; do not present it as a requirement for end users.
 - Scientific scope is limited: protein–peptide workflows are the primary path; small molecules require externally prepared CGenFF-compatible inputs and force-field parameters. Avoid implying universal preparation or parameterization.
 
@@ -26,6 +26,7 @@ Use this skill when working in this repository. Treat source code and tests as t
 - External force fields are user-level shared data, not duplicated into each project. Respect `GMXFLOW_FORCEFIELD_DIR`, `XDG_DATA_HOME` (Linux/macOS), and the platform-specific default. Preserve resolver precedence and the no-implicit-overwrite rule in `forcefields.py`.
 - Treat scientific outputs and claims carefully. Keep `smoke` runs clearly identified as integration checks, not scientifically interpretable simulations. Do not silently alter force-field, protonation, sampling, GPU, or analysis assumptions.
 - Keep user documentation accessible to scientists with limited programming experience: lead with the supported workflow, explain required inputs and expected outputs, and make optional/developer-only steps explicit.
+- In user-facing notebooks, keep visible code focused on scientific choices and the gmxflow workflow. Store notebook-ready projects physically under `notebooks/`; do not copy projects at runtime. Treat matching projects under `examples/` as the source of truth and synchronize their files when examples change. Avoid exposing repository discovery, temporary-directory management, environment probing, and progress-callback boilerplate when the package can handle those concerns. Prefer a few simple API calls and clear results; do not hide scientifically meaningful choices.
 
 ## Working on changes
 

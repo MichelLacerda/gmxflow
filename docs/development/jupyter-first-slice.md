@@ -1,6 +1,12 @@
 # Primeiro Recorte: Fluxo Jupyter De Validação
 
-Status: implementação incremental. A API experimental permite abrir, inspecionar, validar e executar um projeto usando o executor compartilhado com a CLI. `ExecutionReport` expõe os resultados da preparação do workspace e de cada etapa, com seus logs. A interface pública ainda não é estável, e o notebook de ponta a ponta continua pendente.
+Status: primeiro fluxo implementado. O projeto [smoke para Jupyter](../../notebooks/smoke_peptide_complex/project.ipynb)
+está fisicamente disponível em `notebooks/`, junto com seu `config.toml` e os
+arquivos de entrada. O notebook trabalha diretamente nessa cópia versionada,
+sem copiar projetos durante a execução. `gmxflow startproject` também gera
+`project.ipynb` em novos projetos. O fluxo foi executado de ponta a ponta com
+Python 3.12.16 e GROMACS 2026.3. A API e o notebook continuam experimentais; o
+smoke verifica integração do software, não validade científica.
 
 ## Objetivo
 
@@ -8,17 +14,18 @@ Definir um primeiro fluxo pequeno e reproduzível para validar a experiência Ju
 
 ## História De Usuário
 
-Como cientista com Jupyter, Python, `gmxflow` e GROMACS disponíveis no mesmo ambiente Conda/Micromamba, quero abrir um notebook, verificar os pré-requisitos, validar e pré-visualizar o exemplo, executá-lo e inspecionar o estado, os logs e o relatório sem precisar conhecer ou digitar comandos da CLI.
+Como cientista com Jupyter, Python, `gmxflow` e GROMACS disponíveis no mesmo ambiente Conda/Micromamba, quero abrir um notebook, verificar os pré-requisitos, executar um exemplo e abrir o relatório sem precisar conhecer ou digitar comandos da CLI nem escrever código de infraestrutura.
 
 ## Dentro Do Escopo
 
-- Usar `examples/smoke_peptide_complex` como entrada fixa do primeiro percurso, sem pedir ao usuário que edite TOML ou escreva comandos de terminal dentro do notebook.
-- Prever uma etapa explícita de validação e uma etapa de pré-visualização antes de iniciar a execução.
-- Executar o fluxo `smoke` por meio da futura API Python pública, não invocando a CLI por shell ou `subprocess` no notebook.
+- Manter cópias físicas de projetos de `examples/` sob `notebooks/`, prontas para abrir; `examples/` continua sendo a referência de origem e suas cópias devem ser sincronizadas quando houver mudanças.
+- Gerar `project.ipynb` junto com `config.toml` pelo comando `gmxflow startproject`.
+- Prever uma etapa explícita de validação antes de iniciar a execução; por ser um exemplo smoke fixo, não exigir a inspeção manual dos detalhes internos de cada etapa.
+- Executar o fluxo `smoke` por meio da API experimental `GmxFlowProject`, sem invocar a CLI ou `subprocess` diretamente no notebook.
 - A execução da API valida entradas, force field e executável GROMACS antes de preparar o workspace; preserva templates existentes e reutiliza logs e estado do executor.
-- Mostrar estado final, caminho de logs e localização dos resultados/relatório; falhas devem apontar a etapa e o log correspondente.
-- Manter os arquivos versionados do exemplo intactos: execução e outputs devem ocorrer em uma cópia ou diretório de trabalho separado, sem sobrescrita implícita.
-- Permitir executar o notebook de cima a baixo em um kernel limpo, com todas as células concluindo ou apresentando falhas compreensíveis.
+- Mostrar sucesso/falha e acesso ao relatório e aos arquivos gerados; falhas devem apontar a etapa e o log correspondente.
+- Preservar configuração e entradas do projeto ao executar; arquivos gerados devem ficar em `work/` e `outputs/`, que são regeneráveis e ignorados pelo Git.
+- Permitir executar o notebook de cima a baixo em um kernel Conda/Micromamba limpo, com células curtas e falhas compreensíveis.
 
 ## Fora Do Escopo
 
@@ -29,16 +36,17 @@ Como cientista com Jupyter, Python, `gmxflow` e GROMACS disponíveis no mesmo am
 - Adicionar visualização interativa 3D ou análise de trajetórias via bibliotecas extras; isso será avaliado numa tarefa futura.
 - Definir nomes de classes, métodos ou assinaturas antes de uma tarefa separada de desenho e revisão do contrato da API.
 
-## Critérios De Aceite Da Implementação Futura
+## Critérios De Aceite
 
-1. O notebook informa os pré-requisitos e valida kernel, dependências, GROMACS e arquivos necessários antes da execução.
-2. A pessoa consegue revisar a configuração/plano antes de iniciar as etapas que executam GROMACS.
-3. A execução não altera os arquivos versionados do exemplo nem sobrescreve dados do usuário sem uma ação explícita.
-4. A interface do notebook usa a API pública do pacote; não exige que a pessoa conheça comandos da CLI, nem esconde uma invocação de shell como se fosse API Python.
-5. O notebook expõe sucesso/falha, etapa atual ou final, logs e caminhos dos resultados/relatório de forma legível.
-6. As células executam de cima a baixo em um kernel limpo quando os pré-requisitos estão presentes; erros de pré-requisito ou execução são apresentados com contexto acionável.
-7. A documentação e o notebook identificam claramente o fluxo como `smoke` e proíbem interpretar seus resultados como evidência científica.
-8. Testes automatizados cobrem os comportamentos não dependentes de GPU; eventual teste end-to-end com GROMACS é identificado separadamente e não substitui revisão científica.
+1. O notebook informa os pré-requisitos e valida GROMACS, force field e arquivos necessários antes da execução.
+2. Os projetos para notebook incluem fisicamente a configuração e as entradas; não há cópia de projeto em tempo de execução.
+3. A execução preserva `config.toml` e os arquivos de entrada, mantendo artefatos gerados em `work/` e `outputs/`.
+4. `startproject` cria `project.ipynb` e não sobrescreve arquivos existentes sem `--force`.
+5. A interface do notebook usa a API do pacote; não exige que a pessoa conheça comandos da CLI nem esconde uma invocação de shell como se fosse API Python.
+6. O notebook expõe sucesso/falha e acesso ao relatório sem exigir que a pessoa interprete detalhes internos da pipeline.
+7. As células executam de cima a baixo em um kernel limpo quando os pré-requisitos estão presentes; erros são apresentados com contexto acionável.
+8. A documentação identifica claramente o fluxo como `smoke` e proíbe interpretar seus resultados como evidência científica.
+9. Testes automatizados cobrem os comportamentos não dependentes de GPU; eventual teste end-to-end com GROMACS é identificado separadamente e não substitui revisão científica.
 
 ## Decisões E Revisões Humanas
 
@@ -48,6 +56,6 @@ Como cientista com Jupyter, Python, `gmxflow` e GROMACS disponíveis no mesmo am
 - A pessoa revisora deve aprovar este percurso antes de se fixarem classes, métodos e estabilidade da API pública.
 - Nenhuma conclusão sobre desempenho, qualidade de parâmetros ou validade científica pode ser derivada deste fluxo.
 
-## Próxima Tarefa Após Aprovação
+## Próxima Tarefa
 
-Adicionar testes de integração da API de execução com GROMACS em um ambiente reproduzível e, em seguida, construir o notebook smoke em cópia isolada do exemplo. A validação unitária da API não substitui esses testes: subprocessos continuam sendo usados internamente pelo executor compartilhado.
+Ampliar a validação da experiência em outras combinações suportadas de Python e GROMACS e documentar a instalação do kernel para o notebook. Depois, revisar com humanos o contrato experimental da API antes de declará-la estável. O teste de integração real já foi executado com sucesso em uma combinação de ambiente; subprocessos continuam sendo usados internamente pelo executor compartilhado.

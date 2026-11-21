@@ -17,6 +17,8 @@ def test_cli_startproject_creates_project(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "Projeto criado em:" in result.output
     assert (tmp_path / "cli_project" / "config.toml").is_file()
+    assert "Notebook Jupyter:" in result.output
+    assert (tmp_path / "cli_project" / "project.ipynb").is_file()
 
 
 def test_cli_startproject_accepts_initial_pipeline_options(tmp_path: Path) -> None:
