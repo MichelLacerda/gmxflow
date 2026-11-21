@@ -113,21 +113,22 @@ Enquanto estiver comentado, não tem efeito.
 - `name`: campo de força passado ao `gmx pdb2gmx`, por exemplo `amber99sb-ildn`.
 - `water`: modelo de água passado ao `gmx pdb2gmx`, por exemplo `tip3p`.
 
-Para `small_molecule` com CHARMM/CGenFF, o force field `.ff` pode ficar na raiz do projeto, por exemplo:
+Para `small_molecule` com CHARMM/CGenFF, instale o force field `.ff` uma única vez no diretório central do usuário:
 
 ```text
-example/
+~/.local/share/gmxflow/forcefields/
   charmm36-feb2026_cgenff-5.0.ff/
-  config.toml
 ```
 
-Nesse caso, configure:
+No Windows, o padrão é `%LOCALAPPDATA%/gmxflow/forcefields/`. O diretório pode ser alterado definindo `GMXFLOW_FORCEFIELD_DIR`. A configuração do projeto continua indicando apenas o nome:
 
 ```toml
 [force_field]
 name = "charmm36-feb2026_cgenff-5.0"
 water = "tip3p"
 ```
+
+Use `gmxflow forcefield install <pasta.ff>` para copiar uma pasta validada para o diretório central. O comando não sobrescreve destinos existentes. A resolução considera force fields já instalados com o GROMACS, o diretório central e, por compatibilidade, uma pasta `.ff` legada na raiz do projeto. Consulte `gmxflow forcefield --help` para listar, localizar e validar force fields.
 
 ### `[box]`
 

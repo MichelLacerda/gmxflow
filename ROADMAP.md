@@ -209,7 +209,13 @@ Entregue:
 - integração de `.prm` e `.itp` do ligante ao `topol.top`;
 - adição do ligante em `[ molecules ]`;
 - normalização do moleculetype do ligante para `input.ligand_resname`;
-- uso de force field CHARMM `.ff` local via `GMXLIB`;
+- integração de force fields CHARMM `.ff` externos via `GMXLIB`;
+- armazenamento central de force fields externos por usuário, configurável com `GMXFLOW_FORCEFIELD_DIR` e respeitando `XDG_DATA_HOME`;
+- resolvedor comum para pipeline e conversor CGenFF, com precedência para force fields instalados, centralizados e cópias legadas do projeto;
+- comandos `gmxflow forcefield path`, `list`, `locate`, `validate` e `install`, sem sobrescrita implícita;
+- validação mínima de `forcefield.itp` e `forcefield.doc`;
+- documentação e exemplos atualizados para instalar force fields uma única vez por usuário;
+- resolução de force fields não instalados pelo GROMACS a partir do projeto e de diretórios de ambiente conhecidos;
 - seleção do ligante pequeno por `input.ligand_resname` nas análises;
 - validação de `input.ligand_resname` contra `RESI` do `.str`;
 - validação da lista de átomos entre `.mol2` e `.str`;

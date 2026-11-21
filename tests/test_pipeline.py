@@ -44,7 +44,10 @@ def test_topology_command_uses_force_field_and_water(tmp_path: Path) -> None:
 def test_gromacs_steps_use_gmxlib_for_project_force_field(tmp_path: Path) -> None:
     config = default_config("local_force_field_test")
     config.force_field.name = "charmm36-feb2026_cgenff-5.0"
-    (tmp_path / "charmm36-feb2026_cgenff-5.0.ff").mkdir()
+    forcefield = tmp_path / "charmm36-feb2026_cgenff-5.0.ff"
+    forcefield.mkdir()
+    (forcefield / "forcefield.itp").write_text("; test\n", encoding="utf-8")
+    (forcefield / "forcefield.doc").write_text("test\n", encoding="utf-8")
 
     steps = build_pipeline(config, config_dir=tmp_path)
     topology = next(step for step in steps if step.name == "topology")
@@ -52,6 +55,25 @@ def test_gromacs_steps_use_gmxlib_for_project_force_field(tmp_path: Path) -> Non
 
     assert topology.env == {"GMXLIB": str(tmp_path.resolve())}
     assert em_grompp.env == {"GMXLIB": str(tmp_path.resolve())}
+
+
+def test_gromacs_steps_use_central_forcefield_directory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    central_root = tmp_path / "user data" / "forcefields"
+    forcefield = central_root / "charmm36-central-test.ff"
+    forcefield.mkdir(parents=True)
+    (forcefield / "forcefield.itp").write_text("; test\n", encoding="utf-8")
+    (forcefield / "forcefield.doc").write_text("test\n", encoding="utf-8")
+    monkeypatch.setenv("GMXFLOW_FORCEFIELD_DIR", str(central_root))
+    monkeypatch.setattr("gmxflow.forcefields._installed_roots", lambda: [])
+
+    config = default_config("central_force_field_test")
+    config.force_field.name = "charmm36-central-test"
+    steps = build_pipeline(config, config_dir=tmp_path / "project")
+    topology = next(step for step in steps if step.name == "topology")
+
+    assert topology.env == {"GMXLIB": str(central_root.resolve())}
 
 
 def test_gromacs_steps_do_not_set_gmxlib_for_installed_force_field(tmp_path: Path) -> None:

@@ -5,6 +5,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from gmxflow.config import GmxFlowConfig
+from gmxflow.forcefields import resolve_forcefield
 
 
 class PipelineStep(BaseModel):
@@ -737,24 +738,10 @@ def _gmx_command(config: GmxFlowConfig) -> str:
 
 
 def _gromacs_env(force_field_name: str, project_root: Path) -> dict[str, str]:
-    force_field_dir = _local_force_field_dir(force_field_name, project_root)
-    if force_field_dir is None:
+    location = resolve_forcefield(force_field_name, project_root)
+    if location is None or location.gmxlib is None:
         return {}
-    return {"GMXLIB": str(force_field_dir.parent)}
-
-
-def _local_force_field_dir(force_field_name: str, project_root: Path) -> Path | None:
-    names = [force_field_name]
-    if force_field_name and not force_field_name.endswith(".ff"):
-        names.append(f"{force_field_name}.ff")
-    for name in names:
-        path = Path(name).expanduser()
-        if path.is_absolute() and path.is_dir():
-            return path.resolve()
-        candidate = project_root / path
-        if candidate.is_dir():
-            return candidate.resolve()
-    return None
+    return {"GMXLIB": str(location.gmxlib)}
 
 
 def _neutralize_args(config: GmxFlowConfig) -> list[str]:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,14 @@ from rich.table import Table
 from gmxflow.analysis import run_analysis, run_interaction_energy, run_sasa_analysis
 from gmxflow.config import load_config
 from gmxflow.executor import run_steps, run_workspace_setup, select_steps
+from gmxflow.forcefields import (
+    FORCEFIELD_ENV,
+    install_forcefield,
+    list_user_forcefields,
+    resolve_forcefield,
+    user_forcefield_root,
+    validate_forcefield_directory,
+)
 from gmxflow.ligand import prepare_ligand as prepare_ligand_files
 from gmxflow.pipeline import PipelineStep, build_pipeline
 from gmxflow.preparation import prepare_complex as prepare_complex_files
@@ -25,6 +34,8 @@ from gmxflow.workspace import clean_workspace, ensure_workspace, render_template
 app = typer.Typer(
     help="CLI para preparar, executar e analisar pipelines de dinâmica molecular com GROMACS."
 )
+forcefield_app = typer.Typer(help="Gerencia force fields externos do GROMACS.")
+app.add_typer(forcefield_app, name="forcefield")
 console = Console()
 ALLOWED_REAL_STEPS = {
     "prepare",
@@ -61,6 +72,77 @@ class ResidueInfo:
     number: int
     name: str
     atom_count: int
+
+
+@forcefield_app.command("path")
+def forcefield_path() -> None:
+    """Mostra o diretório central de force fields deste usuário."""
+    console.print(user_forcefield_root())
+    if FORCEFIELD_ENV in os.environ:
+        console.print(f"Diretório definido por {FORCEFIELD_ENV}.")
+
+
+@forcefield_app.command("list")
+def forcefield_list() -> None:
+    """Lista force fields instalados no diretório central do usuário."""
+    locations = list_user_forcefields()
+    if not locations:
+        console.print(f"Nenhum force field instalado em {user_forcefield_root()}")
+        return
+    table = Table(title=f"Force fields em {user_forcefield_root()}")
+    table.add_column("Nome")
+    table.add_column("Diretório")
+    for location in locations:
+        table.add_row(location.name, str(location.path))
+    console.print(table)
+
+
+@forcefield_app.command("locate")
+def forcefield_locate(
+    name: Annotated[str, typer.Argument(help="Nome configurado, com ou sem sufixo .ff.")],
+    project_dir: Annotated[
+        Path,
+        typer.Option("--project-dir", help="Projeto para considerar a cópia legada local."),
+    ] = Path.cwd(),
+) -> None:
+    """Mostra qual cópia do force field será usada para um projeto."""
+    location = resolve_forcefield(name, project_dir)
+    if location is None:
+        console.print(f"Force field não encontrado: {name}")
+        raise typer.Exit(code=1)
+    console.print(f"Nome: {location.name}")
+    console.print(f"Origem: {location.source}")
+    console.print(f"Diretório: {location.path}")
+    if location.gmxlib is not None:
+        console.print(f"GMXLIB: {location.gmxlib}")
+
+
+@forcefield_app.command("validate")
+def forcefield_validate(
+    directory: Annotated[Path, typer.Argument(help="Diretório .ff a verificar.")],
+) -> None:
+    """Verifica se a pasta contém a estrutura mínima de um force field GROMACS."""
+    try:
+        valid_directory = validate_forcefield_directory(directory)
+    except (FileNotFoundError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from error
+    console.print(f"Force field válido: [bold]{valid_directory}[/bold]")
+
+
+@forcefield_app.command("install")
+def forcefield_install(
+    source: Annotated[Path, typer.Argument(help="Pasta .ff extraída para instalar.")],
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Nome de destino opcional; por padrão usa o nome da pasta."),
+    ] = None,
+) -> None:
+    """Copia um force field para o diretório central sem sobrescrever destinos."""
+    try:
+        installed = install_forcefield(source, name=name)
+    except (FileExistsError, FileNotFoundError, ValueError, OSError) as error:
+        raise typer.BadParameter(str(error)) from error
+    console.print(f"Force field instalado em: [bold]{installed}[/bold]")
 
 
 @app.command()

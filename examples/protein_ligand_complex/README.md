@@ -23,10 +23,9 @@ inputs/3HTB.pdb
 inputs/JZ4.pdb
 inputs/JZ4.mol2
 inputs/JZ4.str
-charmm36-feb2026_cgenff-5.0.ff/
 ```
 
-Os arquivos `JZ4.mol2`, `JZ4.str` e o diretório `.ff` não devem ser tratados como artefatos universais do `gmxflow`. Eles dependem do fluxo CHARMM/CGenFF usado pelo usuário.
+Os arquivos `JZ4.mol2` e `JZ4.str` dependem do fluxo CHARMM/CGenFF usado pelo usuário. O force field não fica no exemplo: instale-o uma vez no diretório central do usuário.
 
 Antes de rodar a pipeline completa, confirme:
 
@@ -34,7 +33,7 @@ Antes de rodar a pipeline completa, confirme:
 - `inputs/JZ4.pdb`: pose 3D do ligante;
 - `inputs/JZ4.mol2`: ligante enviado/compatível com CGenFF;
 - `inputs/JZ4.str`: stream file produzido por CGenFF/ParamChem/SilcsBio;
-- `charmm36-feb2026_cgenff-5.0.ff/`: force field CHARMM/CGenFF local.
+- force field `charmm36-feb2026_cgenff-5.0.ff/` instalado no diretório central do usuário.
 
 `inputs/3HTB.pdb` pode ser um PDB cristalográfico completo contendo o JZ4. Para `ligand_kind = "small_molecule"`, o `gmxflow` remove do receptor os registros com `resname = ligand_resname` antes de chamar `gmx pdb2gmx`, evitando que o GROMACS tente tratar o ligante como parte da cadeia proteica.
 
@@ -53,18 +52,20 @@ charmm36-feb2026_cgenff-5.0.ff.tgz
 Por linha de comando:
 
 ```sh
-cd examples/protein_ligand_complex
+mkdir -p "$HOME/Downloads/gmxflow-forcefields"
+cd "$HOME/Downloads/gmxflow-forcefields"
 wget https://mackerell.umaryland.edu/download.php?filename=CHARMM_ff_params_files/charmm36-feb2026_cgenff-5.0.ff.tgz -O charmm36-feb2026_cgenff-5.0.ff.tgz
 tar -xzf charmm36-feb2026_cgenff-5.0.ff.tgz
 ```
 
-Depois da extração, a pasta esperada é:
+Instale o force field extraído no armazenamento central do usuário:
 
-```text
-charmm36-feb2026_cgenff-5.0.ff/
+```sh
+gmxflow forcefield validate "$HOME/Downloads/gmxflow-forcefields/charmm36-feb2026_cgenff-5.0.ff"
+gmxflow forcefield install "$HOME/Downloads/gmxflow-forcefields/charmm36-feb2026_cgenff-5.0.ff"
 ```
 
-Esse nome precisa bater com:
+O nome centralizado será `~/.local/share/gmxflow/forcefields/charmm36-feb2026_cgenff-5.0.ff/` no Linux/macOS (`%LOCALAPPDATA%/gmxflow/forcefields/` no Windows). Esse nome precisa bater com:
 
 ```toml
 [force_field]
@@ -137,7 +138,7 @@ name = "charmm36-feb2026_cgenff-5.0"
 water = "tip3p"
 ```
 
-Quando o force field `.ff` fica na raiz do projeto, o `gmxflow` define `GMXLIB` durante as etapas GROMACS para que `pdb2gmx` encontre esse force field local.
+O `gmxflow` define `GMXLIB` automaticamente para que as etapas GROMACS encontrem o force field centralizado. Force fields presentes na instalação do GROMACS têm precedência; pastas `.ff` locais ao projeto continuam sendo aceitas como fallback para projetos antigos.
 
 ## Fluxo Rápido
 
@@ -217,7 +218,7 @@ Correção:
 
 ### 3. O force field precisa estar visível para o GROMACS
 
-Este exemplo espera uma pasta:
+Este exemplo usa o force field instalado no diretório central do usuário:
 
 ```text
 charmm36-feb2026_cgenff-5.0.ff/
@@ -232,7 +233,7 @@ name = "charmm36-feb2026_cgenff-5.0"
 Correção:
 
 - se sua pasta `.ff` tiver outro nome, ajuste `force_field.name`;
-- mantenha a pasta `.ff` ao lado do `config.toml`;
+- instale a pasta `.ff` com `gmxflow forcefield install` e confirme o caminho com `gmxflow forcefield locate charmm36-feb2026_cgenff-5.0`;
 - se usar uma instalação global do GROMACS, garanta que o force field também esteja em um caminho reconhecido pelo GROMACS.
 
 ### 4. `profile = "smoke"` não é simulação interpretável

@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import os
-import shutil
 import subprocess
 import sys
 from importlib import resources
 from pathlib import Path
-from typing import Iterable
 
 from pydantic import BaseModel, Field
 
 from gmxflow.config import GmxFlowConfig
+from gmxflow.forcefields import forcefield_search_paths, resolve_forcefield
 from gmxflow.runner import format_command
 
 
@@ -47,11 +45,22 @@ def prepare_ligand(
         project_root,
         "input.ligand_str",
     )
-    ff_dir = _resolve_force_field_dir(
-        configured=config.force_field.name,
+    location = resolve_forcefield(
+        name=config.force_field.name,
         project_root=project_root,
         explicit=force_field_dir,
     )
+    if location is None:
+        searched = "\n".join(
+            f"- {path}"
+            for path in forcefield_search_paths(config.force_field.name, project_root)
+        )
+        raise FileNotFoundError(
+            "Diretório de force field CHARMM não encontrado. Instale-o com "
+            "`gmxflow forcefield install` ou informe --force-field-dir.\n"
+            f"Buscado em:\n{searched}"
+        )
+    ff_dir = location.path
     resname = config.input.ligand_resname.strip()
     if not resname:
         raise ValueError("input.ligand_resname deve ser informado para ligante pequeno.")
@@ -122,79 +131,6 @@ def _resolve_project_path(value: str, project_root: Path) -> Path:
     if path.is_absolute():
         return path
     return project_root / path
-
-
-def _resolve_force_field_dir(
-    configured: str,
-    project_root: Path,
-    explicit: Path | None,
-) -> Path:
-    if explicit is not None:
-        path = explicit.expanduser().resolve()
-        if not path.is_dir():
-            raise FileNotFoundError(f"Diretório de force field não encontrado: {path}")
-        return path
-
-    for candidate in _force_field_candidates(configured, project_root):
-        if candidate.is_dir():
-            return candidate.resolve()
-
-    searched = "\n".join(f"- {path}" for path in _force_field_candidates(configured, project_root))
-    raise FileNotFoundError(
-        "Diretório de force field CHARMM não encontrado. Informe --force-field-dir.\n"
-        f"Buscado em:\n{searched}"
-    )
-
-
-def _force_field_candidates(configured: str, project_root: Path) -> list[Path]:
-    names = [configured]
-    if configured and not configured.endswith(".ff"):
-        names.append(f"{configured}.ff")
-
-    roots = [
-        project_root,
-        project_root / "inputs",
-        project_root / "work",
-        Path(sys.prefix) / "share" / "gromacs" / "top",
-    ]
-    if gmxlib := os.environ.get("GMXLIB"):
-        roots.insert(0, Path(gmxlib))
-    if conda_prefix := os.environ.get("CONDA_PREFIX"):
-        roots.insert(0, Path(conda_prefix) / "share" / "gromacs" / "top")
-    roots.extend(_gromacs_roots_from_path())
-
-    candidates: list[Path] = []
-    for name in names:
-        path = Path(name).expanduser()
-        if path.is_absolute():
-            candidates.append(path)
-        candidates.extend(root / name for root in roots)
-    return _unique_paths(candidates)
-
-
-def _gromacs_roots_from_path() -> list[Path]:
-    roots: list[Path] = []
-    for command in ("gmx", "gmx_mpi"):
-        executable = shutil.which(command)
-        if executable is None:
-            continue
-        path = Path(executable).resolve()
-        if path.parent.name.startswith("bin"):
-            roots.append(path.parent.parent / "share" / "gromacs" / "top")
-        else:
-            roots.append(path.parent / "share" / "gromacs" / "top")
-    return roots
-
-
-def _unique_paths(paths: Iterable[Path]) -> list[Path]:
-    seen: set[str] = set()
-    unique: list[Path] = []
-    for path in paths:
-        key = str(path)
-        if key not in seen:
-            seen.add(key)
-            unique.append(path)
-    return unique
 
 
 def _require_outputs(result: LigandPreparationResult) -> None:

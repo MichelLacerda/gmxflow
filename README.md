@@ -76,10 +76,25 @@ O primeiro fluxo recomendado para usuários novos é o tutorial de complexo prot
 - [Exemplo: `examples/protein_ligand_complex`](examples/protein_ligand_complex/README.md);
 - [Referência do `config.toml`](docs/reference/config.md);
 - [Como preparar ligante pequeno com CGenFF/ParamChem](docs/how-to/cgenff-paramchem.md);
+- [Como instalar force fields externos no diretório central do usuário](docs/how-to/cgenff-paramchem.md#como-obter-o-charmm36cgenff-para-gromacs);
 - [Como instalar o gmxflow sem usar uv](docs/how-to/install-gmxflow-without-uv.md);
 - [Como instalar GROMACS com CUDA usando Micromamba](docs/how-to/install-gromacs-cuda.md).
 
 ## Comandos disponíveis
+
+### Gerenciar force fields externos
+
+Force fields externos podem ser instalados uma única vez no diretório do usuário:
+
+```sh
+gmxflow forcefield path
+gmxflow forcefield validate /caminho/para/charmm36.ff
+gmxflow forcefield install /caminho/para/charmm36.ff
+gmxflow forcefield list
+gmxflow forcefield locate charmm36
+```
+
+O diretório padrão segue `XDG_DATA_HOME` no Linux/macOS (por padrão `~/.local/share/gmxflow/forcefields`) e `%LOCALAPPDATA%/gmxflow/forcefields` no Windows. Defina `GMXFLOW_FORCEFIELD_DIR` para escolher outro local. A instalação não sobrescreve pastas existentes. Para compatibilidade, force fields na raiz do projeto continuam sendo usados quando não há cópia instalada com o GROMACS ou no diretório central.
 
 ### Ajuda geral
 
@@ -275,7 +290,7 @@ Saídas geradas em `work/ligand/`:
 
 Observação: este comando não gera os parâmetros CGenFF. Ele consome o `.str` já produzido por ferramenta externa e apenas converte para arquivos utilizáveis pelo GROMACS. O `RESI` do `.str` deve corresponder ao `input.ligand_resname`.
 
-Quando `ligand_kind = "small_molecule"`, o `gmxflow run` inclui as etapas `ligand-topology`, `protein-topology` e `assemble-complex` antes de seguir para caixa, solvatação, íons, minimização, equilíbrios, produção e análises. Se o force field `.ff` estiver na raiz do projeto, o executor define `GMXLIB` para que o GROMACS encontre esse force field local.
+Quando `ligand_kind = "small_molecule"`, o `gmxflow run` inclui as etapas `ligand-topology`, `protein-topology` e `assemble-complex` antes de seguir para caixa, solvatação, íons, minimização, equilíbrios, produção e análises. O executor define `GMXLIB` automaticamente quando o force field selecionado vem do diretório central do usuário ou de uma pasta `.ff` legada no projeto.
 
 Nas análises, ligantes peptídicos ainda são detectados por cadeia (`analysis.ligand_chain`). Para `small_molecule`, o grupo `Ligante` é criado pelo `input.ligand_resname`.
 

@@ -30,26 +30,29 @@ Também são necessários:
 
 - GROMACS acessível como `gmx`;
 - Open Babel, se precisar converter o ligante para `.mol2`;
-- force field CHARMM/CGenFF em uma pasta `.ff`;
+- force field CHARMM/CGenFF instalado no diretório central do usuário;
 - arquivos `.mol2` e `.str` compatíveis para o ligante.
 
 Para instalar GROMACS com suporte a CUDA/NVIDIA, veja:
 
 - [Como instalar GROMACS com CUDA usando Micromamba](../how-to/install-gromacs-cuda.md)
 
-O force field usado no exemplo é baixado do site do MacKerell Lab:
+O force field usado no exemplo é baixado do site do MacKerell Lab e instalado uma vez no armazenamento central do usuário:
 
 - <https://mackerell.umaryland.edu/charmm_ff.shtml#gromacs>
 
-Na seção **CHARMM36 Files for GROMACS**, baixe `charmm36-feb2026_cgenff-5.0.ff.tgz` e extraia na raiz do exemplo:
+Na seção **CHARMM36 Files for GROMACS**, baixe `charmm36-feb2026_cgenff-5.0.ff.tgz` e extraia fora da raiz do exemplo:
 
 ```sh
-cd examples/protein_ligand_complex
+mkdir -p "$HOME/Downloads/gmxflow-forcefields"
+cd "$HOME/Downloads/gmxflow-forcefields"
 wget https://mackerell.umaryland.edu/download.php?filename=CHARMM_ff_params_files/charmm36-feb2026_cgenff-5.0.ff.tgz -O charmm36-feb2026_cgenff-5.0.ff.tgz
 tar -xzf charmm36-feb2026_cgenff-5.0.ff.tgz
+gmxflow forcefield validate charmm36-feb2026_cgenff-5.0.ff
+gmxflow forcefield install charmm36-feb2026_cgenff-5.0.ff
 ```
 
-O diretório extraído deve se chamar:
+O diretório instalado por usuário fica, por padrão, em `~/.local/share/gmxflow/forcefields/` no Linux/macOS (ou `%LOCALAPPDATA%/gmxflow/forcefields/` no Windows) e deve se chamar:
 
 ```text
 charmm36-feb2026_cgenff-5.0.ff/
@@ -79,10 +82,9 @@ inputs/3HTB.pdb
 inputs/JZ4.pdb
 inputs/JZ4.mol2
 inputs/JZ4.str
-charmm36-feb2026_cgenff-5.0.ff/
 ```
 
-O diretório do force field local é ignorado pelo Git no exemplo. Para publicar ou compartilhar o projeto, prefira documentar como obtê-lo em vez de versionar uma cópia completa.
+O force field é instalado uma vez fora do projeto com `gmxflow forcefield install`; o repositório contém apenas as instruções para obtê-lo.
 
 O PDB do receptor pode vir de uma estrutura cristalográfica que ainda contém o ligante. Quando `ligand_kind = "small_molecule"`, o `gmxflow` remove do receptor os átomos cujo resname corresponde a `input.ligand_resname` antes da etapa `protein-topology`. Isso evita o erro do `pdb2gmx` em que uma cadeia mistura resíduos de tipo `Protein` e `Other`.
 
@@ -178,7 +180,7 @@ Para produção científica:
 - valide ou refine parâmetros críticos;
 - documente penalties e decisões no relatório do projeto.
 
-### Force Field Local
+### Force Field Centralizado
 
 Para este exemplo:
 
@@ -188,13 +190,13 @@ name = "charmm36-feb2026_cgenff-5.0"
 water = "tip3p"
 ```
 
-A pasta esperada é:
+A pasta central esperada no Linux/macOS é:
 
 ```text
-examples/protein_ligand_complex/charmm36-feb2026_cgenff-5.0.ff/
+~/.local/share/gmxflow/forcefields/charmm36-feb2026_cgenff-5.0.ff/
 ```
 
-Se a pasta tiver outro nome, ajuste `force_field.name`. Se o GROMACS não encontrar o force field, confira o nome da pasta e se ela está ao lado do `config.toml`.
+Se a pasta tiver outro nome, ajuste `force_field.name`. Use `gmxflow forcefield locate charmm36-feb2026_cgenff-5.0` para verificar a cópia que será usada. Projetos antigos com a pasta `.ff` ao lado do `config.toml` continuam aceitos como fallback.
 
 Também confira a compatibilidade entre a versão CGenFF do force field e a versão usada para gerar o `.str` do ligante. O exemplo usa CGenFF 5.0.
 

@@ -14,7 +14,7 @@ def test_prepare_ligand_runs_vendored_converter(tmp_path: Path, monkeypatch) -> 
     mol2.parent.mkdir()
     _write_mol2(mol2)
     _write_stream(stream)
-    force_field.mkdir()
+    _make_forcefield(force_field)
 
     calls: list[dict[str, object]] = []
 
@@ -88,7 +88,7 @@ def test_prepare_ligand_rejects_stream_resname_mismatch(tmp_path: Path) -> None:
     _write_mol2(inputs / "lig.mol2")
     _write_stream(inputs / "lig.str")
     force_field = tmp_path / "charmm36.ff"
-    force_field.mkdir()
+    _make_forcefield(force_field)
     config = default_config("ligand_resname_mismatch_test")
     config.input.ligand_mol2 = "inputs/lig.mol2"
     config.input.ligand_str = "inputs/lig.str"
@@ -107,7 +107,7 @@ def test_prepare_ligand_finds_force_field_from_gmx_path(
     _write_stream(inputs / "lig.str")
     gmx_root = tmp_path / "gmx-env"
     ff_dir = gmx_root / "share" / "gromacs" / "top" / "charmm36-jul2022.ff"
-    ff_dir.mkdir(parents=True)
+    _make_forcefield(ff_dir)
     calls: list[dict[str, object]] = []
 
     def fake_run(command, cwd, text, capture_output, check):
@@ -120,7 +120,7 @@ def test_prepare_ligand_finds_force_field_from_gmx_path(
 
     monkeypatch.setattr("gmxflow.ligand.subprocess.run", fake_run)
     monkeypatch.setattr(
-        "gmxflow.ligand.shutil.which",
+        "gmxflow.forcefields.shutil.which",
         lambda name: str(gmx_root / "bin.AVX2_256" / name),
     )
 
@@ -143,7 +143,7 @@ def test_prepare_ligand_rejects_atom_mismatch_between_mol2_and_stream(
     _write_mol2(inputs / "lig.mol2", atoms=("C1", "N1"))
     _write_stream(inputs / "lig.str", atoms=("C1", "O1"))
     force_field = tmp_path / "charmm36.ff"
-    force_field.mkdir()
+    _make_forcefield(force_field)
     config = default_config("ligand_atom_mismatch_test")
     config.input.ligand_mol2 = "inputs/lig.mol2"
     config.input.ligand_str = "inputs/lig.str"
@@ -161,7 +161,7 @@ def test_prepare_ligand_allows_cgenff_hydrogen_renaming(
     _write_mol2(inputs / "lig.mol2", atoms=("C1", "H", "H"))
     _write_stream(inputs / "lig.str", atoms=("C1", "H1", "H2"))
     force_field = tmp_path / "charmm36.ff"
-    force_field.mkdir()
+    _make_forcefield(force_field)
 
     def fake_run(command, cwd, text, capture_output, check):
         cwd.joinpath("jz4.itp").write_text("itp", encoding="utf-8")
@@ -189,7 +189,7 @@ def test_prepare_ligand_warns_for_high_cgenff_penalty(
     _write_mol2(inputs / "lig.mol2")
     _write_stream(inputs / "lig.str", penalty=60.0)
     force_field = tmp_path / "charmm36.ff"
-    force_field.mkdir()
+    _make_forcefield(force_field)
 
     def fake_run(command, cwd, text, capture_output, check):
         cwd.joinpath("jz4.itp").write_text("itp", encoding="utf-8")
@@ -225,6 +225,13 @@ def _write_mol2(path: Path, atoms: tuple[str, ...] = ("C1", "N1")) -> None:
         )
     lines.append("@<TRIPOS>BOND")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _make_forcefield(path: Path) -> Path:
+    path.mkdir(parents=True)
+    (path / "forcefield.itp").write_text("; test force field\n", encoding="utf-8")
+    (path / "forcefield.doc").write_text("test force field\n", encoding="utf-8")
+    return path
 
 
 def _write_stream(

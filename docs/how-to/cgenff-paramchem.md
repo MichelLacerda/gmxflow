@@ -14,8 +14,9 @@ ligand.str
 3. Envie esse `.mol2` para CGenFF/ParamChem/SilcsBio.
 4. Baixe o `.str` gerado.
 5. Baixe o force field CHARMM36/CGenFF para GROMACS.
-6. Configure `input.ligand_mol2`, `input.ligand_str`, `input.ligand_resname` e `force_field.name`.
-7. Rode `gmxflow prepare-ligand`.
+6. Instale a pasta `.ff` uma vez no diretório central do usuário.
+7. Configure `input.ligand_mol2`, `input.ligand_str`, `input.ligand_resname` e `force_field.name`.
+8. Rode `gmxflow prepare-ligand`.
 
 Exemplo:
 
@@ -52,24 +53,37 @@ name = "charmm36-feb2026_cgenff-5.0"
 water = "tip3p"
 ```
 
-Para baixar por linha de comando a partir da raiz do exemplo:
+Baixe e extraia o pacote fora da pasta do projeto, por exemplo:
 
 ```sh
-cd examples/protein_ligand_complex
+mkdir -p "$HOME/Downloads/gmxflow-forcefields"
+cd "$HOME/Downloads/gmxflow-forcefields"
 wget https://mackerell.umaryland.edu/download.php?filename=CHARMM_ff_params_files/charmm36-feb2026_cgenff-5.0.ff.tgz -O charmm36-feb2026_cgenff-5.0.ff.tgz
 tar -xzf charmm36-feb2026_cgenff-5.0.ff.tgz
+gmxflow forcefield validate charmm36-feb2026_cgenff-5.0.ff
+gmxflow forcefield install charmm36-feb2026_cgenff-5.0.ff
 ```
 
-Depois da extração, a estrutura esperada é:
+Por padrão, os arquivos são copiados para `~/.local/share/gmxflow/forcefields/` no Linux/macOS ou `%LOCALAPPDATA%/gmxflow/forcefields/` no Windows. Para usar outro local, defina `GMXFLOW_FORCEFIELD_DIR` antes de iniciar o `gmxflow`.
+
+Depois da instalação, a estrutura centralizada é:
 
 ```text
-examples/protein_ligand_complex/
-  config.toml
+~/.local/share/gmxflow/forcefields/
   charmm36-feb2026_cgenff-5.0.ff/
     forcefield.itp
+    forcefield.doc
     aminoacids.rtp
     cgenff.rtp
     ...
+```
+
+Confira o local e os force fields instalados:
+
+```sh
+gmxflow forcefield path
+gmxflow forcefield list
+gmxflow forcefield locate charmm36-feb2026_cgenff-5.0
 ```
 
 O nome da pasta sem o sufixo `.ff` precisa bater com `force_field.name`. Se você usar outra versão, ajuste o `config.toml`. Exemplos:
@@ -82,7 +96,7 @@ name = "charmm36-feb2026_ljpme_cgenff-5.0"
 
 Ponto crítico: a versão dos parâmetros CGenFF do force field precisa ser compatível com a versão usada para gerar o `.str` do ligante. Para este tutorial, mantenha CGenFF 5.0 no force field e gere o `.str` com CGenFF/ParamChem/SilcsBio compatível com CGenFF 5.0.
 
-O diretório `.ff` é ignorado pelo `.gitignore` do exemplo. Para publicar ou compartilhar o projeto, prefira documentar o download em vez de versionar uma cópia completa do force field.
+O `gmxflow` procura primeiro force fields já instalados com o GROMACS, depois no diretório central do usuário e, por compatibilidade, na raiz do projeto. Assim, projetos antigos com uma pasta `.ff` local continuam funcionando; para novos projetos, instale o force field centralmente e não mantenha cópias dentro de cada projeto. O comando `install` nunca sobrescreve um destino existente.
 
 ## Como Obter O `.mol2`
 
