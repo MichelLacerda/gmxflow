@@ -245,7 +245,7 @@ water = "tip3p"
 Comando implementado:
 
 ```bash
-gmxflow prepare-ligand --config project.toml
+gmxflow prepare-ligand --project project.toml
 ```
 
 Responsabilidades esperadas:

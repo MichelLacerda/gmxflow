@@ -197,8 +197,8 @@ terminal_selections = ["1", "0"]
 Para descobrir os números dos resíduos no complexo preparado:
 
 ```sh
-gmxflow run --config project.toml --until prepare
-gmxflow list-residues --config project.toml --chain A --resnames HIS,ASP,SER
+gmxflow run --project project.toml --until prepare
+gmxflow list-residues --project project.toml --chain A --resnames HIS,ASP,SER
 ```
 
 O comando imprime uma tabela e uma linha pronta para copiar para o `project.toml`, por exemplo:

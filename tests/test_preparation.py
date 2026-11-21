@@ -162,7 +162,7 @@ def test_prepare_complex_cli(tmp_path: Path) -> None:
 
     from gmxflow.cli import app
 
-    result = runner.invoke(app, ["prepare-complex", "--config", str(project / "project.toml")])
+    result = runner.invoke(app, ["prepare-complex", "--project", str(project / "project.toml")])
 
     assert result.exit_code == 0
     assert "Complexo preparado:" in result.output

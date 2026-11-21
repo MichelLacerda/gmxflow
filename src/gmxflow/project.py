@@ -147,19 +147,19 @@ Coloque os arquivos PDB de entrada em `inputs/` e ajuste os caminhos em `project
 Valide a configuração:
 
 ```bash
-gmxflow validate --config project.toml
+gmxflow validate --project project.toml
 ```
 
 Veja o plano resumido:
 
 ```bash
-gmxflow plan --config project.toml
+gmxflow plan --project project.toml
 ```
 
 Veja o plano detalhado sem executar GROMACS:
 
 ```bash
-gmxflow run --config project.toml --dry-run
+gmxflow run --project project.toml --dry-run
 ```
 
 Crie projetos novos com presets iniciais quando necessário:
@@ -177,13 +177,13 @@ Valores aceitos:
 Prepare o complexo receptor-ligante:
 
 ```bash
-gmxflow prepare-complex --config project.toml
+gmxflow prepare-complex --project project.toml
 ```
 
 Para ligante pequeno já parametrizado externamente com CGenFF:
 
 ```bash
-gmxflow prepare-ligand --config project.toml
+gmxflow prepare-ligand --project project.toml
 ```
 
 Esse comando gera `work/ligand/<ligand_resname>.itp`, `.prm`, `.top` e `_ini.pdb`. Ele não acessa CGenFF/ParamChem/SilcsBio; esses arquivos externos devem ser obtidos antes e configurados em `input.ligand_mol2` e `input.ligand_str`.
@@ -212,31 +212,31 @@ O `.mol2` e o `.str` devem representar o mesmo ligante e a mesma lista de átomo
 Execute a pipeline até a preparação, com logs:
 
 ```bash
-gmxflow run --config project.toml --until prepare
+gmxflow run --project project.toml --until prepare
 ```
 
 Limpe artefatos regeneráveis preservando os `.mdp`:
 
 ```bash
-gmxflow clean --config project.toml
+gmxflow clean --project project.toml
 ```
 
 Renderize novamente os arquivos `.mdp` finais:
 
 ```bash
-gmxflow render-templates --config project.toml --force
+gmxflow render-templates --project project.toml --force
 ```
 
 Gere novamente o relatório consolidado em `outputs/`:
 
 ```bash
-gmxflow report --config project.toml
+gmxflow report --project project.toml
 ```
 
 Para também conferir se os PDBs configurados existem:
 
 ```bash
-gmxflow run --config project.toml --dry-run --strict-inputs
+gmxflow run --project project.toml --dry-run --strict-inputs
 ```
 
 ## Estrutura do projeto
@@ -285,7 +285,7 @@ Após `gmxflow run --until prepare`, os logs devem ficar em:
 - `work/logs/00_workspace.log`;
 - `work/logs/01_prepare.log`.
 
-`gmxflow clean --config project.toml` remove artefatos regeneráveis em `work/` e preserva os `.mdp`. Use `--templates` para remover também os `.mdp`, ou `--all-work` para recriar `work/` vazio.
+`gmxflow clean --project project.toml` remove artefatos regeneráveis em `work/` e preserva os `.mdp`. Use `--templates` para remover também os `.mdp`, ou `--all-work` para recriar `work/` vazio.
 
 Os arquivos `.mdp` finais já são criados pelo `startproject` e ficam em `work/`. Eles podem ser recriados com `gmxflow render-templates --force`:
 
@@ -386,8 +386,8 @@ Com `profile = "smoke"`, NVT, NPT e produção usam apenas 10 passos. Esse perfi
 Para descobrir os números dos resíduos no complexo preparado:
 
 ```sh
-gmxflow run --config project.toml --until prepare
-gmxflow list-residues --config project.toml --chain A --resnames HIS,ASP,SER
+gmxflow run --project project.toml --until prepare
+gmxflow list-residues --project project.toml --chain A --resnames HIS,ASP,SER
 ```
 
 O comando imprime uma tabela e uma linha pronta para copiar para o `project.toml`.

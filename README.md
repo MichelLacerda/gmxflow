@@ -186,7 +186,7 @@ gmxflow startproject example --force
 ### Validar configuração
 
 ```sh
-gmxflow validate --config example/project.toml
+gmxflow validate --project example/project.toml
 ```
 
 Valida o TOML e mostra informações derivadas, como número de passos de produção.
@@ -194,7 +194,7 @@ Valida o TOML e mostra informações derivadas, como número de passos de produ�
 ### Ver plano resumido
 
 ```sh
-gmxflow plan --config example/project.toml
+gmxflow plan --project example/project.toml
 ```
 
 Mostra uma tabela curta com as etapas principais da pipeline.
@@ -202,7 +202,7 @@ Mostra uma tabela curta com as etapas principais da pipeline.
 ### Ver dry-run detalhado
 
 ```sh
-gmxflow run --config example/project.toml --dry-run
+gmxflow run --project example/project.toml --dry-run
 ```
 
 Mostra:
@@ -220,7 +220,7 @@ O dry-run não executa `gmx`, não chama `mdrun` e não gera arquivos pesados.
 ### Preparar complexo
 
 ```sh
-gmxflow prepare-complex --config example/project.toml
+gmxflow prepare-complex --project example/project.toml
 ```
 
 Gera em `work/prep/`:
@@ -232,13 +232,13 @@ Gera em `work/prep/`:
 Por padrão, não sobrescreve arquivos já existentes. Para permitir sobrescrita:
 
 ```sh
-gmxflow prepare-complex --config example/project.toml --force
+gmxflow prepare-complex --project example/project.toml --force
 ```
 
 ### Preparar ligante pequeno com CGenFF
 
 ```sh
-gmxflow prepare-ligand --config example/project.toml --force-field-dir /caminho/para/charmm36.ff
+gmxflow prepare-ligand --project example/project.toml --force-field-dir /caminho/para/charmm36.ff
 ```
 
 Esse comando usa o conversor `cgenff_charmm2gmx.py` vendorizado em `src/gmxflow/vendor/` para converter arquivos já gerados externamente pelo CGenFF/ParamChem/SilcsBio.
@@ -306,7 +306,7 @@ Nas análises, ligantes peptídicos ainda são detectados por cadeia (`analysis.
 ### Preparar workspace
 
 ```sh
-gmxflow setup-workspace --config example/project.toml
+gmxflow setup-workspace --project example/project.toml
 ```
 
 Garante a estrutura de `work/` e renderiza somente os `.mdp` ausentes. Arquivos `.mdp` já existentes são preservados.
@@ -314,7 +314,7 @@ Garante a estrutura de `work/` e renderiza somente os `.mdp` ausentes. Arquivos 
 ### Executar até a preparação
 
 ```sh
-gmxflow run --config example/project.toml --until prepare
+gmxflow run --project example/project.toml --until prepare
 ```
 
 Esse comando:
@@ -334,25 +334,25 @@ work/logs/01_prepare.log
 ### Limpar workspace
 
 ```sh
-gmxflow clean --config mastoparan_dm/project.toml
+gmxflow clean --project mastoparan_dm/project.toml
 ```
 
 Remove artefatos regeneráveis em `work/`, preservando os `.mdp` renderizados por padrão. Para remover também os `.mdp`:
 
 ```sh
-gmxflow clean --config mastoparan_dm/project.toml --templates
+gmxflow clean --project mastoparan_dm/project.toml --templates
 ```
 
 Para remover todo o `work/` e recriar apenas os diretórios vazios:
 
 ```sh
-gmxflow clean --config mastoparan_dm/project.toml --all-work
+gmxflow clean --project mastoparan_dm/project.toml --all-work
 ```
 
 ### Executar análises
 
 ```sh
-gmxflow run --config example/project.toml
+gmxflow run --project example/project.toml
 ```
 
 Esse comando executa a pipeline completa: setup de workspace, preparação, solvatação, íons, minimização, equilíbrios NVT/NPT, produção, pós-processamento `gmx trjconv`, análises para gerar `work/analysis/*.xvg`, figuras `work/analysis/*.png` e relatório em `outputs/`. Se uma etapa já tiver todas as saídas esperadas, ela é registrada como ignorada e o fluxo continua.
@@ -456,7 +456,7 @@ Quando `analysis.sasa = true`, há uma etapa extra antes dos gráficos; os logs 
 ### Renderizar Templates
 
 ```sh
-gmxflow render-templates --config example/project.toml
+gmxflow render-templates --project example/project.toml
 ```
 
 Renderiza os arquivos `.mdp` finais em `work/`:
@@ -472,7 +472,7 @@ work/prod/md.mdp
 Por padrão, arquivos existentes não são sobrescritos. Para sobrescrever:
 
 ```sh
-gmxflow render-templates --config example/project.toml --force
+gmxflow render-templates --project example/project.toml --force
 ```
 
 Observação: projetos criados com `startproject` já nascem com esses `.mdp` em `work/`. Nesse caso, use `--force` quando quiser recriá-los a partir do `project.toml`.
@@ -480,7 +480,7 @@ Observação: projetos criados com `startproject` já nascem com esses `.mdp` em
 ### Dry-run com validação dos PDBs
 
 ```sh
-gmxflow run --config example/project.toml --dry-run --strict-inputs
+gmxflow run --project example/project.toml --dry-run --strict-inputs
 ```
 
 Com `--strict-inputs`, a CLI falha se `receptor_pdb` ou `ligand_pdb` não existirem.
@@ -502,7 +502,7 @@ O `gmxflow` usa como raiz do projeto a pasta onde está o `project.toml`.
 Exemplo:
 
 ```sh
-gmxflow run --config /home/dev/simulacoes/example/project.toml --dry-run
+gmxflow run --project /home/dev/simulacoes/example/project.toml --dry-run
 ```
 
 Neste caso, a raiz do projeto é:
@@ -569,10 +569,10 @@ Ele usa dois peptídeos curtos de glicina e `simulation.profile = "smoke"`, que 
 Comandos:
 
 ```sh
-gmxflow validate --config examples/smoke_peptide_complex/project.toml
-gmxflow run --config examples/smoke_peptide_complex/project.toml --dry-run --strict-inputs
-gmxflow prepare-complex --config examples/smoke_peptide_complex/project.toml --force
-gmxflow render-templates --config examples/smoke_peptide_complex/project.toml --force
+gmxflow validate --project examples/smoke_peptide_complex/project.toml
+gmxflow run --project examples/smoke_peptide_complex/project.toml --dry-run --strict-inputs
+gmxflow prepare-complex --project examples/smoke_peptide_complex/project.toml --force
+gmxflow render-templates --project examples/smoke_peptide_complex/project.toml --force
 ```
 
 Para criar um projeto novo já em modo smoke:

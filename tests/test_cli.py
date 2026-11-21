@@ -75,12 +75,26 @@ def test_cli_validate_accepts_generated_config(tmp_path: Path) -> None:
     assert project_result.exit_code == 0
 
     config_path = tmp_path / "cli_project" / "project.toml"
-    validate_result = runner.invoke(app, ["validate", "--config", str(config_path)])
+    validate_result = runner.invoke(app, ["validate", "--project", str(config_path)])
 
     assert validate_result.exit_code == 0
     assert "project.toml" in validate_result.output
     assert "Projeto: cli_project" in validate_result.output
     assert "50000000" in validate_result.output
+
+
+def test_cli_validate_rejects_renamed_config_option(tmp_path: Path) -> None:
+    project_result = CliRunner().invoke(
+        app,
+        ["startproject", "cli_project", "--destination", str(tmp_path)],
+    )
+    assert project_result.exit_code == 0
+
+    config_path = tmp_path / "cli_project" / "project.toml"
+    result = CliRunner().invoke(app, ["validate", "--config", str(config_path)])
+
+    assert result.exit_code != 0
+    assert "--config" in result.output
 
 
 def test_cli_validate_defaults_to_project_toml(tmp_path: Path, monkeypatch) -> None:
@@ -126,7 +140,7 @@ def test_cli_list_residues_filters_and_prints_config_value(tmp_path: Path) -> No
         app,
         [
             "list-residues",
-            "--config",
+            "--project",
             str(project / "project.toml"),
             "--chain",
             "A",
@@ -152,7 +166,7 @@ def test_cli_run_dry_run_prints_pipeline_without_executing(tmp_path: Path) -> No
     assert project_result.exit_code == 0
 
     config_path = tmp_path / "cli_project" / "project.toml"
-    result = runner.invoke(app, ["run", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(app, ["run", "--project", str(config_path), "--dry-run"])
 
     assert result.exit_code == 0
     assert "DRY-RUN" in result.output
@@ -204,7 +218,7 @@ def test_cli_run_without_until_executes_full_pipeline(tmp_path: Path, monkeypatc
     monkeypatch.setattr("gmxflow.cli.run_workspace_setup", fake_workspace_setup)
     monkeypatch.setattr("gmxflow.cli.run_steps", fake_run_steps)
 
-    result = runner.invoke(app, ["run", "--config", str(project / "project.toml")])
+    result = runner.invoke(app, ["run", "--project", str(project / "project.toml")])
 
     assert result.exit_code == 0
     assert calls["workspace_project"] == project
@@ -283,7 +297,7 @@ def test_cli_run_until_analysis_is_allowed(
         app,
         [
             "run",
-            "--config",
+            "--project",
             str(project / "project.toml"),
             "--until",
             "analysis",
@@ -334,7 +348,7 @@ def test_cli_run_until_prepare_sets_up_workspace_and_logs(tmp_path: Path) -> Non
         encoding="utf-8",
     )
 
-    result = runner.invoke(app, ["run", "--config", str(project / "project.toml"), "--until", "prepare"])
+    result = runner.invoke(app, ["run", "--project", str(project / "project.toml"), "--until", "prepare"])
 
     assert result.exit_code == 0
     assert "Etapa concluída: workspace" in result.output
@@ -355,7 +369,7 @@ def test_cli_run_dry_run_strict_inputs_rejects_missing_files(tmp_path: Path) -> 
     config_path = tmp_path / "cli_project" / "project.toml"
     result = runner.invoke(
         app,
-        ["run", "--config", str(config_path), "--dry-run", "--strict-inputs"],
+        ["run", "--project", str(config_path), "--dry-run", "--strict-inputs"],
     )
 
     assert result.exit_code != 0
@@ -372,7 +386,7 @@ def test_cli_render_templates_writes_mdp_files(tmp_path: Path) -> None:
 
     config_path = tmp_path / "cli_project" / "project.toml"
     result = runner.invoke(
-        app, ["render-templates", "--config", str(config_path), "--force"]
+        app, ["render-templates", "--project", str(config_path), "--force"]
     )
 
     assert result.exit_code == 0
@@ -410,7 +424,7 @@ def test_cli_prepare_ligand_prints_generated_files(tmp_path: Path, monkeypatch) 
 
     monkeypatch.setattr("gmxflow.cli.prepare_ligand_files", fake_prepare_ligand_files)
 
-    result = runner.invoke(app, ["prepare-ligand", "--config", str(config_path)])
+    result = runner.invoke(app, ["prepare-ligand", "--project", str(config_path)])
 
     assert result.exit_code == 0
     assert "Ligante preparado: JZ4" in result.output
@@ -429,7 +443,7 @@ def test_cli_clean_removes_artifacts_and_preserves_templates(tmp_path: Path) -> 
     artifact = project / "work" / "prep" / "complexo.pdb"
     artifact.write_text("pdb", encoding="utf-8")
 
-    result = runner.invoke(app, ["clean", "--config", str(project / "project.toml")])
+    result = runner.invoke(app, ["clean", "--project", str(project / "project.toml")])
 
     assert result.exit_code == 0
     assert "Workspace limpo:" in result.output
@@ -452,7 +466,7 @@ def test_cli_setup_workspace_renders_only_missing_templates(tmp_path: Path) -> N
     missing_template.unlink()
 
     result = runner.invoke(
-        app, ["setup-workspace", "--config", str(project / "project.toml")]
+        app, ["setup-workspace", "--project", str(project / "project.toml")]
     )
 
     assert result.exit_code == 0

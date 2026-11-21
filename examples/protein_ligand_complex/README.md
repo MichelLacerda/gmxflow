@@ -148,17 +148,17 @@ O `gmxflow` define `GMXLIB` automaticamente para que as etapas GROMACS encontrem
 Na raiz do repositório:
 
 ```sh
-gmxflow validate --config examples/protein_ligand_complex/project.toml
-gmxflow run --config examples/protein_ligand_complex/project.toml --dry-run --strict-inputs
-gmxflow run --config examples/protein_ligand_complex/project.toml
+gmxflow validate --project examples/protein_ligand_complex/project.toml
+gmxflow run --project examples/protein_ligand_complex/project.toml --dry-run --strict-inputs
+gmxflow run --project examples/protein_ligand_complex/project.toml
 ```
 
 Para rodar de dentro deste diretório:
 
 ```sh
-gmxflow validate --config project.toml
-gmxflow run --config project.toml --dry-run --strict-inputs
-gmxflow run --config project.toml
+gmxflow validate --project project.toml
+gmxflow run --project project.toml --dry-run --strict-inputs
+gmxflow run --project project.toml
 ```
 
 O relatório final fica em:
@@ -257,50 +257,50 @@ Correção:
 
 - após mudar arquivos de entrada, rode normalmente; o estado deve detectar mudanças rastreadas;
 - se quiser forçar reexecução parcial, use `--from-step`;
-- se estiver em dúvida, use `gmxflow clean --config project.toml` para remover artefatos regeneráveis preservando templates.
+- se estiver em dúvida, use `gmxflow clean --project project.toml` para remover artefatos regeneráveis preservando templates.
 
 ## Comandos Úteis
 
 Validar:
 
 ```sh
-gmxflow validate --config project.toml
+gmxflow validate --project project.toml
 ```
 
 Dry-run estrito:
 
 ```sh
-gmxflow run --config project.toml --dry-run --strict-inputs
+gmxflow run --project project.toml --dry-run --strict-inputs
 ```
 
 Preparar apenas ligante:
 
 ```sh
-gmxflow prepare-ligand --config project.toml
+gmxflow prepare-ligand --project project.toml
 ```
 
 Rodar até montagem do complexo:
 
 ```sh
-gmxflow run --config project.toml --until assemble-complex
+gmxflow run --project project.toml --until assemble-complex
 ```
 
 Rodar pipeline completa:
 
 ```sh
-gmxflow run --config project.toml
+gmxflow run --project project.toml
 ```
 
 Regenerar relatório a partir de análises existentes:
 
 ```sh
-gmxflow report --config project.toml
+gmxflow report --project project.toml
 ```
 
 Limpar artefatos regeneráveis:
 
 ```sh
-gmxflow clean --config project.toml
+gmxflow clean --project project.toml
 ```
 
 ## Próximo Passo

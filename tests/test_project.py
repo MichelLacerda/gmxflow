@@ -77,13 +77,13 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     assert "## Configuração" in readme_text
     assert "project.show_report()" in readme_text
     assert "outputs/report.html" in readme_text
-    assert "gmxflow prepare-complex --config project.toml" in readme_text
-    assert "gmxflow run --config project.toml --until prepare" in readme_text
-    assert "gmxflow clean --config project.toml" in readme_text
-    assert "gmxflow render-templates --config project.toml" in readme_text
-    assert "gmxflow report --config project.toml" in readme_text
+    assert "gmxflow prepare-complex --project project.toml" in readme_text
+    assert "gmxflow run --project project.toml --until prepare" in readme_text
+    assert "gmxflow clean --project project.toml" in readme_text
+    assert "gmxflow render-templates --project project.toml" in readme_text
+    assert "gmxflow report --project project.toml" in readme_text
     assert "gmxflow startproject novo_projeto --ligand-kind small_molecule --profile smoke --gpu off" in readme_text
-    assert "gmxflow prepare-ligand --config project.toml" in readme_text
+    assert "gmxflow prepare-ligand --project project.toml" in readme_text
     assert "sudo apt install openbabel" in readme_text
     assert "obabel inputs/ligand.pdb -O inputs/ligand.mol2" in readme_text
     assert "valida a lista de átomos entre `.mol2` e `.str`" in readme_text

@@ -95,7 +95,7 @@ def build_pipeline(
             command=[
                 "gmxflow",
                 "prepare-complex",
-                "--config",
+                "--project",
                 str(config_path),
                 "--force",
             ],
@@ -121,7 +121,7 @@ def build_pipeline(
                     name="ligand-topology",
                     description="Converter topologia CGenFF do ligante para GROMACS.",
                     workdir=ligand,
-                    command=["gmxflow", "prepare-ligand", "--config", str(config_path)],
+                    command=["gmxflow", "prepare-ligand", "--project", str(config_path)],
                     inputs=[ligand_mol2, ligand_str],
                     outputs=[
                         ligand / f"{ligand_prefix}.itp",
@@ -171,7 +171,7 @@ def build_pipeline(
                     command=[
                         "gmxflow",
                         "assemble-complex",
-                        "--config",
+                        "--project",
                         str(config_path),
                     ],
                     inputs=[
@@ -297,7 +297,7 @@ def build_pipeline(
                 command=[
                     "gmxflow",
                     "solvate-system",
-                    "--config",
+                    "--project",
                     str(config_path),
                 ],
                 inputs=[box / "box.gro", topo / "topol.top"],
@@ -579,7 +579,7 @@ def build_pipeline(
                 name="analysis",
                 description="Executar análises principais.",
                 workdir=analysis,
-                command=["gmxflow", "analyze", "--config", str(config_path)],
+                command=["gmxflow", "analyze", "--project", str(config_path)],
                 inputs=[prod / "md.tpr", prod / "md_fit.xtc"],
                 outputs=analysis_outputs,
                 state={
@@ -596,7 +596,7 @@ def build_pipeline(
                 name="interaction-energy",
                 description="Calcular energia aproximada de interação receptor-ligante por rerun.",
                 workdir=analysis,
-                command=["gmxflow", "interaction-energy", "--config", str(config_path)],
+                command=["gmxflow", "interaction-energy", "--project", str(config_path)],
                 inputs=[
                     analysis / "rerun.mdp",
                     analysis / "lig.ndx",
@@ -625,7 +625,7 @@ def build_pipeline(
                 name="sasa",
                 description="Calcular SASA e BSA aproximado receptor-ligante.",
                 workdir=analysis,
-                command=["gmxflow", "sasa", "--config", str(config_path)],
+                command=["gmxflow", "sasa", "--project", str(config_path)],
                 inputs=[
                     analysis / "lig.ndx",
                     prod / "md.tpr",
@@ -710,7 +710,7 @@ def build_pipeline(
                 name="plots",
                 description="Gerar figuras das análises.",
                 workdir=analysis,
-                command=["gmxflow", "plot-analysis", "--config", str(config_path)],
+                command=["gmxflow", "plot-analysis", "--project", str(config_path)],
                 inputs=plot_inputs,
                 outputs=plot_outputs,
                 state={
@@ -726,7 +726,7 @@ def build_pipeline(
                 name="report",
                 description="Gerar relatório consolidado das análises.",
                 workdir=outputs,
-                command=["gmxflow", "report", "--config", str(config_path)],
+                command=["gmxflow", "report", "--project", str(config_path)],
                 inputs=[
                     *final_analysis_inputs,
                     *plot_outputs,

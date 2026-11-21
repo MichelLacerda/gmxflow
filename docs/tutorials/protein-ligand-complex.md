@@ -93,19 +93,19 @@ O PDB do receptor pode vir de uma estrutura cristalográfica que ainda contém o
 Valide a configuração:
 
 ```sh
-gmxflow validate --config examples/protein_ligand_complex/project.toml
+gmxflow validate --project examples/protein_ligand_complex/project.toml
 ```
 
 Inspecione o plano detalhado sem executar GROMACS:
 
 ```sh
-gmxflow run --config examples/protein_ligand_complex/project.toml --dry-run --strict-inputs
+gmxflow run --project examples/protein_ligand_complex/project.toml --dry-run --strict-inputs
 ```
 
 Execute a pipeline:
 
 ```sh
-gmxflow run --config examples/protein_ligand_complex/project.toml
+gmxflow run --project examples/protein_ligand_complex/project.toml
 ```
 
 Abra o relatório:
@@ -259,7 +259,7 @@ O `gmxflow` usa `work/state.json` para registrar comandos, entradas e fingerprin
 Use:
 
 ```sh
-gmxflow run --config examples/protein_ligand_complex/project.toml --from-step ligand-topology
+gmxflow run --project examples/protein_ligand_complex/project.toml --from-step ligand-topology
 ```
 
 quando quiser refazer a partir de uma etapa específica.
@@ -267,7 +267,7 @@ quando quiser refazer a partir de uma etapa específica.
 Use:
 
 ```sh
-gmxflow clean --config examples/protein_ligand_complex/project.toml
+gmxflow clean --project examples/protein_ligand_complex/project.toml
 ```
 
 quando quiser limpar artefatos regeneráveis preservando templates `.mdp`.
@@ -309,6 +309,6 @@ catalytic_residues = ""
 Para resíduos catalíticos:
 
 ```sh
-gmxflow run --config examples/protein_ligand_complex/project.toml --until prepare
-gmxflow list-residues --config examples/protein_ligand_complex/project.toml --chain A --resnames HIS,ASP,SER
+gmxflow run --project examples/protein_ligand_complex/project.toml --until prepare
+gmxflow list-residues --project examples/protein_ligand_complex/project.toml --chain A --resnames HIS,ASP,SER
 ```

@@ -101,7 +101,7 @@ def test_prepare_step_uses_internal_cli_command(tmp_path: Path) -> None:
     assert prepare.command == [
         "gmxflow",
         "prepare-complex",
-        "--config",
+        "--project",
         str(config_path.resolve()),
         "--force",
     ]
@@ -133,7 +133,7 @@ def test_small_molecule_pipeline_adds_ligand_topology_step(tmp_path: Path) -> No
     assert ligand_topology.command == [
         "gmxflow",
         "prepare-ligand",
-        "--config",
+        "--project",
         str(config_path.resolve()),
     ]
     assert ligand_topology.inputs == [
@@ -177,7 +177,7 @@ def test_small_molecule_pipeline_adds_ligand_topology_step(tmp_path: Path) -> No
     assert assemble_complex.command == [
         "gmxflow",
         "assemble-complex",
-        "--config",
+        "--project",
         str(config_path.resolve()),
     ]
     assert assemble_complex.inputs == [
@@ -271,7 +271,7 @@ def test_solvate_uses_internal_topology_reset_command(tmp_path: Path) -> None:
     assert solvate.command == [
         "gmxflow",
         "solvate-system",
-        "--config",
+        "--project",
         str(config_path.resolve()),
     ]
 
@@ -518,7 +518,7 @@ def test_analysis_step_uses_explicit_config_path(tmp_path: Path) -> None:
     )
     analysis = next(step for step in steps if step.name == "analysis")
 
-    assert analysis.command == ["gmxflow", "analyze", "--config", str(config_path.resolve())]
+    assert analysis.command == ["gmxflow", "analyze", "--project", str(config_path.resolve())]
     assert analysis.inputs == [
         tmp_path.resolve() / "work" / "prod" / "md.tpr",
         tmp_path.resolve() / "work" / "prod" / "md_fit.xtc",
@@ -547,7 +547,7 @@ def test_plots_step_uses_analysis_outputs(tmp_path: Path) -> None:
     plots = next(step for step in steps if step.name == "plots")
 
     assert plots.name == "plots"
-    assert plots.command == ["gmxflow", "plot-analysis", "--config", str(config_path.resolve())]
+    assert plots.command == ["gmxflow", "plot-analysis", "--project", str(config_path.resolve())]
     assert plots.inputs == [
         tmp_path.resolve() / "work" / "analysis" / "rmsd_backbone.xvg",
         tmp_path.resolve() / "work" / "analysis" / "rmsd_ligante.xvg",
@@ -578,7 +578,7 @@ def test_report_step_uses_analysis_outputs_and_plots(tmp_path: Path) -> None:
     report = steps[-1]
 
     assert report.name == "report"
-    assert report.command == ["gmxflow", "report", "--config", str(config_path.resolve())]
+    assert report.command == ["gmxflow", "report", "--project", str(config_path.resolve())]
     assert report.workdir == tmp_path.resolve() / "outputs"
     assert report.inputs == [
         tmp_path.resolve() / "work" / "analysis" / "rmsd_backbone.xvg",
@@ -617,7 +617,7 @@ def test_pipeline_adds_interaction_energy_when_enabled(tmp_path: Path) -> None:
     assert interaction.command == [
         "gmxflow",
         "interaction-energy",
-        "--config",
+        "--project",
         str(config_path.resolve()),
     ]
     assert interaction.inputs == [
@@ -647,7 +647,7 @@ def test_pipeline_adds_sasa_when_enabled(tmp_path: Path) -> None:
     report = steps[-1]
 
     assert names[names.index("analysis") + 1] == "sasa"
-    assert sasa.command == ["gmxflow", "sasa", "--config", str(config_path.resolve())]
+    assert sasa.command == ["gmxflow", "sasa", "--project", str(config_path.resolve())]
     assert sasa.inputs == [
         tmp_path.resolve() / "work" / "analysis" / "lig.ndx",
         tmp_path.resolve() / "work" / "prod" / "md.tpr",

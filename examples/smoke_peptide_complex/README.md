@@ -22,9 +22,9 @@ Esse perfil força NVT, NPT e produção a usarem apenas 10 passos. O objetivo �
 Comandos úteis:
 
 ```sh
-uv run gmxflow validate --config examples/smoke_peptide_complex/project.toml
-uv run gmxflow run --config examples/smoke_peptide_complex/project.toml --dry-run --strict-inputs
-uv run gmxflow prepare-complex --config examples/smoke_peptide_complex/project.toml --force
+uv run gmxflow validate --project examples/smoke_peptide_complex/project.toml
+uv run gmxflow run --project examples/smoke_peptide_complex/project.toml --dry-run --strict-inputs
+uv run gmxflow prepare-complex --project examples/smoke_peptide_complex/project.toml --force
 ```
 
 O teste automatizado ponta a ponta da API exige GROMACS e o force field
