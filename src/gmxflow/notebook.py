@@ -7,7 +7,47 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
+from gmxflow.executor import StepResult
+
 _DISPLAYED_FIGURES: list[Any] = []
+
+
+def show_execution(results: tuple[StepResult, ...]) -> None:
+    """Display execution statuses, durations, and log paths in a notebook."""
+    try:
+        display_module = import_module("IPython.display")
+    except ImportError as error:
+        raise RuntimeError(
+            "A exibição do resumo requer IPython no ambiente do notebook."
+        ) from error
+    try:
+        pd = import_module("pandas")
+    except ImportError as error:
+        raise RuntimeError(
+            "A exibição do resumo requer pandas. Instale o extra `gmxflow[notebook]`."
+        ) from error
+
+    rows = []
+    for result in results:
+        if result.skipped:
+            status = "reutilizada (sem alterações)"
+        elif result.succeeded:
+            status = "concluída"
+        else:
+            status = "falhou"
+        rows.append(
+            {
+                "Etapa": result.step_name,
+                "Status": status,
+                "Duração (s)": round(result.elapsed_seconds, 3),
+                "Log": str(result.log_path),
+            }
+        )
+
+    display_module.display(display_module.Markdown("### Resumo da execução"))
+    table = pd.DataFrame(rows, columns=["Etapa", "Status", "Duração (s)", "Log"])
+    with pd.option_context("display.max_colwidth", None):
+        display_module.display(table)
 
 
 def show_report(project_root: Path, config: Any) -> None:

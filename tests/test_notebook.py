@@ -2,14 +2,93 @@ from __future__ import annotations
 
 import json
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
 
 from matplotlib.figure import Figure
 
 from gmxflow.config import default_config
-from gmxflow.notebook import show_report
+from gmxflow.executor import StepResult
+from gmxflow.notebook import show_execution, show_report
 from gmxflow import plots
+
+
+def test_show_execution_displays_native_step_summary(monkeypatch) -> None:
+    displayed: list[object] = []
+    option_context_calls: list[tuple[str, object]] = []
+    option_context_active = False
+
+    class FakeMarkdown:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+    class FakeDataFrame:
+        def __init__(self, rows, columns) -> None:
+            self.rows = rows
+            self.columns = columns
+
+    @contextmanager
+    def option_context(option: str, value: object):
+        nonlocal option_context_active
+        option_context_calls.append((option, value))
+        option_context_active = True
+        try:
+            yield
+        finally:
+            option_context_active = False
+
+    def fake_display(value: object) -> None:
+        if isinstance(value, FakeDataFrame):
+            assert option_context_active
+        displayed.append(value)
+
+    display_module = ModuleType("IPython.display")
+    display_module.Markdown = FakeMarkdown
+    display_module.display = fake_display
+    pandas = ModuleType("pandas")
+    pandas.DataFrame = FakeDataFrame
+    pandas.option_context = option_context
+    monkeypatch.setitem(sys.modules, "IPython.display", display_module)
+    monkeypatch.setitem(sys.modules, "pandas", pandas)
+    completed = StepResult(
+        step_name="prepare",
+        command=["gmxflow", "prepare-complex"],
+        workdir=Path("work/prep"),
+        log_path=Path("work/logs/01_prepare.log"),
+        returncode=0,
+        elapsed_seconds=1.23456,
+    )
+    skipped = StepResult(
+        step_name="topology",
+        command=["gmx", "pdb2gmx"],
+        workdir=Path("work/topo"),
+        log_path=Path("work/logs/02_topology.log"),
+        returncode=0,
+        elapsed_seconds=0,
+        skipped=True,
+    )
+
+    show_execution((completed, skipped))
+
+    assert displayed[0].text == "### Resumo da execução"
+    table = displayed[1]
+    assert table.columns == ["Etapa", "Status", "Duração (s)", "Log"]
+    assert table.rows == [
+        {
+            "Etapa": "prepare",
+            "Status": "concluída",
+            "Duração (s)": 1.235,
+            "Log": "work/logs/01_prepare.log",
+        },
+        {
+            "Etapa": "topology",
+            "Status": "reutilizada (sem alterações)",
+            "Duração (s)": 0,
+            "Log": "work/logs/02_topology.log",
+        },
+    ]
+    assert option_context_calls == [("display.max_colwidth", None)]
 
 
 def test_show_report_displays_native_tables_and_graphs(

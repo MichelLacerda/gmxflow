@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from gmxflow.api import GmxFlowProject
+from gmxflow.api import ExecutionReport, GmxFlowProject
 from gmxflow.config import default_config, to_toml
 from gmxflow.executor import StepResult
 
@@ -50,6 +50,29 @@ def test_show_report_delegates_using_project_root(
     project.show_report()
 
     assert shown_projects == [(project.root, project.config)]
+
+
+def test_show_execution_delegates_execution_results(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
+    result = StepResult(
+        step_name="prepare",
+        command=["gmxflow", "prepare-complex"],
+        workdir=project.root / "work" / "prep",
+        log_path=project.root / "work" / "logs" / "01_prepare.log",
+        returncode=0,
+        elapsed_seconds=0.25,
+    )
+    report = ExecutionReport(workspace=result, steps=(result,))
+    shown_results: list[tuple[StepResult, ...]] = []
+    monkeypatch.setattr(
+        "gmxflow.notebook.show_execution", shown_results.append
+    )
+
+    project.show_execution(report)
+
+    assert shown_results == [(result, result)]
 
 
 def test_clean_removes_work_artifacts_and_preserves_project_data(tmp_path: Path) -> None:

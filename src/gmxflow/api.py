@@ -76,6 +76,12 @@ class GmxFlowProject:
 
         show_report(self.root, self.config)
 
+    def show_execution(self, report: ExecutionReport) -> None:
+        """Display an execution summary with statuses, durations, and log paths."""
+        from gmxflow.notebook import show_execution
+
+        show_execution(report.results)
+
     def clean(
         self,
         *,

@@ -139,7 +139,7 @@ def _render_readme(config: GmxFlowConfig) -> str:
 
 Este projeto contém a configuração e a estrutura de diretórios para uma pipeline de dinâmica molecular com GROMACS.
 
-Para trabalhar no Jupyter, abra `project.ipynb` usando um kernel que tenha `gmxflow` e GROMACS instalados. Após `project.run()`, `project.show_report()` exibe resumo, tabelas nativas e gráficos Matplotlib interativos com toolbar; o HTML distribuível fica em `outputs/report.html`. Para remover artefatos intermediários, execute `project.clean()`: por padrão, preserva os templates `.mdp`, as entradas e os arquivos em `outputs/`. A API usada pelo notebook ainda é experimental.
+Para trabalhar no Jupyter, abra `project.ipynb` usando um kernel que tenha `gmxflow` e GROMACS instalados. Após `project.run()`, `project.show_execution(execution_report)` exibe status, duração e log de cada etapa. `project.show_report()` exibe resumo, tabelas nativas e gráficos Matplotlib interativos com toolbar; o HTML distribuível fica em `outputs/report.html`. Para remover artefatos intermediários, execute `project.clean()`: por padrão, preserva os templates `.mdp`, as entradas e os arquivos em `outputs/`. A API usada pelo notebook ainda é experimental.
 
 Para remover também os templates `.mdp`, use `project.clean(remove_templates=True)`. `project.clean(all_work=True)` remove todo o conteúdo de `work/` e recria sua estrutura; use essa opção apenas quando quiser descartar todos os artefatos de trabalho.
 

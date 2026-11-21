@@ -49,6 +49,8 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     assert "GmxFlowProject.open('project.toml')" in notebook_code
     assert "project.validate()" in notebook_code
     assert "project.run()" in notebook_code
+    assert "execution_report = project.run()" in notebook_code
+    assert "project.show_execution(execution_report)" in notebook_code
     assert "project.show_report()" in notebook_code
     assert all(not cell.get("outputs") for cell in notebook["cells"])
     assert (project_dir / "README.md").is_file()
