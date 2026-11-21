@@ -23,7 +23,7 @@ from gmxflow.forcefields import (
     validate_forcefield_directory,
 )
 from gmxflow.ligand import prepare_ligand as prepare_ligand_files
-from gmxflow.pipeline import PipelineStep
+from gmxflow.pipeline import REAL_EXECUTION_STEPS, PipelineStep
 from gmxflow.preparation import prepare_complex as prepare_complex_files
 from gmxflow.project import available_templates, create_project
 from gmxflow.report import generate_report
@@ -38,35 +38,6 @@ app = typer.Typer(
 forcefield_app = typer.Typer(help="Gerencia force fields externos do GROMACS.")
 app.add_typer(forcefield_app, name="forcefield")
 console = Console()
-ALLOWED_REAL_STEPS = {
-    "prepare",
-    "ligand-topology",
-    "protein-topology",
-    "assemble-complex",
-    "topology",
-    "box",
-    "solvate",
-    "ions-grompp",
-    "ions",
-    "em-grompp",
-    "em",
-    "nvt-grompp",
-    "nvt",
-    "npt-grompp",
-    "npt",
-    "production-grompp",
-    "production",
-    "pbc-nojump",
-    "pbc-center",
-    "fit",
-    "analysis",
-    "interaction-energy",
-    "sasa",
-    "plots",
-    "report",
-}
-
-
 @dataclass(frozen=True)
 class ResidueInfo:
     chain: str
@@ -703,7 +674,7 @@ def run(
     except (FileNotFoundError, ValueError) as error:
         raise typer.BadParameter(str(error)) from error
 
-    if not dry_run and any(step.name not in ALLOWED_REAL_STEPS for step in steps):
+    if not dry_run and any(step.name not in REAL_EXECUTION_STEPS for step in steps):
         console.print(
             "Há etapas ainda não liberadas para execução real. Use --dry-run para inspecionar o plano."
         )

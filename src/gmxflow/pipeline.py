@@ -8,6 +8,37 @@ from gmxflow.config import GmxFlowConfig
 from gmxflow.forcefields import resolve_forcefield
 
 
+REAL_EXECUTION_STEPS = frozenset(
+    {
+        "prepare",
+        "ligand-topology",
+        "protein-topology",
+        "assemble-complex",
+        "topology",
+        "box",
+        "solvate",
+        "ions-grompp",
+        "ions",
+        "em-grompp",
+        "em",
+        "nvt-grompp",
+        "nvt",
+        "npt-grompp",
+        "npt",
+        "production-grompp",
+        "production",
+        "pbc-nojump",
+        "pbc-center",
+        "fit",
+        "analysis",
+        "interaction-energy",
+        "sasa",
+        "plots",
+        "report",
+    }
+)
+
+
 class PipelineStep(BaseModel):
     name: str
     description: str

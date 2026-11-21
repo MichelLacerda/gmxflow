@@ -1,6 +1,6 @@
 # Primeiro Recorte: Fluxo Jupyter De Validação
 
-Status: implementação incremental. A API experimental já permite abrir um projeto e inspecionar seu plano; executar simulações pela API ainda não está implementado.
+Status: implementação incremental. A API experimental permite abrir, inspecionar, validar e executar um projeto usando o executor compartilhado com a CLI. `ExecutionReport` expõe os resultados da preparação do workspace e de cada etapa, com seus logs. A interface pública ainda não é estável, e o notebook de ponta a ponta continua pendente.
 
 ## Objetivo
 
@@ -15,6 +15,7 @@ Como cientista com Jupyter, Python, `gmxflow` e GROMACS disponíveis no mesmo am
 - Usar `examples/smoke_peptide_complex` como entrada fixa do primeiro percurso, sem pedir ao usuário que edite TOML ou escreva comandos de terminal dentro do notebook.
 - Prever uma etapa explícita de validação e uma etapa de pré-visualização antes de iniciar a execução.
 - Executar o fluxo `smoke` por meio da futura API Python pública, não invocando a CLI por shell ou `subprocess` no notebook.
+- A execução da API valida entradas, force field e executável GROMACS antes de preparar o workspace; preserva templates existentes e reutiliza logs e estado do executor.
 - Mostrar estado final, caminho de logs e localização dos resultados/relatório; falhas devem apontar a etapa e o log correspondente.
 - Manter os arquivos versionados do exemplo intactos: execução e outputs devem ocorrer em uma cópia ou diretório de trabalho separado, sem sobrescrita implícita.
 - Permitir executar o notebook de cima a baixo em um kernel limpo, com todas as células concluindo ou apresentando falhas compreensíveis.
@@ -49,4 +50,4 @@ Como cientista com Jupyter, Python, `gmxflow` e GROMACS disponíveis no mesmo am
 
 ## Próxima Tarefa Após Aprovação
 
-Revisar o contrato inicial de `GmxFlowProject.open()` e `GmxFlowProject.plan()`, e desenhar o próximo contrato para validação explícita e execução/resultados. A execução não deve ser exposta até que as etapas internas hoje disparadas pelo executor via subprocessos possam ser reutilizadas diretamente pelo núcleo Python. O resultado desse desenho deve ser revisado antes da próxima implementação.
+Adicionar testes de integração da API de execução com GROMACS em um ambiente reproduzível e, em seguida, construir o notebook smoke em cópia isolada do exemplo. A validação unitária da API não substitui esses testes: subprocessos continuam sendo usados internamente pelo executor compartilhado.
