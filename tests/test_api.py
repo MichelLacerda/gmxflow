@@ -444,6 +444,14 @@ def test_run_validates_then_uses_shared_executor(
         returncode=0,
         elapsed_seconds=1.8,
     )
+    analysis_result = StepResult(
+        step_name="analysis",
+        command=runtime_command(project.plan(until="analysis")[17].command),
+        workdir=project.root / "work" / "analysis",
+        log_path=project.root / "work" / "logs" / "18_analysis.log",
+        returncode=0,
+        elapsed_seconds=1.9,
+    )
 
     monkeypatch.setattr(
         "gmxflow.api.GmxFlowProject.validate",
@@ -473,6 +481,7 @@ def test_run_validates_then_uses_shared_executor(
             "production",
             "pbc-nojump",
             "pbc-center",
+            "fit",
         )
         assert kwargs["project_root"] == project.root
         step_results = {
@@ -492,6 +501,7 @@ def test_run_validates_then_uses_shared_executor(
             "production": production_result,
             "pbc-nojump": pbc_nojump_result,
             "pbc-center": pbc_center_result,
+            "fit": fit_result,
         }
         return WorkflowExecutionReport(
             results=tuple(
@@ -511,14 +521,14 @@ def test_run_validates_then_uses_shared_executor(
 
     def fake_run_steps(steps, **kwargs):
         events.append("run_steps")
-        assert [step.name for step in steps] == ["fit"]
+        assert [step.name for step in steps] == ["analysis"]
         assert kwargs["project_root"] == project.root
-        assert kwargs["start_index"] == 17
-        return [fit_result]
+        assert kwargs["start_index"] == 18
+        return [analysis_result]
 
     monkeypatch.setattr("gmxflow.api.run_steps", fake_run_steps)
 
-    report = project.run(until="fit")
+    report = project.run(until="analysis")
 
     assert events == ["validate", "workspace", "workflow_graph", "run_steps"]
     assert report.workspace is workspace
@@ -540,6 +550,7 @@ def test_run_validates_then_uses_shared_executor(
         pbc_nojump_result,
         pbc_center_result,
         fit_result,
+        analysis_result,
     )
     assert report.results == (
         workspace,
@@ -560,10 +571,11 @@ def test_run_validates_then_uses_shared_executor(
         pbc_nojump_result,
         pbc_center_result,
         fit_result,
+        analysis_result,
     )
 
 
-def test_graph_prefix_through_pbc_center_matches_legacy_commands_and_outputs(
+def test_graph_prefix_through_fit_matches_legacy_commands_and_outputs(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -707,7 +719,7 @@ def test_graph_prefix_through_pbc_center_matches_legacy_commands_and_outputs(
 
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run(
-        until="pbc-center",
+        until="fit",
         on_step_start=lambda index, step: callback_events.append(
             ("start", index, step.name)
         ),
@@ -715,7 +727,7 @@ def test_graph_prefix_through_pbc_center_matches_legacy_commands_and_outputs(
             ("done", index, result.step_name)
         ),
     )
-    resumed_report = project.run(until="pbc-center")
+    resumed_report = project.run(until="fit")
 
     topology_only_root = tmp_path / "topology_only_project"
     topology_only_project = GmxFlowProject.open(
@@ -1005,14 +1017,26 @@ def test_graph_prefix_through_pbc_center_matches_legacy_commands_and_outputs(
         from_step="pbc-center", until="pbc-center"
     )
 
+    fit_only_root = tmp_path / "fit_only_project"
+    fit_only_project = GmxFlowProject.open(_write_project_config(fit_only_root))
+    fit_only_inputs = fit_only_root / "inputs"
+    fit_only_inputs.mkdir()
+    (fit_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (fit_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
+    fit_only_dir = fit_only_root / "work" / "prod"
+    fit_only_dir.mkdir(parents=True)
+    (fit_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
+    (fit_only_dir / "md_nopbc.xtc").write_text("CENTERED_XTC\n", encoding="utf-8")
+    fit_only_report = fit_only_project.run(from_step="fit", until="fit")
+
     legacy_steps = build_pipeline(
         project.config,
         config_dir=legacy_root,
         config_path=legacy_config,
-    )[:16]
+    )[:17]
     legacy_results = run_steps(legacy_steps, project_root=legacy_root)
 
-    assert len(graph_report.steps) == len(legacy_results) == 16
+    assert len(graph_report.steps) == len(legacy_results) == 17
     for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
         graph_command = [
             argument.replace(str(project_root), "<project-root>")
@@ -1055,13 +1079,19 @@ def test_graph_prefix_through_pbc_center_matches_legacy_commands_and_outputs(
     assert pbc_nojump_only_report.steps[0].returncode == 0
     assert pbc_center_only_report.steps[0].step_name == "pbc-center"
     assert pbc_center_only_report.steps[0].returncode == 0
-    assert len(subprocess_calls) == 47  # graph twice, isolated steps, legacy prefix
+    assert fit_only_report.steps[0].step_name == "fit"
+    assert fit_only_report.steps[0].returncode == 0
+    assert len(subprocess_calls) == 50  # graph twice, isolated steps, legacy prefix
     assert sum(
         command[-1:] == ("nojump",) and stdin == "0\n"
         for command, stdin in subprocess_inputs
     ) == 3  # graph run, isolated graph step, and legacy reference
     assert sum(
         "-center" in command and stdin == "Protein\nSystem\n"
+        for command, stdin in subprocess_inputs
+    ) == 3  # graph run, isolated graph step, and legacy reference
+    assert sum(
+        "-fit" in command and stdin == "Backbone\nSystem\n"
         for command, stdin in subprocess_inputs
     ) == 3  # graph run, isolated graph step, and legacy reference
     assert legacy_state.read_bytes() == legacy_state_before
@@ -1099,6 +1129,8 @@ def test_graph_prefix_through_pbc_center_matches_legacy_commands_and_outputs(
         ("done", 15, "pbc-nojump"),
         ("start", 16, "pbc-center"),
         ("done", 16, "pbc-center"),
+        ("start", 17, "fit"),
+        ("done", 17, "fit"),
     ]
     for relative_dir in (
         Path("work/prep"),
