@@ -22,7 +22,6 @@ from gmxflow.forcefields import resolve_forcefield
 from gmxflow.pipeline import (
     REAL_EXECUTION_STEPS,
     GromacsCommandStep,
-    PipelineCommandStep,
     PipelineStep,
     Step,
     Sequence as WorkflowSequence,
@@ -276,18 +275,15 @@ def _run_graph_steps(
     on_step_start: Callable[[int, PipelineStep], None] | None,
     on_step_done: Callable[[int, StepResult], None] | None,
 ) -> list[StepResult]:
-    """Execute a composed API workflow, using adapters only for legacy steps."""
+    """Execute a composed workflow of concrete GROMACS command steps."""
     adapted_steps: list[Step] = []
     for step in workflow.items:
         if isinstance(step, GromacsCommandStep):
             step.command = tuple(runtime_command(list(step.command)))
             adapted_steps.append(step)
-        elif isinstance(step, PipelineCommandStep):
-            step.command = tuple(runtime_command(list(step.command)))
-            adapted_steps.append(step)
         else:
             raise TypeError(
-                "build_workflow deve compor apenas etapas diretas em Sequence."
+                "build_workflow deve compor apenas GromacsCommandStep em Sequence."
             )
     workflow = WorkflowSequence(*adapted_steps)
     produced_keys = {

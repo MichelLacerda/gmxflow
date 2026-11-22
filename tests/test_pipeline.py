@@ -19,7 +19,7 @@ from gmxflow.pipeline import (
     LigandTopologyStep,
     NptEquilibrationStep,
     Parallel,
-    PipelineCommandStep,
+    PipelineStep,
     PlotAnalysisStep,
     PrepareIonsStep,
     PrepareEnergyMinimizationStep,
@@ -69,26 +69,37 @@ def test_build_pipeline_returns_expected_order(tmp_path: Path) -> None:
     assert steps[-1].name == "report"
 
 
-def test_prepare_step_adapts_to_workflow_without_changing_its_command(
+def test_prepare_step_projection_preserves_its_command_and_artifacts(
     tmp_path: Path,
 ) -> None:
+    config = default_config("prepare_projection")
+    config_path = tmp_path / "project.toml"
     legacy_step = build_pipeline(
-        default_config("prepare_adapter"),
+        config,
         config_dir=tmp_path,
-        config_path=tmp_path / "project.toml",
+        config_path=config_path,
     )[0]
-    workflow_step = PipelineCommandStep.from_pipeline_step(legacy_step)
-    graph = WorkflowGraph.from_workflow(
-        workflow_step,
-        project_inputs=workflow_step.inputs,
+    concrete_step = PrepareComplexStep.from_config(
+        config, tmp_path, config_path
     )
 
-    assert graph.topological_order == ("prepare",)
-    assert workflow_step.command == tuple(legacy_step.command)
-    assert workflow_step.workdir == legacy_step.workdir
-    assert [Path(item.key) for item in workflow_step.inputs] == legacy_step.inputs
-    assert [Path(item.key) for item in workflow_step.outputs] == legacy_step.outputs
-    assert workflow_step.state == legacy_step.state
+    assert concrete_step.to_pipeline_step() == legacy_step
+
+
+def test_workflow_rejects_unmapped_legacy_step(tmp_path: Path) -> None:
+    unmapped = PipelineStep(
+        name="unmapped",
+        description="Unmapped legacy step",
+        workdir=tmp_path,
+        command=["gmx", "unknown"],
+    )
+
+    with pytest.raises(ValueError, match="implementação concreta"):
+        build_workflow(
+            default_config("unmapped_workflow"),
+            config_dir=tmp_path,
+            selected_steps=[unmapped],
+        )
 
 
 def test_workflow_graph_builds_sequence_dependencies_from_artifacts() -> None:

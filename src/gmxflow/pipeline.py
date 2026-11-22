@@ -56,50 +56,6 @@ class PipelineStep(BaseModel):
     state: dict[str, object] = Field(default_factory=dict)
 
 
-@dataclass
-class PipelineCommandStep:
-    """Workflow ``Step`` adapter that preserves a legacy command step."""
-
-    id: str
-    name: str
-    command: tuple[str, ...]
-    workdir: Path
-    inputs: tuple[Artifact, ...]
-    outputs: tuple[Artifact, ...]
-    stdin: str | None
-    env: Mapping[str, str]
-    state: Mapping[str, object]
-    parallel: bool = False
-    version: str = "1"
-
-    @classmethod
-    def from_pipeline_step(cls, step: PipelineStep) -> PipelineCommandStep:
-        """Adapt one existing pipeline step without changing its command."""
-        return cls(
-            id=step.name,
-            name=step.description,
-            command=tuple(step.command),
-            workdir=step.workdir,
-            inputs=tuple(_path_artifact(path) for path in step.inputs),
-            outputs=tuple(_path_artifact(path) for path in step.outputs),
-            stdin=step.stdin,
-            env=MappingProxyType(dict(step.env)),
-            state=MappingProxyType(dict(step.state)),
-        )
-
-    def run(self, context: RunContext) -> None:
-        for artifact in self.inputs:
-            context.input_path(artifact)
-        for artifact in self.outputs:
-            context.output_path(artifact)
-        context.run_command(
-            self.command,
-            cwd=self.workdir,
-            env=self.env,
-            stdin=self.stdin,
-        )
-
-
 def _path_artifact(path: Path) -> Artifact:
     resolved_path = path.expanduser().resolve()
     return Artifact(
@@ -1683,10 +1639,10 @@ def build_workflow(
     config_path: Path | None = None,
     selected_steps: list[PipelineStep] | None = None,
 ) -> Sequence:
-    """Compose an API workflow from concrete steps and temporary legacy adapters.
+    """Compose an API workflow from concrete steps.
 
     The CLI continues to consume ``build_pipeline()``. The API reuses concrete
-    step implementations where available and adapts only steps not migrated yet.
+    step implementations and checks them against the CLI plan.
     """
     root = config_dir.expanduser().resolve()
     resolved_config = (config_path or root / "project.toml").expanduser().resolve()
@@ -1743,8 +1699,10 @@ def build_workflow(
     for pipeline_step in plan:
         concrete = by_id.get(pipeline_step.name)
         if concrete is None:
-            workflow_steps.append(PipelineCommandStep.from_pipeline_step(pipeline_step))
-            continue
+            raise ValueError(
+                f"Não há implementação concreta para a etapa "
+                f"{pipeline_step.name!r} no workflow da API."
+            )
         if concrete.to_pipeline_step() != pipeline_step:
             raise ValueError(
                 f"A definição tipada da etapa {pipeline_step.name!r} "

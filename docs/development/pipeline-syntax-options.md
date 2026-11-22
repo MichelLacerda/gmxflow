@@ -353,9 +353,10 @@ etapas `analysis` e `thermodynamics` também agora são `AnalyzeTrajectoryStep` 
 e `ReportStep`. Para projetos sem molécula pequena, a topologia agora é
 `BuildTopologyStep`; a classe preserva os caminhos de saída distintos para
 proteína isolada e peptídeo. Assim, todas as etapas produzidas atualmente são
-classes concretas. `PipelineCommandStep` permanece como fallback de
-compatibilidade para planos legados ou etapas ainda não mapeadas. A sequência
-atual não usa `Parallel`.
+classes concretas. O adaptador genérico `PipelineCommandStep` foi removido da
+API; se um plano incluir uma etapa sem implementação concreta correspondente,
+a composição falha explicitamente. O CLI continua usando `PipelineStep` por
+meio de `build_pipeline()`. A sequência atual não usa `Parallel`.
 
 **Compatibilidade do executor:** toda execução pela API usa agora
 `work/workflow_state.json`; o CLI segue usando `work/state.json`. Esses estados
