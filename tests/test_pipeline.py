@@ -489,9 +489,9 @@ def test_em_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
 
     project_root = tmp_path.resolve()
     assert em_grompp.command[em_grompp.command.index("-p") + 1] == str(
-        project_root / "work" / "topo" / "topol.top"
+        project_root / "work" / "topo" / "topol_ions.top"
     )
-    assert project_root / "work" / "topo" / "topol.top" in em_grompp.inputs
+    assert project_root / "work" / "topo" / "topol_ions.top" in em_grompp.inputs
     assert em_grompp.outputs == [
         project_root / "work" / "em" / "em.tpr",
         project_root / "work" / "em" / "mdout.mdp",
@@ -508,7 +508,46 @@ def test_solvate_uses_internal_topology_reset_command(tmp_path: Path) -> None:
         "solvate-system",
         "--project",
         str(config_path.resolve()),
+        "--topology-output",
+        str(tmp_path.resolve() / "work" / "topo" / "topol_solvated.top"),
     ]
+    assert solvate.inputs == [
+        tmp_path.resolve() / "work" / "box" / "box.gro",
+        tmp_path.resolve() / "work" / "topo" / "topol.top",
+    ]
+    assert solvate.outputs == [
+        tmp_path.resolve() / "work" / "box" / "solv.gro",
+        tmp_path.resolve() / "work" / "topo" / "topol_solvated.top",
+    ]
+
+
+def test_ions_create_a_new_topology_version(tmp_path: Path) -> None:
+    config_path = tmp_path / "project.toml"
+    steps = build_pipeline(
+        default_config("ions_test"), config_dir=tmp_path, config_path=config_path
+    )
+    ions_grompp = next(step for step in steps if step.name == "ions-grompp")
+    ions = next(step for step in steps if step.name == "ions")
+
+    root = tmp_path.resolve()
+    solvated_topology = root / "work" / "topo" / "topol_solvated.top"
+    ionized_topology = root / "work" / "topo" / "topol_ions.top"
+    assert solvated_topology in ions_grompp.inputs
+    assert ions_grompp.command[ions_grompp.command.index("-p") + 1] == str(
+        solvated_topology
+    )
+    assert ions.command == [
+        "gmxflow",
+        "genion-system",
+        "--project",
+        str(config_path.resolve()),
+        "--topology-input",
+        str(solvated_topology),
+        "--topology-output",
+        str(ionized_topology),
+    ]
+    assert ions.inputs == [root / "work" / "box" / "ions.tpr", solvated_topology]
+    assert ions.outputs == [root / "work" / "box" / "ions.gro", ionized_topology]
 
 
 def test_nvt_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
@@ -517,9 +556,9 @@ def test_nvt_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
 
     project_root = tmp_path.resolve()
     assert nvt_grompp.command[nvt_grompp.command.index("-p") + 1] == str(
-        project_root / "work" / "topo" / "topol.top"
+        project_root / "work" / "topo" / "topol_ions.top"
     )
-    assert project_root / "work" / "topo" / "topol.top" in nvt_grompp.inputs
+    assert project_root / "work" / "topo" / "topol_ions.top" in nvt_grompp.inputs
     assert nvt_grompp.outputs == [
         project_root / "work" / "nvt" / "nvt.tpr",
         project_root / "work" / "nvt" / "mdout.mdp",
@@ -549,9 +588,9 @@ def test_npt_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
 
     project_root = tmp_path.resolve()
     assert npt_grompp.command[npt_grompp.command.index("-p") + 1] == str(
-        project_root / "work" / "topo" / "topol.top"
+        project_root / "work" / "topo" / "topol_ions.top"
     )
-    assert project_root / "work" / "topo" / "topol.top" in npt_grompp.inputs
+    assert project_root / "work" / "topo" / "topol_ions.top" in npt_grompp.inputs
     assert npt_grompp.outputs == [
         project_root / "work" / "npt" / "npt.tpr",
         project_root / "work" / "npt" / "mdout.mdp",
@@ -581,9 +620,9 @@ def test_production_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> 
 
     project_root = tmp_path.resolve()
     assert production_grompp.command[production_grompp.command.index("-p") + 1] == str(
-        project_root / "work" / "topo" / "topol.top"
+        project_root / "work" / "topo" / "topol_ions.top"
     )
-    assert project_root / "work" / "topo" / "topol.top" in production_grompp.inputs
+    assert project_root / "work" / "topo" / "topol_ions.top" in production_grompp.inputs
     assert production_grompp.outputs == [
         project_root / "work" / "prod" / "md.tpr",
         project_root / "work" / "prod" / "mdout.mdp",
@@ -877,7 +916,7 @@ def test_pipeline_adds_interaction_energy_when_enabled(tmp_path: Path) -> None:
         tmp_path.resolve() / "work" / "analysis" / "lig.ndx",
         tmp_path.resolve() / "work" / "prod" / "md.gro",
         tmp_path.resolve() / "work" / "prod" / "md_fit.xtc",
-        tmp_path.resolve() / "work" / "topo" / "topol.top",
+        tmp_path.resolve() / "work" / "topo" / "topol_ions.top",
     ]
     assert interaction.outputs == [
         tmp_path.resolve() / "work" / "analysis" / "interaction.tpr",

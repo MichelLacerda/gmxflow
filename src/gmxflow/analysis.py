@@ -379,7 +379,7 @@ def run_interaction_energy(
                 "-c",
                 str(prod / "md.gro"),
                 "-p",
-                str(topo / "topol.top"),
+                str(topo / "topol_ions.top"),
                 "-n",
                 str(analysis / "lig.ndx"),
                 "-o",

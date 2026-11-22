@@ -349,6 +349,9 @@ def test_run_interaction_energy_executes_rerun_and_energy(
     assert calls[0]["command"][calls[0]["command"].index("-n") + 1] == str(  # pyright: ignore[reportIndexIssue, reportAttributeAccessIssue]
         analysis_dir / "lig.ndx"
     )
+    assert calls[0]["command"][calls[0]["command"].index("-p") + 1] == str(  # pyright: ignore[reportIndexIssue, reportAttributeAccessIssue]
+        tmp_path.resolve() / "work" / "topo" / "topol_ions.top"
+    )
     assert calls[1]["command"][1] == "mdrun"  # pyright: ignore[reportIndexIssue]
     assert "-rerun" in calls[1]["command"]  # pyright: ignore[reportOperatorIssue]
     assert calls[1]["command"][calls[1]["command"].index("-nb") + 1] == "cpu"  # pyright: ignore[reportIndexIssue, reportAttributeAccessIssue]

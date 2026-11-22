@@ -21,6 +21,90 @@ def test_cli_startproject_creates_project(tmp_path: Path) -> None:
     assert (tmp_path / "cli_project" / "project.ipynb").is_file()
 
 
+def test_solvate_system_preserves_original_topology(tmp_path: Path, monkeypatch) -> None:
+    runner = CliRunner()
+    created = runner.invoke(
+        app,
+        ["startproject", "solvate_project", "--destination", str(tmp_path)],
+    )
+    assert created.exit_code == 0
+    project = tmp_path / "solvate_project"
+    topology_dir = project / "work" / "topo"
+    topology_dir.mkdir(parents=True, exist_ok=True)
+    original = topology_dir / "topol.top"
+    original.write_text(
+        "[ molecules ]\nProtein 1\nSOL 4\n",
+        encoding="utf-8",
+    )
+    original_content = original.read_text(encoding="utf-8")
+    output_topology = topology_dir / "topol_solvated.top"
+    commands: list[list[str]] = []
+
+    def fake_subprocess_run(command, **kwargs):
+        commands.append(command)
+        output_path = Path(command[command.index("-p") + 1])
+        output_path.write_text(output_path.read_text(encoding="utf-8") + "; solvated\n")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("gmxflow.cli.subprocess.run", fake_subprocess_run)
+    result = runner.invoke(
+        app,
+        ["solvate-system", "--project", str(project / "project.toml"),
+         "--topology-output", str(output_topology)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert original.read_text(encoding="utf-8") == original_content
+    assert "SOL 4" not in output_topology.read_text(encoding="utf-8")
+    assert "; solvated" in output_topology.read_text(encoding="utf-8")
+    assert commands[0][commands[0].index("-p") + 1] == str(output_topology)
+
+
+def test_genion_system_preserves_solvated_topology(tmp_path: Path, monkeypatch) -> None:
+    runner = CliRunner()
+    created = runner.invoke(
+        app,
+        ["startproject", "ions_project", "--destination", str(tmp_path)],
+    )
+    assert created.exit_code == 0
+    project = tmp_path / "ions_project"
+    topology_dir = project / "work" / "topo"
+    topology_dir.mkdir(parents=True, exist_ok=True)
+    solvated = topology_dir / "topol_solvated.top"
+    solvated.write_text("[ molecules ]\nProtein 1\nSOL 25\n", encoding="utf-8")
+    solvated_content = solvated.read_text(encoding="utf-8")
+    ionized = topology_dir / "topol_ions.top"
+    commands: list[list[str]] = []
+    inputs: list[str | None] = []
+
+    def fake_subprocess_run(command, *, input=None, **kwargs):
+        commands.append(command)
+        inputs.append(input)
+        output_path = Path(command[command.index("-p") + 1])
+        output_path.write_text(output_path.read_text(encoding="utf-8") + "; ions\n")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("gmxflow.cli.subprocess.run", fake_subprocess_run)
+    result = runner.invoke(
+        app,
+        [
+            "genion-system",
+            "--project",
+            str(project / "project.toml"),
+            "--topology-input",
+            str(solvated),
+            "--topology-output",
+            str(ionized),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert solvated.read_text(encoding="utf-8") == solvated_content
+    assert "; ions" in ionized.read_text(encoding="utf-8")
+    assert commands[0][commands[0].index("-p") + 1] == str(ionized)
+    assert inputs == ["SOL\n"]
+
+
 def test_cli_startproject_accepts_initial_pipeline_options(tmp_path: Path) -> None:
     runner = CliRunner()
 

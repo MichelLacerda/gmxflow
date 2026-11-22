@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -509,18 +510,27 @@ def solvate_system(
         Path,
         typer.Option("--project", "-p", help="Arquivo project.toml do projeto."),
     ] = Path("project.toml"),
+    topology_output: Annotated[
+        Path,
+        typer.Option("--topology-output", help="Arquivo de topologia após solvatação."),
+    ] = Path("work/topo/topol_solvated.top"),
 ) -> None:
     """Normaliza a topologia e adiciona solvente."""
     loaded = load_config(config)
     config_path = config.expanduser().resolve()
     project_root = config_path.parent
-    topol_top = project_root / "work" / "topo" / "topol.top"
+    source_topology = project_root / "work" / "topo" / "topol.top"
+    output_topology = _resolve_project_path(str(topology_output), project_root)
 
-    if not topol_top.is_file():
-        raise typer.BadParameter(f"Topologia não encontrada: {topol_top}")
+    if not source_topology.is_file():
+        raise typer.BadParameter(f"Topologia não encontrada: {source_topology}")
+    if output_topology.resolve() == source_topology.resolve():
+        raise typer.BadParameter("A topologia de saída deve ser diferente da original.")
 
+    output_topology.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_topology, output_topology)
     reset_molecules_section(
-        topol_top,
+        output_topology,
         remove_molecules={
             "SOL",
             loaded.solvent.positive_ion,
@@ -535,11 +545,61 @@ def solvate_system(
         "-cs",
         loaded.solvent.water_structure,
         "-p",
-        str(topol_top),
+        str(output_topology),
         "-o",
         "solv.gro",
     ]
     completed = subprocess.run(command, text=True, check=False)
+    if completed.returncode != 0:
+        raise typer.Exit(code=completed.returncode)
+
+
+@app.command("genion-system", hidden=True)
+def genion_system(
+    topology_input: Annotated[Path, typer.Option("--topology-input")],
+    topology_output: Annotated[Path, typer.Option("--topology-output")],
+    config: Annotated[
+        Path,
+        typer.Option("--project", "-p", help="Arquivo project.toml do projeto."),
+    ] = Path("project.toml"),
+) -> None:
+    """Add ions while keeping the solvated topology unchanged."""
+    loaded = load_config(config)
+    config_path = config.expanduser().resolve()
+    project_root = config_path.parent
+    source_topology = _resolve_project_path(str(topology_input), project_root)
+    output_topology = _resolve_project_path(str(topology_output), project_root)
+    if not source_topology.is_file():
+        raise typer.BadParameter(f"Topologia não encontrada: {source_topology}")
+    if output_topology.resolve() == source_topology.resolve():
+        raise typer.BadParameter("A topologia de saída deve ser diferente da entrada.")
+
+    output_topology.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_topology, output_topology)
+    command = [
+        _gmx_command(loaded),
+        "genion",
+        "-s",
+        "ions.tpr",
+        "-o",
+        "ions.gro",
+        "-p",
+        str(output_topology),
+        "-pname",
+        loaded.solvent.positive_ion,
+        "-nname",
+        loaded.solvent.negative_ion,
+        "-conc",
+        str(loaded.solvent.salt_concentration_m),
+    ]
+    if loaded.solvent.neutralize:
+        command.append("-neutral")
+    completed = subprocess.run(
+        command,
+        input="SOL\n",
+        text=True,
+        check=False,
+    )
     if completed.returncode != 0:
         raise typer.Exit(code=completed.returncode)
 

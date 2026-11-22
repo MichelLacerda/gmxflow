@@ -339,6 +339,12 @@ O fluxo
 `small_molecule` (`ligand-topology`, `protein-topology` e `assemble-complex`)
 não foi migrado.
 
+**Versões de topologia:** a rota principal preserva `work/topo/topol.top` como
+saída original de `topology`. `solvate` cria `topol_solvated.top` e `genion`
+cria `topol_ions.top`; as etapas posteriores de simulação e a análise de
+interação consomem esta última. Isso permite inspecionar cada versão sem
+alterar os parâmetros ou a sequência científica.
+
 **Decisão de compatibilidade já aplicada:** o CLI mantém `work/state.json`; a
 execução pelo grafo na API usa `work/workflow_state.json`. Os formatos não são
 convertidos nem sobrescritos entre si, e a retomada de cada executor é
