@@ -1506,8 +1506,12 @@ def test_small_molecule_assembly_prefix_runs_through_graph(
     )
 
 
-def test_small_molecule_analysis_can_start_through_graph(
-    tmp_path: Path, monkeypatch
+@pytest.mark.parametrize(
+    ("step_name", "command_name"),
+    [("analysis", "analyze"), ("thermodynamics", "thermodynamics")],
+)
+def test_small_molecule_analysis_steps_can_start_through_graph(
+    tmp_path: Path, monkeypatch, step_name: str, command_name: str
 ) -> None:
     project_root = tmp_path / "small_molecule_analysis_project"
     project_root.mkdir()
@@ -1519,13 +1523,13 @@ def test_small_molecule_analysis_can_start_through_graph(
     config_path = project_root / "project.toml"
     config_path.write_text(to_toml(config), encoding="utf-8")
     project = GmxFlowProject.open(config_path)
-    analysis_step = project.plan(from_step="analysis", until="analysis")[0]
+    selected_step = project.plan(from_step=step_name, until=step_name)[0]
 
     inputs_dir = project_root / "inputs"
     inputs_dir.mkdir()
     for filename in ("receptor.pdb", "ligante.pdb", "ligand.mol2", "ligand.str"):
         (inputs_dir / filename).write_text("INPUT\n", encoding="utf-8")
-    for input_path in analysis_step.inputs:
+    for input_path in selected_step.inputs:
         input_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.write_text("INPUT\n", encoding="utf-8")
 
@@ -1545,18 +1549,18 @@ def test_small_molecule_analysis_can_start_through_graph(
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
-        for output in analysis_step.outputs:
+        for output in selected_step.outputs:
             (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run(from_step="analysis", until="analysis")
+    report = project.run(from_step=step_name, until=step_name)
 
     assert len(calls) == 1
-    assert "analyze" in calls[0]
-    assert [result.step_name for result in report.steps] == ["analysis"]
-    assert all(output.is_file() for output in analysis_step.outputs)
+    assert command_name in calls[0]
+    assert [result.step_name for result in report.steps] == [step_name]
+    assert all(output.is_file() for output in selected_step.outputs)
 
 
 def test_run_rejects_unreleased_steps_before_workspace_setup(

@@ -341,10 +341,11 @@ desde que suas entradas já existam. As etapas `interaction-energy` e `sasa`,
 quando habilitadas em um projeto `peptide`, também são executadas pelo grafo e
 podem ser iniciadas diretamente se suas entradas existirem. No fluxo
 `small_molecule`, `prepare → ligand-topology → protein-topology →
-assemble-complex` também usa o grafo, assim como a etapa `analysis`, que pode
-ser iniciada diretamente quando suas entradas já existem. A topologia original
-da proteína é preservada em `work/topo/topol.top`; `assemble-complex` cria
-`work/topo/topol_complex.top`, consumida pela etapa `solvate`.
+assemble-complex` também usa o grafo, assim como as etapas `analysis` e
+`thermodynamics`, que podem ser iniciadas diretamente quando suas entradas já
+existem. A topologia original da proteína é preservada em
+`work/topo/topol.top`; `assemble-complex` cria `work/topo/topol_complex.top`,
+consumida pela etapa `solvate`.
 
 **Versões de topologia:** `work/topo/topol.top` permanece como saída original
 da geração de topologia. Para `small_molecule`, `assemble-complex` cria

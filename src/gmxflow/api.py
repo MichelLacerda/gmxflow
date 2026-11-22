@@ -291,6 +291,7 @@ class GmxFlowProject:
                     "protein-topology",
                     "assemble-complex",
                     "analysis",
+                    "thermodynamics",
                 }
             )
         if steps and steps[0].name in graph_step_names:
