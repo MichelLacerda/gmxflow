@@ -49,6 +49,7 @@ def create_analysis_figures(
 
     datasets = {
         "rmsd_bb": _load_xvg(analysis / "rmsd_backbone.xvg"),
+        "rmsd_reference": _load_xvg(analysis / "rmsd_reference.xvg"),
         "rmsd_lig": _load_xvg(analysis / "rmsd_ligante.xvg"),
         "rmsf": _load_xvg(analysis / "rmsf_residuos.xvg"),
         "rg": _load_xvg(analysis / "gyrate.xvg"),
@@ -60,13 +61,28 @@ def create_analysis_figures(
         "bsa": _load_xvg(analysis / "bsa.xvg"),
         "catalytic_distance": _load_xvg(analysis / "catalytic_distance.xvg"),
         "catalytic_occupancy": _load_xvg(analysis / "catalytic_occupancy.xvg"),
+        "em_potential": _load_xvg(analysis / "em_potential.xvg"),
+        "nvt_temperature": _load_xvg(analysis / "nvt_temperature.xvg"),
+        "npt_pressure": _load_xvg(analysis / "npt_pressure.xvg"),
+        "npt_density": _load_xvg(analysis / "npt_density.xvg"),
     }
 
     if config.input.ligand_kind == "none":
         return _plot_individuals(
             datasets,
             config,
-            names if names is not None else {"rmsd_bb", "rmsf", "rg"},
+            names
+            if names is not None
+            else {
+                "rmsd_bb",
+                "rmsd_reference",
+                "rmsf",
+                "rg",
+                "em_potential",
+                "nvt_temperature",
+                "npt_pressure",
+                "npt_density",
+            },
         )
 
     results = []
@@ -161,6 +177,11 @@ def _plot_individuals(
     results: list[tuple[str, Figure]] = []
     specs = {
         "rmsd_bb": ("RMSD do Backbone", "RMSD (nm)", config.plots.receptor_color),
+        "rmsd_reference": (
+            "RMSD vs. referência minimizada",
+            "RMSD (nm)",
+            config.plots.receptor_color,
+        ),
         "rmsd_lig": ("RMSD do Ligante", "RMSD (nm)", config.plots.ligand_color),
         "rg": ("Raio de Giro", "Rg (nm)", config.plots.receptor_color),
         "ncont": (
@@ -179,9 +200,30 @@ def _plot_individuals(
             "BSA (nm^2)",
             config.plots.receptor_color,
         ),
+        "em_potential": (
+            "Energia potencial após minimização",
+            "Energia (kJ/mol)",
+            config.plots.receptor_color,
+        ),
+        "nvt_temperature": (
+            "Temperatura durante NVT",
+            "Temperatura (K)",
+            config.plots.receptor_color,
+        ),
+        "npt_pressure": (
+            "Pressão durante NPT",
+            "Pressão (bar)",
+            config.plots.receptor_color,
+        ),
+        "npt_density": (
+            "Densidade durante NPT",
+            "Densidade (kg/m³)",
+            config.plots.receptor_color,
+        ),
     }
     ordered_names = [
         "rmsd_bb",
+        "rmsd_reference",
         "rmsd_lig",
         "rmsf",
         "rg",
@@ -192,6 +234,10 @@ def _plot_individuals(
         "bsa",
         "catalytic_distance",
         "catalytic_occupancy",
+        "em_potential",
+        "nvt_temperature",
+        "npt_pressure",
+        "npt_density",
     ]
 
     for name in ordered_names:

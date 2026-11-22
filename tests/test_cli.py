@@ -241,6 +241,7 @@ def test_cli_run_without_until_executes_full_pipeline(tmp_path: Path, monkeypatc
         "pbc-center",
         "fit",
         "analysis",
+        "thermodynamics",
         "plots",
         "report",
     ]

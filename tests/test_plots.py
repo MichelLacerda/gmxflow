@@ -63,15 +63,43 @@ def test_create_analysis_figures_returns_matplotlib_objects_without_saving(
 def test_protein_only_plots_exclude_ligand_figures(tmp_path: Path) -> None:
     analysis = tmp_path / "work" / "analysis"
     analysis.mkdir(parents=True)
-    for name in ("rmsd_backbone", "rmsf_residuos", "gyrate"):
+    for name in ("rmsd_backbone", "rmsd_reference", "rmsf_residuos", "gyrate"):
         _write_xvg(analysis / f"{name}.xvg")
     config = default_config("protein_only_plots")
     config.input.ligand_kind = "none"
 
     results = generate_analysis_plots(config, project_root=tmp_path)
 
-    assert [result.name for result in results] == ["rmsd_bb", "rmsf", "rg"]
+    assert [result.name for result in results] == [
+        "rmsd_bb",
+        "rmsd_reference",
+        "rmsf",
+        "rg",
+    ]
     assert all(result.output_path.is_file() for result in results)
+
+
+def test_thermodynamic_series_generate_individual_figures(tmp_path: Path) -> None:
+    analysis = tmp_path / "work" / "analysis"
+    analysis.mkdir(parents=True)
+    for name in (
+        "em_potential",
+        "nvt_temperature",
+        "npt_pressure",
+        "npt_density",
+    ):
+        _write_xvg(analysis / f"{name}.xvg")
+    config = default_config("thermodynamic_plots")
+    config.input.ligand_kind = "none"
+
+    results = generate_analysis_plots(config, project_root=tmp_path)
+
+    assert [result.name for result in results] == [
+        "em_potential",
+        "nvt_temperature",
+        "npt_pressure",
+        "npt_density",
+    ]
 
 
 def _write_xvg(path: Path) -> None:

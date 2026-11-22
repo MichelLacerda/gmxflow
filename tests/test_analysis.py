@@ -1,7 +1,12 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from gmxflow.analysis import run_analysis, run_interaction_energy, run_sasa_analysis
+from gmxflow.analysis import (
+    run_analysis,
+    run_interaction_energy,
+    run_sasa_analysis,
+    run_thermodynamic_analysis,
+)
 from gmxflow.config import default_config
 
 
@@ -105,16 +110,95 @@ def test_run_analysis_for_protein_only_system(tmp_path: Path, monkeypatch) -> No
 
     assert [result.name for result in results] == [
         "rmsd_backbone",
+        "rmsd_reference",
         "rmsf_residuos",
         "gyrate",
     ]
     assert [call["input"] for call in calls] == [
         "Backbone\nBackbone\n",
+        "Backbone\nBackbone\n",
         "Backbone\n",
         "Protein\n",
     ]
-    assert [call["command"][1] for call in calls] == ["rms", "rmsf", "gyrate"]
+    assert calls[1]["command"] == [
+        "gmx",
+        "rms",
+        "-s",
+        str(tmp_path.resolve() / "work" / "em" / "em.tpr"),
+        "-f",
+        str(tmp_path.resolve() / "work" / "prod" / "md_fit.xtc"),
+        "-o",
+        str(tmp_path.resolve() / "work" / "analysis" / "rmsd_reference.xvg"),
+        "-tu",
+        "ns",
+    ]
+    assert [call["command"][1] for call in calls] == [
+        "rms",
+        "rms",
+        "rmsf",
+        "gyrate",
+    ]
     assert all("-n" not in call["command"] for call in calls)
+
+
+def test_run_thermodynamic_analysis_extracts_expected_terms(
+    tmp_path: Path, monkeypatch
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_run(command, cwd, input, text, capture_output, check):
+        calls.append({"command": command, "input": input})
+        energy_file = Path(command[command.index("-f") + 1]).name
+        if input == "\n":
+            menus = {
+                "em.edr": (
+                    "Select the terms you want from the following list\n"
+                    "  1 Bond             2 Angle            3 Proper-Dih.      "
+                    "4\nPer.-Imp.-Dih.  10 Potential\n---\n"
+                ),
+                "nvt.edr": (
+                    "Select the terms you want from the following list\n"
+                    "  1 Bond             2 Angle           10 Temperature\n---\n"
+                ),
+                "npt.edr": (
+                    "Select the terms you want from the following list\n"
+                    "  1 Pressure         2 Density\n---\n"
+                ),
+            }
+            return SimpleNamespace(stdout=menus[energy_file], stderr="", returncode=0)
+        output_path = Path(command[command.index("-o") + 1])
+        output_path.write_text(
+            '@ xaxis label "Time (ps)"\n0 300.0\n1000 301.0\n',
+            encoding="utf-8",
+        )
+        return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+    monkeypatch.setattr("gmxflow.analysis.subprocess.run", fake_run)
+
+    results = run_thermodynamic_analysis(default_config("thermo_test"), tmp_path)
+
+    assert [result.name for result in results] == [
+        "em-potential",
+        "nvt-temperature",
+        "npt-pressure",
+        "npt-density",
+    ]
+    assert [call["input"] for call in calls if call["input"] != "\n"] == [
+        "10\n\n",
+        "10\n\n",
+        "1\n\n",
+        "2\n\n",
+    ]
+    assert [result.output_path.name for result in results] == [
+        "em_potential.xvg",
+        "nvt_temperature.xvg",
+        "npt_pressure.xvg",
+        "npt_density.xvg",
+    ]
+    assert "-tu" not in results[0].command
+    assert results[0].output_path.read_text(encoding="utf-8") == (
+        '@ xaxis label "Time (ns)"\n0.000000 300.0\n1.000000 301.0\n'
+    )
 
 
 def test_run_analysis_honors_gmx_mpi_engine(tmp_path: Path, monkeypatch) -> None:

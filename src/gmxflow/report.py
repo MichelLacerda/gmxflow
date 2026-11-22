@@ -64,6 +64,11 @@ SERIES = {
         "path": "rmsd_backbone.xvg",
         "unit": "nm",
     },
+    "rmsd_reference": {
+        "label": "RMSD vs. referência minimizada",
+        "path": "rmsd_reference.xvg",
+        "unit": "nm",
+    },
     "rmsd_ligante": {
         "label": "RMSD do ligante",
         "path": "rmsd_ligante.xvg",
@@ -124,11 +129,32 @@ SERIES = {
         "path": "catalytic_occupancy.xvg",
         "unit": "contatos",
     },
+    "em_potential": {
+        "label": "Energia potencial após minimização",
+        "path": "em_potential.xvg",
+        "unit": "kJ/mol",
+    },
+    "nvt_temperature": {
+        "label": "Temperatura durante NVT",
+        "path": "nvt_temperature.xvg",
+        "unit": "K",
+    },
+    "npt_pressure": {
+        "label": "Pressão durante NPT",
+        "path": "npt_pressure.xvg",
+        "unit": "bar",
+    },
+    "npt_density": {
+        "label": "Densidade durante NPT",
+        "path": "npt_density.xvg",
+        "unit": "kg/m³",
+    },
 }
 
 PLOTS = [
     "painel_completo.png",
     "rmsd_bb.png",
+    "rmsd_reference.png",
     "rmsd_lig.png",
     "rmsf.png",
     "rg.png",
@@ -139,10 +165,15 @@ PLOTS = [
     "bsa.png",
     "catalytic_distance.png",
     "catalytic_occupancy.png",
+    "em_potential.png",
+    "nvt_temperature.png",
+    "npt_pressure.png",
+    "npt_density.png",
 ]
 
 DATA_FILES = [
     "rmsd_backbone.xvg",
+    "rmsd_reference.xvg",
     "rmsd_ligante.xvg",
     "rmsf_residuos.xvg",
     "gyrate.xvg",
@@ -156,6 +187,10 @@ DATA_FILES = [
     "bsa.xvg",
     "catalytic_distance.xvg",
     "catalytic_occupancy.xvg",
+    "em_potential.xvg",
+    "nvt_temperature.xvg",
+    "npt_pressure.xvg",
+    "npt_density.xvg",
 ]
 
 REPORT_SECTIONS = [
@@ -163,6 +198,7 @@ REPORT_SECTIONS = [
         "Estabilidade",
         (
             "rmsd_backbone",
+            "rmsd_reference",
             "rmsd_ligante",
             "rmsf_residuos",
             "gyrate",
@@ -194,6 +230,10 @@ REPORT_SECTIONS = [
             "bsa",
         ),
     ),
+    (
+        "Termodinâmica",
+        ("em_potential", "nvt_temperature", "npt_pressure", "npt_density"),
+    ),
 ]
 
 
@@ -209,7 +249,16 @@ def generate_report(config: GmxFlowConfig, project_root: Path) -> ReportResult:
         source_dir=analysis_dir,
         output_dir=output_dir / "figures",
         names=(
-            ["rmsd_bb.png", "rmsf.png", "rg.png"]
+            [
+                "rmsd_bb.png",
+                "rmsd_reference.png",
+                "rmsf.png",
+                "rg.png",
+                "em_potential.png",
+                "nvt_temperature.png",
+                "npt_pressure.png",
+                "npt_density.png",
+            ]
             if config.input.ligand_kind == "none"
             else PLOTS
         ),
@@ -420,6 +469,7 @@ def _executive_summary(
     ]
     for key, label in (
         ("rmsd_backbone", "RMSD backbone médio"),
+        ("rmsd_reference", "RMSD médio vs. referência minimizada"),
         ("rmsd_ligante", "RMSD ligante médio"),
         ("numcont", "Contatos médios"),
         ("hbond", "H-bonds médios"),

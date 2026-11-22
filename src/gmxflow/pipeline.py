@@ -27,6 +27,7 @@ REAL_EXECUTION_STEPS = frozenset(
         "npt",
         "production-grompp",
         "production",
+        "thermodynamics",
         "pbc-nojump",
         "pbc-center",
         "fit",
@@ -264,6 +265,7 @@ def build_pipeline(
     if config.input.ligand_kind == "none":
         final_analysis_inputs = [
             analysis / "rmsd_backbone.xvg",
+            analysis / "rmsd_reference.xvg",
             analysis / "rmsf_residuos.xvg",
             analysis / "gyrate.xvg",
         ]
@@ -271,6 +273,7 @@ def build_pipeline(
         plot_inputs = list(final_analysis_inputs)
         plot_outputs = [
             analysis / "rmsd_bb.png",
+            analysis / "rmsd_reference.png",
             analysis / "rmsf.png",
             analysis / "rg.png",
         ]
@@ -319,6 +322,9 @@ def build_pipeline(
                 analysis / "catalytic_occupancy.xvg",
             ]
         )
+    analysis_step_inputs = [prod / "md.tpr", prod / "md_fit.xtc"]
+    if config.input.ligand_kind == "none":
+        analysis_step_inputs.append(em / "em.tpr")
     steps.extend(
         [
             PipelineStep(
@@ -632,7 +638,7 @@ def build_pipeline(
                 description="Executar análises principais.",
                 workdir=analysis,
                 command=["gmxflow", "analyze", "--project", str(config_path)],
-                inputs=[prod / "md.tpr", prod / "md_fit.xtc"],
+                inputs=analysis_step_inputs,
                 outputs=analysis_outputs,
                 state={
                     "input.ligand_kind": config.input.ligand_kind,
@@ -641,6 +647,22 @@ def build_pipeline(
                 },
             ),
         ]
+    )
+    steps.append(
+        PipelineStep(
+            name="thermodynamics",
+            description="Extrair propriedades termodinâmicas das etapas MD.",
+            workdir=analysis,
+            command=["gmxflow", "thermodynamics", "--project", str(config_path)],
+            inputs=[em / "em.edr", nvt / "nvt.edr", npt / "npt.edr"],
+            outputs=[
+                analysis / "em_potential.xvg",
+                analysis / "nvt_temperature.xvg",
+                analysis / "npt_pressure.xvg",
+                analysis / "npt_density.xvg",
+            ],
+            env=gromacs_env,
+        )
     )
     if config.analysis.interaction_energy:
         steps.append(
@@ -711,6 +733,22 @@ def build_pipeline(
                 analysis / "catalytic_occupancy.xvg",
             ]
         )
+    thermodynamic_outputs = [
+        analysis / "em_potential.xvg",
+        analysis / "nvt_temperature.xvg",
+        analysis / "npt_pressure.xvg",
+        analysis / "npt_density.xvg",
+    ]
+    final_analysis_inputs.extend(thermodynamic_outputs)
+    plot_inputs.extend(thermodynamic_outputs)
+    plot_outputs.extend(
+        [
+            analysis / "em_potential.png",
+            analysis / "nvt_temperature.png",
+            analysis / "npt_pressure.png",
+            analysis / "npt_density.png",
+        ]
+    )
     if config.analysis.sasa:
         plot_inputs.extend(
             [

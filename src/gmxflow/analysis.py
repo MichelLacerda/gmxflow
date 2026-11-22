@@ -200,6 +200,77 @@ def run_analysis(
     return results
 
 
+def run_thermodynamic_analysis(
+    config: GmxFlowConfig, project_root: Path
+) -> list[AnalysisCommandResult]:
+    """Extract selected thermodynamic observables from EM, NVT, and NPT energy files."""
+    project_root = project_root.expanduser().resolve()
+    work_dir = project_root / "work"
+    analysis = work_dir / "analysis"
+    analysis.mkdir(parents=True, exist_ok=True)
+    gmx = _gmx_command(config)
+    requests = (
+        ("em", work_dir / "em" / "em.edr", "Potential", "em_potential"),
+        ("nvt", work_dir / "nvt" / "nvt.edr", "Temperature", "nvt_temperature"),
+        ("npt", work_dir / "npt" / "npt.edr", "Pressure", "npt_pressure"),
+        ("npt", work_dir / "npt" / "npt.edr", "Density", "npt_density"),
+    )
+    results: list[AnalysisCommandResult] = []
+    for stage, energy_path, term_name, output_name in requests:
+        terms = _energy_terms(gmx=gmx, energy_path=energy_path, cwd=analysis)
+        term = next((item for item in terms if item.name.casefold() == term_name.casefold()), None)
+        if term is None:
+            raise RuntimeError(
+                f"O termo de energia '{term_name}' não foi encontrado em {energy_path}."
+            )
+        output_path = analysis / f"{output_name}.xvg"
+        results.append(
+            _extract_energy_series(
+                gmx=gmx,
+                energy_path=energy_path,
+                term=term,
+                output_path=output_path,
+                result_name=f"{stage}-{term_name.casefold()}",
+                cwd=analysis,
+            )
+        )
+    return results
+
+
+def _extract_energy_series(
+    gmx: str,
+    energy_path: Path,
+    term: EnergyTerm,
+    output_path: Path,
+    result_name: str,
+    cwd: Path,
+) -> AnalysisCommandResult:
+    result = _run_analysis_command(
+        result_name,
+        [gmx, "energy", "-f", str(energy_path), "-o", str(output_path)],
+        f"{term.number}\n\n",
+        output_path,
+        cwd,
+    )
+    _convert_xvg_time_ps_to_ns(output_path)
+    return result
+
+
+def _convert_xvg_time_ps_to_ns(path: Path) -> None:
+    """GROMACS energy output uses ps; normalize its time axis to the report's ns."""
+    lines: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("@"):
+            lines.append(line.replace("Time (ps)", "Time (ns)"))
+        elif line.startswith("#") or not line.strip():
+            lines.append(line)
+        else:
+            columns = line.split()
+            columns[0] = f"{float(columns[0]) / 1000.0:.6f}"
+            lines.append(" ".join(columns))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def _run_protein_only_analysis(
     gmx: str,
     prod: Path,
@@ -225,6 +296,23 @@ def _run_protein_only_analysis(
             ],
             f"{config.analysis.fit_group}\n{config.analysis.fit_group}\n",
             analysis / "rmsd_backbone.xvg",
+        ),
+        (
+            "rmsd_reference",
+            [
+                gmx,
+                "rms",
+                "-s",
+                str(prod.parent / "em" / "em.tpr"),
+                "-f",
+                str(trajectory_path),
+                "-o",
+                str(analysis / "rmsd_reference.xvg"),
+                "-tu",
+                "ns",
+            ],
+            f"{config.analysis.fit_group}\n{config.analysis.fit_group}\n",
+            analysis / "rmsd_reference.xvg",
         ),
         (
             "rmsf_residuos",
@@ -504,7 +592,18 @@ class EnergyTerm(BaseModel):
 def _interaction_energy_terms(
     gmx: str, energy_path: Path, cwd: Path
 ) -> list[EnergyTerm]:
-    probe = cwd / "_interaction_energy_probe.xvg"
+    terms = _energy_terms(gmx=gmx, energy_path=energy_path, cwd=cwd)
+    selected = [term for term in terms if _is_receptor_ligand_energy_term(term.name)]
+    if not selected:
+        raise RuntimeError(
+            "Não foi possível detectar termos Coul-SR/LJ-SR entre Receptor e Ligante "
+            "em interaction.edr."
+        )
+    return selected
+
+
+def _energy_terms(gmx: str, energy_path: Path, cwd: Path) -> list[EnergyTerm]:
+    probe = cwd / f"_{energy_path.stem}_energy_probe.xvg"
     completed = subprocess.run(
         [gmx, "energy", "-f", str(energy_path), "-o", str(probe)],
         cwd=cwd,
@@ -516,23 +615,32 @@ def _interaction_energy_terms(
     probe.unlink(missing_ok=True)
     output = completed.stdout + "\n" + completed.stderr
     terms = _parse_energy_terms(output)
-    selected = [term for term in terms if _is_receptor_ligand_energy_term(term.name)]
-    if not selected:
+    if not terms:
         raise RuntimeError(
-            "Não foi possível detectar termos Coul-SR/LJ-SR entre Receptor e Ligante "
-            "em interaction.edr."
+            f"Não foi possível listar termos de energia em {energy_path}: "
+            f"{completed.stderr.strip()}"
         )
-    return selected
+    return terms
 
 
 def _parse_energy_terms(output: str) -> list[EnergyTerm]:
-    terms: list[EnergyTerm] = []
-    for line in output.splitlines():
-        match = re.match(r"^\s*(\d+)\s+(.+?)\s*$", line)
-        if match is None:
-            continue
-        terms.append(EnergyTerm(number=int(match.group(1)), name=match.group(2)))
-    return terms
+    menu = output.split("Select the terms you want", maxsplit=1)
+    if len(menu) == 1:
+        return [
+            EnergyTerm(number=int(match.group(1)), name=match.group(2))
+            for line in output.splitlines()
+            if (
+                match := re.match(r"^\s*(\d+)\s+(.+?)\s*$", line)
+            ) is not None
+        ]
+    menu_sections = re.split(r"-{5,}", menu[1])
+    menu_text = menu_sections[1] if len(menu_sections) > 1 else menu[1]
+    return [
+        EnergyTerm(number=int(match.group(1)), name=match.group(2))
+        for match in re.finditer(
+            r"(?<!\S)(\d+)\s+([A-Za-z#][\w#().:+*/-]*)", menu_text
+        )
+    ]
 
 
 def _is_receptor_ligand_energy_term(name: str) -> bool:

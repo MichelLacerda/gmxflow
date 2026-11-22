@@ -67,13 +67,47 @@ def test_protein_only_pipeline_omits_ligand_steps_and_metrics(tmp_path: Path) ->
     assert not any("chain_B" in str(path) for path in topology.outputs)
     assert analysis.outputs == [
         tmp_path.resolve() / "work" / "analysis" / "rmsd_backbone.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "rmsd_reference.xvg",
         tmp_path.resolve() / "work" / "analysis" / "rmsf_residuos.xvg",
         tmp_path.resolve() / "work" / "analysis" / "gyrate.xvg",
     ]
+    assert analysis.inputs == [
+        tmp_path.resolve() / "work" / "prod" / "md.tpr",
+        tmp_path.resolve() / "work" / "prod" / "md_fit.xtc",
+        tmp_path.resolve() / "work" / "em" / "em.tpr",
+    ]
     assert [path.name for path in plots.outputs] == [
         "rmsd_bb.png",
+        "rmsd_reference.png",
         "rmsf.png",
         "rg.png",
+        "em_potential.png",
+        "nvt_temperature.png",
+        "npt_pressure.png",
+        "npt_density.png",
+    ]
+
+
+def test_pipeline_adds_thermodynamic_extraction_step(tmp_path: Path) -> None:
+    steps = build_pipeline(default_config("thermo_pipeline_test"), config_dir=tmp_path)
+    thermodynamics = next(step for step in steps if step.name == "thermodynamics")
+
+    assert thermodynamics.command == [
+        "gmxflow",
+        "thermodynamics",
+        "--project",
+        str((tmp_path / "project.toml").resolve()),
+    ]
+    assert [path.name for path in thermodynamics.inputs] == [
+        "em.edr",
+        "nvt.edr",
+        "npt.edr",
+    ]
+    assert [path.name for path in thermodynamics.outputs] == [
+        "em_potential.xvg",
+        "nvt_temperature.xvg",
+        "npt_pressure.xvg",
+        "npt_density.xvg",
     ]
 
 
@@ -591,6 +625,10 @@ def test_plots_step_uses_analysis_outputs(tmp_path: Path) -> None:
         tmp_path.resolve() / "work" / "analysis" / "gyrate.xvg",
         tmp_path.resolve() / "work" / "analysis" / "numcont.xvg",
         tmp_path.resolve() / "work" / "analysis" / "hbond.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "em_potential.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "nvt_temperature.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "npt_pressure.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "npt_density.xvg",
     ]
     assert plots.outputs == [
         tmp_path.resolve() / "work" / "analysis" / "painel_completo.png",
@@ -600,6 +638,10 @@ def test_plots_step_uses_analysis_outputs(tmp_path: Path) -> None:
         tmp_path.resolve() / "work" / "analysis" / "rg.png",
         tmp_path.resolve() / "work" / "analysis" / "ncont.png",
         tmp_path.resolve() / "work" / "analysis" / "hbond.png",
+        tmp_path.resolve() / "work" / "analysis" / "em_potential.png",
+        tmp_path.resolve() / "work" / "analysis" / "nvt_temperature.png",
+        tmp_path.resolve() / "work" / "analysis" / "npt_pressure.png",
+        tmp_path.resolve() / "work" / "analysis" / "npt_density.png",
     ]
 
 
@@ -624,6 +666,10 @@ def test_report_step_uses_analysis_outputs_and_plots(tmp_path: Path) -> None:
         tmp_path.resolve() / "work" / "analysis" / "mindist.xvg",
         tmp_path.resolve() / "work" / "analysis" / "numcont.xvg",
         tmp_path.resolve() / "work" / "analysis" / "hbond.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "em_potential.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "nvt_temperature.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "npt_pressure.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "npt_density.xvg",
         tmp_path.resolve() / "work" / "analysis" / "painel_completo.png",
         tmp_path.resolve() / "work" / "analysis" / "rmsd_bb.png",
         tmp_path.resolve() / "work" / "analysis" / "rmsd_lig.png",
@@ -631,6 +677,10 @@ def test_report_step_uses_analysis_outputs_and_plots(tmp_path: Path) -> None:
         tmp_path.resolve() / "work" / "analysis" / "rg.png",
         tmp_path.resolve() / "work" / "analysis" / "ncont.png",
         tmp_path.resolve() / "work" / "analysis" / "hbond.png",
+        tmp_path.resolve() / "work" / "analysis" / "em_potential.png",
+        tmp_path.resolve() / "work" / "analysis" / "nvt_temperature.png",
+        tmp_path.resolve() / "work" / "analysis" / "npt_pressure.png",
+        tmp_path.resolve() / "work" / "analysis" / "npt_density.png",
     ]
     assert report.outputs == [
         tmp_path.resolve() / "outputs" / "summary.json",
@@ -649,7 +699,8 @@ def test_pipeline_adds_interaction_energy_when_enabled(tmp_path: Path) -> None:
     interaction = next(step for step in steps if step.name == "interaction-energy")
     report = steps[-1]
 
-    assert names[names.index("analysis") + 1] == "interaction-energy"
+    assert names[names.index("analysis") + 1] == "thermodynamics"
+    assert names[names.index("thermodynamics") + 1] == "interaction-energy"
     assert interaction.command == [
         "gmxflow",
         "interaction-energy",
@@ -682,7 +733,8 @@ def test_pipeline_adds_sasa_when_enabled(tmp_path: Path) -> None:
     sasa = next(step for step in steps if step.name == "sasa")
     report = steps[-1]
 
-    assert names[names.index("analysis") + 1] == "sasa"
+    assert names[names.index("analysis") + 1] == "thermodynamics"
+    assert names[names.index("thermodynamics") + 1] == "sasa"
     assert sasa.command == ["gmxflow", "sasa", "--project", str(config_path.resolve())]
     assert sasa.inputs == [
         tmp_path.resolve() / "work" / "analysis" / "lig.ndx",

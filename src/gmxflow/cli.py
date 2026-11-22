@@ -10,7 +10,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from gmxflow.analysis import run_analysis, run_interaction_energy, run_sasa_analysis
+from gmxflow.analysis import (
+    run_analysis,
+    run_interaction_energy,
+    run_sasa_analysis,
+    run_thermodynamic_analysis,
+)
 from gmxflow.api import GmxFlowProject
 from gmxflow.config import load_config
 from gmxflow.executor import run_steps, run_workspace_setup
@@ -580,6 +585,31 @@ def interaction_energy(
     for result in results:
         console.print(
             f"Energia de interação concluída: {result.name} -> [bold]{result.output_path}[/bold]"
+        )
+
+
+@app.command("thermodynamics")
+def thermodynamics(
+    config: Annotated[
+        Path,
+        typer.Option("--project", "-p", help="Arquivo project.toml do projeto."),
+    ] = Path("project.toml"),
+) -> None:
+    """Extrai energia potencial, temperatura, pressão e densidade."""
+    loaded = load_config(config)
+    config_path = config.expanduser().resolve()
+
+    try:
+        results = run_thermodynamic_analysis(
+            loaded, project_root=config_path.parent
+        )
+    except RuntimeError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    for result in results:
+        console.print(
+            f"Propriedade termodinâmica concluída: {result.name} -> "
+            f"[bold]{result.output_path}[/bold]"
         )
 
 

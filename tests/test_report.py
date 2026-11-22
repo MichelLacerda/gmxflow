@@ -122,9 +122,15 @@ def test_protein_only_report_publishes_protein_figures_and_metrics(
 ) -> None:
     analysis = tmp_path / "work" / "analysis"
     analysis.mkdir(parents=True)
-    for name in ("rmsd_backbone", "rmsf_residuos", "gyrate"):
+    for name in ("rmsd_backbone", "rmsd_reference", "rmsf_residuos", "gyrate"):
         _write_xvg(analysis / f"{name}.xvg", [0.1, 0.2])
-    for name in ("painel_proteina.png", "rmsd_bb.png", "rmsf.png", "rg.png"):
+    for name in (
+        "painel_proteina.png",
+        "rmsd_bb.png",
+        "rmsd_reference.png",
+        "rmsf.png",
+        "rg.png",
+    ):
         (analysis / name).write_bytes(b"png")
     config = default_config("protein_only_report")
     config.input.ligand_kind = "none"
@@ -134,11 +140,13 @@ def test_protein_only_report_publishes_protein_figures_and_metrics(
     payload = json.loads(result.summary_json.read_text(encoding="utf-8"))
     assert set(payload["summaries"]) == {
         "rmsd_backbone",
+        "rmsd_reference",
         "rmsf_residuos",
         "gyrate",
     }
     assert payload["plots"] == [
         "figures/rmsd_bb.png",
+        "figures/rmsd_reference.png",
         "figures/rmsf.png",
         "figures/rg.png",
     ]
@@ -185,6 +193,34 @@ def test_generate_report_warns_for_smoke_profile(tmp_path: Path) -> None:
     ]
     assert "Perfil smoke" in result.summary_txt.read_text(encoding="utf-8")
     assert "Perfil smoke" in result.report_html.read_text(encoding="utf-8")
+
+
+def test_report_summarizes_and_publishes_thermodynamic_series(tmp_path: Path) -> None:
+    analysis = tmp_path / "work" / "analysis"
+    analysis.mkdir(parents=True)
+    series = {
+        "em_potential": [-100.0, -120.0],
+        "nvt_temperature": [298.0, 302.0],
+        "npt_pressure": [0.8, 1.2],
+        "npt_density": [990.0, 1010.0],
+    }
+    for name, values in series.items():
+        _write_xvg(analysis / f"{name}.xvg", values)
+        (analysis / f"{name}.png").write_bytes(b"png")
+
+    result = generate_report(default_config("thermodynamic_report"), tmp_path)
+
+    payload = json.loads(result.summary_json.read_text(encoding="utf-8"))
+    assert payload["summaries"]["em_potential"]["mean"] == pytest.approx(-110.0)
+    assert payload["summaries"]["nvt_temperature"]["unit"] == "K"
+    assert payload["summaries"]["npt_pressure"]["unit"] == "bar"
+    assert payload["summaries"]["npt_density"]["unit"] == "kg/m³"
+    assert all(
+        (tmp_path / "outputs" / "data" / f"{name}.xvg").is_file()
+        for name in series
+    )
+    assert "Termodinâmica" in result.summary_txt.read_text(encoding="utf-8")
+    assert "Termodinâmica" in result.report_html.read_text(encoding="utf-8")
 
 
 def _write_xvg(path: Path, values: list[float]) -> None:

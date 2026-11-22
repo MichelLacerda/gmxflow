@@ -32,6 +32,8 @@ Implementado:
 - feedback progressivo no console durante `gmxflow run`;
 - pós-processamento PBC e alinhamento com `gmx trjconv`;
 - análises com `gmx rms`, `gmx rmsf`, `gmx gyrate`, `gmx mindist` e `gmx hbond`;
+- extração com `gmx energy` do potencial após minimização, temperatura NVT,
+  pressão e densidade NPT, com gráficos e publicação no relatório;
 - geração de figuras PNG a partir dos `.xvg`;
 - relatório consolidado em `outputs/summary.json`, `outputs/summary.txt` e `outputs/report.html`;
 - publicação de figuras, séries `.xvg` e logs em `outputs/`;
