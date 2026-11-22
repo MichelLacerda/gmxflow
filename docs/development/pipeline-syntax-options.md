@@ -320,15 +320,22 @@ validar resultados científicos com GROMACS.
 artefatos declarados e comparam a chamada normalizada e os arquivos de saída
 com o executor legado usando um subprocesso simulado. Essa comparação valida a
 integração do software, não a preparação molecular nem a validade científica.
-O formato de estado dos dois executores ainda difere; alternar entre API e CLI
-pode executar `prepare` novamente, e a compatibilidade de retomada fica para a
-etapa 5. Atendido em `tests/test_api.py` e `tests/test_pipeline.py`.
+O estado do grafo é gravado separadamente em `work/workflow_state.json`, sem
+sobrescrever `work/state.json` do CLI. Os caches são independentes, portanto a
+primeira execução por um executor sem estado próprio pode executar a etapa
+novamente. Atendido em `tests/test_api.py` e `tests/test_pipeline.py`.
 
 ### 5. Migrar as demais etapas incrementalmente
 
 **Escopo:** portar etapas em fatias pequenas, atualizando testes e exemplos a
 cada fatia. Definir e testar a compatibilidade de identificadores, opções de
 seleção de etapas e estado salvo para projetos existentes.
+
+**Decisão de compatibilidade já aplicada:** o CLI mantém `work/state.json`; a
+execução pelo grafo na API usa `work/workflow_state.json`. Os formatos não são
+convertidos nem sobrescritos entre si, e a retomada de cada executor é
+independente. As próximas fatias devem preservar os IDs de etapas e verificar
+a retomada dentro de cada executor.
 
 **Fora de escopo:** remover a implementação antiga antes da paridade, introduzir
 um editor visual ou prometer suporte a todos os tutoriais de Lemkul.

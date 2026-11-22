@@ -119,6 +119,42 @@ def test_run_workflow_graph_resumes_when_state_inputs_and_outputs_match(
     assert state["steps"]["cache-step"]["step_version"] == "1"
 
 
+def test_run_workflow_graph_can_use_an_isolated_state_file(
+    tmp_path: Path,
+) -> None:
+    output = Artifact("output", "txt")
+    calls: list[str] = []
+
+    def write_output(context: RunContext) -> None:
+        calls.append("run")
+        context.output_path(output).write_text("cached\n", encoding="utf-8")
+
+    graph = WorkflowGraph.from_workflow(
+        _Step("isolated-cache", "Isolated cache", write_output, outputs=(output,))
+    )
+    workflow_state = tmp_path / "work" / "workflow_state.json"
+    paths = _artifact_paths(tmp_path, ("output", "work/cache.txt"))
+
+    first = run_workflow_graph(
+        graph,
+        project_root=tmp_path,
+        artifact_paths=paths,
+        state_path=workflow_state,
+    )
+    second = run_workflow_graph(
+        graph,
+        project_root=tmp_path,
+        artifact_paths=paths,
+        state_path=workflow_state,
+    )
+
+    assert first.results[0].status is WorkflowStepStatus.SUCCEEDED
+    assert second.results[0].status is WorkflowStepStatus.SKIPPED
+    assert workflow_state.is_file()
+    assert not (tmp_path / "work" / "state.json").exists()
+    assert calls == ["run"]
+
+
 def test_run_workflow_graph_invalidates_resume_when_state_or_version_changes(
     tmp_path: Path,
 ) -> None:

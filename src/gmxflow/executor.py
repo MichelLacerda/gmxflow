@@ -148,6 +148,7 @@ def run_workflow_graph(
     *,
     project_root: Path,
     artifact_paths: Mapping[str, Path],
+    state_path: Path | None = None,
     dry_run: bool = False,
     global_inputs: Sequence[Path] = (),
 ) -> WorkflowExecutionReport:
@@ -165,7 +166,10 @@ def run_workflow_graph(
         path.expanduser().resolve() for path in global_inputs
     )
     log_dir = root / "work" / "logs"
-    state_path = root / "work" / "state.json"
+    state_path = state_path or Path("work/state.json")
+    if not state_path.is_absolute():
+        state_path = root / state_path
+    state_path = state_path.expanduser().resolve()
     ordered_ids = graph.topological_order
     log_paths = {
         step_id: log_dir / f"{index:02d}_{_safe_step_id(step_id)}.log"

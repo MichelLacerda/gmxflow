@@ -378,6 +378,13 @@ def test_graph_preparation_matches_legacy_command_and_outputs(
     (project_root / "inputs").mkdir()
     (project_root / "inputs" / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
     (project_root / "inputs" / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
+    legacy_state = project_root / "work" / "state.json"
+    legacy_state.parent.mkdir(parents=True)
+    legacy_state.write_text(
+        '{"version": 1, "steps": {"prepare": {"status": "success"}}}\n',
+        encoding="utf-8",
+    )
+    legacy_state_before = legacy_state.read_bytes()
 
     legacy_root = tmp_path / "legacy_project"
     legacy_config = _write_project_config(legacy_root)
@@ -385,7 +392,10 @@ def test_graph_preparation_matches_legacy_command_and_outputs(
     (legacy_root / "inputs" / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
     (legacy_root / "inputs" / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
 
+    subprocess_calls: list[tuple[str, ...]] = []
+
     def fake_subprocess_run(command, *, cwd, **kwargs):
+        subprocess_calls.append(tuple(command))
         output_content = {
             "receptor_fixed.pdb": "RECEPTOR\n",
             "ligante_fixed.pdb": "LIGAND\n",
@@ -419,6 +429,7 @@ def test_graph_preparation_matches_legacy_command_and_outputs(
             ("done", index, result.step_name)
         ),
     )
+    resumed_report = project.run(until="prepare")
     legacy_step = build_pipeline(
         project.config,
         config_dir=legacy_root,
@@ -441,6 +452,10 @@ def test_graph_preparation_matches_legacy_command_and_outputs(
     ]
     assert graph_command == legacy_command
     assert graph_result.returncode == legacy_result.returncode == 0
+    assert resumed_report.steps[0].skipped
+    assert len(subprocess_calls) == 2  # graph once, then the separate legacy reference
+    assert legacy_state.read_bytes() == legacy_state_before
+    assert (project_root / "work" / "workflow_state.json").is_file()
     assert callback_events == [
         ("start", 1, "prepare"),
         ("done", 1, "prepare"),

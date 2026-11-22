@@ -305,6 +305,7 @@ def _run_graph_preparation(
             graph,
             project_root=project_root,
             artifact_paths=artifact_paths,
+            state_path=project_root / "work" / "workflow_state.json",
         )
     except WorkflowExecutionError as error:
         report = error.report
