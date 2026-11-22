@@ -271,7 +271,9 @@ class GmxFlowProject:
             "fit",
         }
         if self.config.input.ligand_kind in {"peptide", "none"}:
-            graph_step_names.update({"analysis", "thermodynamics", "plots"})
+            graph_step_names.update(
+                {"analysis", "thermodynamics", "plots", "report"}
+            )
         if (
             self.config.input.ligand_kind == "peptide"
             and self.config.analysis.interaction_energy

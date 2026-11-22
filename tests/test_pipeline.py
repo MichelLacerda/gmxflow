@@ -887,6 +887,8 @@ def test_report_step_uses_analysis_outputs_and_plots(tmp_path: Path) -> None:
         tmp_path.resolve() / "work" / "analysis" / "npt_density.png",
     ]
     assert report.outputs == [
+        tmp_path.resolve() / "outputs" / "figures",
+        tmp_path.resolve() / "outputs" / "data",
         tmp_path.resolve() / "outputs" / "summary.json",
         tmp_path.resolve() / "outputs" / "summary.txt",
         tmp_path.resolve() / "outputs" / "report.html",

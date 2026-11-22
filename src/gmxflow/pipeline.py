@@ -1188,6 +1188,8 @@ def build_pipeline(
                     *plot_outputs,
                 ],
                 outputs=[
+                    outputs / "figures",
+                    outputs / "data",
                     outputs / "summary.json",
                     outputs / "summary.txt",
                     outputs / "report.html",

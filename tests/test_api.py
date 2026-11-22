@@ -689,6 +689,16 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
                 Path(output).name: "PLOT\n"
                 for output in project.plan(until="plots")[-1].outputs
             }
+        elif "report" in command:
+            report_step = project.plan(until="report")[-1]
+            for output in report_step.outputs:
+                if not output.suffix:
+                    (Path(cwd) / output.name).mkdir(exist_ok=True)
+            output_content = {
+                output.name: "REPORT\n"
+                for output in report_step.outputs
+                if output.suffix
+            }
         elif "trjconv" in command:
             output_file = command[command.index("-o") + 1]
             output_content = {output_file: "NOJUMP_XTC\n"}
@@ -739,7 +749,7 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
 
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run(
-        until="plots",
+        until="report",
         on_step_start=lambda index, step: callback_events.append(
             ("start", index, step.name)
         ),
@@ -747,7 +757,7 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
             ("done", index, result.step_name)
         ),
     )
-    resumed_report = project.run(until="plots")
+    resumed_report = project.run(until="report")
 
     topology_only_root = tmp_path / "topology_only_project"
     topology_only_project = GmxFlowProject.open(
@@ -1083,10 +1093,10 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
         project.config,
         config_dir=legacy_root,
         config_path=legacy_config,
-    )[:20]
+    )[:21]
     legacy_results = run_steps(legacy_steps, project_root=legacy_root)
 
-    assert len(graph_report.steps) == len(legacy_results) == 20
+    assert len(graph_report.steps) == len(legacy_results) == 21
     for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
         graph_command = [
             argument.replace(str(project_root), "<project-root>")
@@ -1135,7 +1145,7 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     assert analysis_only_report.steps[0].returncode == 0
     assert thermo_only_report.steps[0].step_name == "thermodynamics"
     assert thermo_only_report.steps[0].returncode == 0
-    assert len(subprocess_calls) == 58  # graph, isolated steps, and legacy prefix
+    assert len(subprocess_calls) == 60  # graph, isolated steps, and legacy prefix
     assert sum(
         command[-1:] == ("nojump",) and stdin == "0\n"
         for command, stdin in subprocess_inputs
@@ -1191,6 +1201,8 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
         ("done", 19, "thermodynamics"),
         ("start", 20, "plots"),
         ("done", 20, "plots"),
+        ("start", 21, "report"),
+        ("done", 21, "report"),
     ]
     for relative_dir in (
         Path("work/prep"),
@@ -1210,6 +1222,14 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
         assert [path.read_bytes() for path in graph_outputs] == [
             path.read_bytes() for path in legacy_outputs
         ]
+    graph_report_outputs = sorted((project_root / "outputs").rglob("*"))
+    legacy_report_outputs = sorted((legacy_root / "outputs").rglob("*"))
+    assert [path.relative_to(project_root / "outputs") for path in graph_report_outputs] == [
+        path.relative_to(legacy_root / "outputs") for path in legacy_report_outputs
+    ]
+    assert [
+        path.read_bytes() for path in graph_report_outputs if path.is_file()
+    ] == [path.read_bytes() for path in legacy_report_outputs if path.is_file()]
 
 
 def test_interaction_energy_runs_through_graph_when_enabled(
@@ -1363,6 +1383,56 @@ def test_plots_runs_through_graph_when_started_directly(
     assert report.steps[0].step_name == "plots"
     assert report.steps[0].returncode == 0
     assert all(output.is_file() for output in plots_step.outputs)
+
+
+def test_report_runs_through_graph_when_started_directly(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project_root = tmp_path / "report_project"
+    project = GmxFlowProject.open(_write_project_config(project_root))
+    inputs_dir = project_root / "inputs"
+    inputs_dir.mkdir()
+    (inputs_dir / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (inputs_dir / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
+
+    report_step = project.plan(until="report")[-1]
+    for input_path in report_step.inputs:
+        input_path.parent.mkdir(parents=True, exist_ok=True)
+        input_path.write_text("REPORT_INPUT\n", encoding="utf-8")
+
+    monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
+    monkeypatch.setattr(
+        "gmxflow.api.run_workspace_setup",
+        lambda config, project_root: StepResult(
+            step_name="workspace",
+            command=["<internal>", "ensure-workspace"],
+            workdir=project_root / "work",
+            log_path=project_root / "work" / "logs" / "00_workspace.log",
+            returncode=0,
+            elapsed_seconds=0.0,
+        ),
+    )
+
+    calls: list[tuple[str, ...]] = []
+
+    def fake_subprocess_run(command, *, cwd, **kwargs):
+        calls.append(tuple(command))
+        for output in report_step.outputs:
+            path = Path(cwd) / output.name
+            if not output.suffix:
+                path.mkdir(exist_ok=True)
+            else:
+                path.write_text("REPORT\n", encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
+
+    report = project.run(from_step="report", until="report")
+
+    assert len(calls) == 1
+    assert report.steps[0].step_name == "report"
+    assert report.steps[0].returncode == 0
+    assert all(output.exists() for output in report_step.outputs)
 
 
 def test_run_rejects_unreleased_steps_before_workspace_setup(

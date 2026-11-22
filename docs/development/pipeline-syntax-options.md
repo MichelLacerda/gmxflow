@@ -334,13 +334,12 @@ seleção de etapas e estado salvo para projetos existentes.
 **Fatia implementada:** nos fluxos `peptide` e `none`, o prefixo
 `prepare → topology → box → solvate → ions-grompp → ions → em-grompp → em →
 nvt-grompp → nvt → npt-grompp → npt → production-grompp → production →
-pbc-nojump → pbc-center → fit → analysis → thermodynamics → plots` é
+pbc-nojump → pbc-center → fit → analysis → thermodynamics → plots → report` é
 executado pelo grafo quando o plano começa em `prepare`. Também é possível
-iniciar diretamente em qualquer etapa desse trecho, de `topology` a
-`plots`, desde que suas entradas já existam. A etapa posterior `report`
-continua no executor legado. As etapas `interaction-energy` e `sasa`, quando
-habilitadas em um projeto `peptide`, também são executadas pelo grafo e podem
-ser iniciadas diretamente se suas entradas existirem. O fluxo
+iniciar diretamente em qualquer etapa desse trecho, de `topology` a `report`,
+desde que suas entradas já existam. As etapas `interaction-energy` e `sasa`,
+quando habilitadas em um projeto `peptide`, também são executadas pelo grafo e
+podem ser iniciadas diretamente se suas entradas existirem. O fluxo
 `small_molecule` (`ligand-topology`, `protein-topology` e `assemble-complex`)
 não foi migrado.
 
