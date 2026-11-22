@@ -251,7 +251,13 @@ class GmxFlowProject:
         remaining_steps = steps
         start_index = 1
         graph_step_count = 0
-        graph_step_names = {"prepare", "topology", "box", "solvate"}
+        graph_step_names = {
+            "prepare",
+            "topology",
+            "box",
+            "solvate",
+            "ions-grompp",
+        }
         if steps and steps[0].name in graph_step_names:
             graph_step_count = next(
                 (
