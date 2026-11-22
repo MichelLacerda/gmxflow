@@ -336,9 +336,11 @@ um único `Sequence` e o executa pelo executor do grafo; não há mais divisão 
 execução por uma allowlist de nomes de etapa. `PrepareComplexStep` é usado em
 todos os perfis e, para `small_molecule`, `LigandTopologyStep`,
 `ProteinTopologyStep` e `AssembleComplexStep` também são implementações
-concretas do contrato `Step`. `build_pipeline()` projeta essas mesmas
-definições como `PipelineStep` para manter o CLI legado. As demais etapas da
-pipeline ainda passam por `PipelineCommandStep`, um adaptador temporário; elas
+concretas do contrato `Step`. As etapas `box`, `solvate`, `ions-grompp` e
+`ions` também são classes concretas (`CreateBoxStep`, `SolvateSystemStep`,
+`PrepareIonsStep` e `AddIonsStep`) em todos os perfis. `build_pipeline()` projeta
+essas mesmas definições como `PipelineStep` para manter o CLI legado. As etapas
+restantes ainda passam por `PipelineCommandStep`, um adaptador temporário; elas
 ainda não são classes de domínio próprias. A sequência atual não usa
 `Parallel`.
 

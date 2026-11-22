@@ -6,14 +6,18 @@ import pytest
 from gmxflow.config import default_config
 from gmxflow.executor import select_steps
 from gmxflow.pipeline import (
+    AddIonsStep,
     AssembleComplexStep,
     Artifact,
+    CreateBoxStep,
     LigandTopologyStep,
     Parallel,
     PipelineCommandStep,
+    PrepareIonsStep,
     PrepareComplexStep,
     ProteinTopologyStep,
     Sequence,
+    SolvateSystemStep,
     WorkflowGraph,
     build_workflow,
     build_pipeline,
@@ -454,18 +458,26 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
     workflow = build_workflow(config, config_dir=tmp_path)
 
     assert isinstance(workflow, Sequence)
-    assert [type(step) for step in workflow.items[:4]] == [
+    assert [type(step) for step in workflow.items[:8]] == [
         PrepareComplexStep,
         LigandTopologyStep,
         ProteinTopologyStep,
         AssembleComplexStep,
+        CreateBoxStep,
+        SolvateSystemStep,
+        PrepareIonsStep,
+        AddIonsStep,
     ]
-    assert isinstance(workflow.items[4], PipelineCommandStep)
-    assert [step.id for step in workflow.items[:4]] == [
+    assert isinstance(workflow.items[8], PipelineCommandStep)
+    assert [step.id for step in workflow.items[:8]] == [
         "prepare",
         "ligand-topology",
         "protein-topology",
         "assemble-complex",
+        "box",
+        "solvate",
+        "ions-grompp",
+        "ions",
     ]
 
 

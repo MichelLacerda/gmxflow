@@ -377,6 +377,152 @@ class AssembleComplexStep(GromacsCommandStep):
         )
 
 
+@dataclass
+class CreateBoxStep(GromacsCommandStep):
+    """Create the periodic simulation box around the prepared complex."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> CreateBoxStep:
+        root = project_root.expanduser().resolve()
+        topo = root / "work" / "topo"
+        box = root / "work" / "box"
+        return cls(
+            id="box",
+            name="Criar caixa de simulação.",
+            command=(
+                _gmx_command(config),
+                "editconf",
+                "-f",
+                str(topo / "complexo.gro"),
+                "-o",
+                "box.gro",
+                "-c",
+                "-d",
+                str(config.box.distance_nm),
+                "-bt",
+                config.box.type,
+            ),
+            workdir=box,
+            input_paths=(topo / "complexo.gro",),
+            output_paths=(box / "box.gro",),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
+@dataclass
+class SolvateSystemStep(GromacsCommandStep):
+    """Add solvent while preserving the input topology as a separate file."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path, config_path: Path
+    ) -> SolvateSystemStep:
+        root = project_root.expanduser().resolve()
+        resolved_config = config_path.expanduser().resolve()
+        topo = root / "work" / "topo"
+        box = root / "work" / "box"
+        input_topology = (
+            topo / "topol_complex.top"
+            if config.input.ligand_kind == "small_molecule"
+            else topo / "topol.top"
+        )
+        output_topology = topo / "topol_solvated.top"
+        return cls(
+            id="solvate",
+            name="Adicionar solvente.",
+            command=(
+                "gmxflow",
+                "solvate-system",
+                "--project",
+                str(resolved_config),
+                "--topology-input",
+                str(input_topology),
+                "--topology-output",
+                str(output_topology),
+            ),
+            workdir=box,
+            input_paths=(box / "box.gro", input_topology),
+            output_paths=(box / "solv.gro", output_topology),
+            env=_gromacs_env(config.force_field.name, root),
+            state={
+                "solvent.water_structure": config.solvent.water_structure,
+                "solvent.positive_ion": config.solvent.positive_ion,
+                "solvent.negative_ion": config.solvent.negative_ion,
+                "solvent.salt_concentration_m": config.solvent.salt_concentration_m,
+                "solvent.neutralize": config.solvent.neutralize,
+            },
+        )
+
+
+@dataclass
+class PrepareIonsStep(GromacsCommandStep):
+    """Generate the binary input required by GROMACS genion."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> PrepareIonsStep:
+        root = project_root.expanduser().resolve()
+        box = root / "work" / "box"
+        topology = root / "work" / "topo" / "topol_solvated.top"
+        gmx = _gmx_command(config)
+        return cls(
+            id="ions-grompp",
+            name="Preparar entrada binária para adição de íons.",
+            command=(
+                gmx,
+                "grompp",
+                "-f",
+                "ions.mdp",
+                "-c",
+                "solv.gro",
+                "-p",
+                str(topology),
+                "-o",
+                "ions.tpr",
+            ),
+            workdir=box,
+            input_paths=(box / "ions.mdp", box / "solv.gro", topology),
+            output_paths=(box / "ions.tpr", box / "mdout.mdp"),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
+@dataclass
+class AddIonsStep(GromacsCommandStep):
+    """Add ions to the solvated system using the generated GROMACS input."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path, config_path: Path
+    ) -> AddIonsStep:
+        root = project_root.expanduser().resolve()
+        resolved_config = config_path.expanduser().resolve()
+        box = root / "work" / "box"
+        input_topology = root / "work" / "topo" / "topol_solvated.top"
+        output_topology = root / "work" / "topo" / "topol_ions.top"
+        return cls(
+            id="ions",
+            name="Adicionar íons e neutralizar o sistema.",
+            command=(
+                "gmxflow",
+                "genion-system",
+                "--project",
+                str(resolved_config),
+                "--topology-input",
+                str(input_topology),
+                "--topology-output",
+                str(output_topology),
+            ),
+            workdir=box,
+            input_paths=(box / "ions.tpr", input_topology),
+            output_paths=(box / "ions.gro", output_topology),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
 @dataclass(frozen=True)
 class Sequence:
     """An ordered composition of workflow items."""
@@ -680,7 +826,6 @@ def build_pipeline(
 
     prep = work_dir / "prep"
     topo = work_dir / "topo"
-    solvated_topology = topo / "topol_solvated.top"
     ionized_topology = topo / "topol_ions.top"
     box = work_dir / "box"
     em = work_dir / "em"
@@ -819,97 +964,16 @@ def build_pipeline(
     analysis_step_inputs = [prod / "md.tpr", prod / "md_fit.xtc"]
     if config.input.ligand_kind == "none":
         analysis_step_inputs.append(em / "em.tpr")
-    solvent_input_topology = (
-        topo / "topol_complex.top"
-        if config.input.ligand_kind == "small_molecule"
-        else topo / "topol.top"
-    )
     steps.extend(
         [
-            PipelineStep(
-                name="box",
-                description="Criar caixa de simulação.",
-                workdir=box,
-                command=[
-                    gmx,
-                    "editconf",
-                    "-f",
-                    str(topo / "complexo.gro"),
-                    "-o",
-                    "box.gro",
-                    "-c",
-                    "-d",
-                    str(config.box.distance_nm),
-                    "-bt",
-                    config.box.type,
-                ],
-                inputs=[topo / "complexo.gro"],
-                outputs=[box / "box.gro"],
-                env=gromacs_env,
-            ),
-            PipelineStep(
-                name="solvate",
-                description="Adicionar solvente.",
-                workdir=box,
-                command=[
-                    "gmxflow",
-                    "solvate-system",
-                    "--project",
-                    str(config_path),
-                    "--topology-input",
-                    str(solvent_input_topology),
-                    "--topology-output",
-                    str(solvated_topology),
-                ],
-                inputs=[box / "box.gro", solvent_input_topology],
-                outputs=[box / "solv.gro", solvated_topology],
-                env=gromacs_env,
-                state={
-                    "solvent.water_structure": config.solvent.water_structure,
-                    "solvent.positive_ion": config.solvent.positive_ion,
-                    "solvent.negative_ion": config.solvent.negative_ion,
-                    "solvent.salt_concentration_m": config.solvent.salt_concentration_m,
-                    "solvent.neutralize": config.solvent.neutralize,
-                },
-            ),
-            PipelineStep(
-                name="ions-grompp",
-                description="Preparar entrada binária para adição de íons.",
-                workdir=box,
-                command=[
-                    gmx,
-                    "grompp",
-                    "-f",
-                    "ions.mdp",
-                    "-c",
-                    "solv.gro",
-                    "-p",
-                    str(solvated_topology),
-                    "-o",
-                    "ions.tpr",
-                ],
-                inputs=[box / "ions.mdp", box / "solv.gro", solvated_topology],
-                outputs=[box / "ions.tpr", box / "mdout.mdp"],
-                env=gromacs_env,
-            ),
-            PipelineStep(
-                name="ions",
-                description="Adicionar íons e neutralizar o sistema.",
-                workdir=box,
-                command=[
-                    "gmxflow",
-                    "genion-system",
-                    "--project",
-                    str(config_path),
-                    "--topology-input",
-                    str(solvated_topology),
-                    "--topology-output",
-                    str(ionized_topology),
-                ],
-                inputs=[box / "ions.tpr", solvated_topology],
-                outputs=[box / "ions.gro", ionized_topology],
-                env=gromacs_env,
-            ),
+            CreateBoxStep.from_config(config, project_root).to_pipeline_step(),
+            SolvateSystemStep.from_config(
+                config, project_root, config_path
+            ).to_pipeline_step(),
+            PrepareIonsStep.from_config(config, project_root).to_pipeline_step(),
+            AddIonsStep.from_config(
+                config, project_root, config_path
+            ).to_pipeline_step(),
             PipelineStep(
                 name="em-grompp",
                 description="Preparar minimização de energia.",
@@ -1351,6 +1415,14 @@ def build_workflow(
                 AssembleComplexStep.from_config(config, root, resolved_config),
             ]
         )
+    concrete_steps.extend(
+        [
+            CreateBoxStep.from_config(config, root),
+            SolvateSystemStep.from_config(config, root, resolved_config),
+            PrepareIonsStep.from_config(config, root),
+            AddIonsStep.from_config(config, root, resolved_config),
+        ]
+    )
     by_id = {step.id: step for step in concrete_steps}
     workflow_steps: list[Step] = []
     for pipeline_step in plan:
