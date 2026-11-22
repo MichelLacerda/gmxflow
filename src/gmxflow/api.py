@@ -263,6 +263,7 @@ class GmxFlowProject:
             "nvt-grompp",
             "nvt",
             "npt-grompp",
+            "npt",
         }
         if steps and steps[0].name in graph_step_names:
             graph_step_count = next(
