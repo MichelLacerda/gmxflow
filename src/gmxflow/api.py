@@ -270,6 +270,8 @@ class GmxFlowProject:
             "pbc-center",
             "fit",
         }
+        if self.config.input.ligand_kind in {"peptide", "none"}:
+            graph_step_names.add("analysis")
         if steps and steps[0].name in graph_step_names:
             graph_step_count = next(
                 (
