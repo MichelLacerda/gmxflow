@@ -284,6 +284,8 @@ class GmxFlowProject:
             and self.config.analysis.sasa
         ):
             graph_step_names.add("sasa")
+        if self.config.input.ligand_kind == "small_molecule":
+            graph_step_names.add("ligand-topology")
         if steps and steps[0].name in graph_step_names:
             graph_step_count = next(
                 (

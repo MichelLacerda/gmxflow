@@ -1435,6 +1435,63 @@ def test_report_runs_through_graph_when_started_directly(
     assert all(output.exists() for output in report_step.outputs)
 
 
+def test_small_molecule_ligand_topology_runs_through_graph(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project_root = tmp_path / "small_molecule_project"
+    project_root.mkdir()
+    config = default_config("small_molecule_project")
+    config.input.ligand_kind = "small_molecule"
+    config.input.ligand_mol2 = "inputs/ligand.mol2"
+    config.input.ligand_str = "inputs/ligand.str"
+    config.input.ligand_resname = "LIG"
+    config_path = project_root / "project.toml"
+    config_path.write_text(to_toml(config), encoding="utf-8")
+    project = GmxFlowProject.open(config_path)
+
+    inputs_dir = project_root / "inputs"
+    inputs_dir.mkdir()
+    for filename in ("receptor.pdb", "ligante.pdb", "ligand.mol2", "ligand.str"):
+        (inputs_dir / filename).write_text("INPUT\n", encoding="utf-8")
+
+    monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
+    monkeypatch.setattr(
+        "gmxflow.api.run_workspace_setup",
+        lambda config, project_root: StepResult(
+            step_name="workspace",
+            command=["<internal>", "ensure-workspace"],
+            workdir=project_root / "work",
+            log_path=project_root / "work" / "logs" / "00_workspace.log",
+            returncode=0,
+            elapsed_seconds=0.0,
+        ),
+    )
+
+    calls: list[tuple[str, ...]] = []
+
+    def fake_subprocess_run(command, *, cwd, **kwargs):
+        calls.append(tuple(command))
+        if "prepare-complex" in command:
+            outputs = project.plan(until="prepare")[0].outputs
+        else:
+            outputs = project.plan(until="ligand-topology")[-1].outputs
+        for output in outputs:
+            (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
+
+    report = project.run(until="ligand-topology")
+
+    assert len(calls) == 2
+    assert [result.step_name for result in report.steps] == [
+        "prepare",
+        "ligand-topology",
+    ]
+    assert all(result.returncode == 0 for result in report.steps)
+    assert all(output.is_file() for output in project.plan(until="ligand-topology")[-1].outputs)
+
+
 def test_run_rejects_unreleased_steps_before_workspace_setup(
     tmp_path: Path, monkeypatch
 ) -> None:
