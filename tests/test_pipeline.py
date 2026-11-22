@@ -14,6 +14,7 @@ from gmxflow.pipeline import (
     CenterTrajectoryStep,
     EnergyMinimizationStep,
     FitTrajectoryStep,
+    InteractionEnergyStep,
     LigandTopologyStep,
     NptEquilibrationStep,
     Parallel,
@@ -29,6 +30,7 @@ from gmxflow.pipeline import (
     RemovePeriodicJumpsStep,
     Sequence,
     SolvateSystemStep,
+    SasaStep,
     ThermodynamicsStep,
     NvtEquilibrationStep,
     WorkflowGraph,
@@ -518,6 +520,18 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
         "analysis",
         "thermodynamics",
     ]
+
+
+def test_optional_analysis_steps_are_concrete_when_enabled(tmp_path: Path) -> None:
+    config = default_config("optional_analysis_workflow")
+    config.analysis.interaction_energy = True
+    config.analysis.sasa = True
+
+    workflow = build_workflow(config, config_dir=tmp_path)
+    steps_by_id = {step.id: step for step in workflow.items}
+
+    assert isinstance(steps_by_id["interaction-energy"], InteractionEnergyStep)
+    assert isinstance(steps_by_id["sasa"], SasaStep)
 
 
 def test_charmm_small_molecule_protein_topology_selects_standard_termini(

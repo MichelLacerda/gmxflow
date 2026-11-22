@@ -997,6 +997,90 @@ class ThermodynamicsStep(GromacsCommandStep):
         )
 
 
+@dataclass
+class InteractionEnergyStep(GromacsCommandStep):
+    """Estimate receptor-ligand interaction energy with the configured rerun."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path, config_path: Path
+    ) -> InteractionEnergyStep:
+        root = project_root.expanduser().resolve()
+        analysis = root / "work" / "analysis"
+        prod = root / "work" / "prod"
+        topology = root / "work" / "topo" / "topol_ions.top"
+        return cls(
+            id="interaction-energy",
+            name="Calcular energia aproximada de interação receptor-ligante por rerun.",
+            command=(
+                "gmxflow",
+                "interaction-energy",
+                "--project",
+                str(config_path.expanduser().resolve()),
+            ),
+            workdir=analysis,
+            input_paths=(
+                analysis / "rerun.mdp",
+                analysis / "lig.ndx",
+                prod / "md.gro",
+                prod / "md_fit.xtc",
+                topology,
+            ),
+            output_paths=(
+                analysis / "interaction.tpr",
+                analysis / "interaction.edr",
+                analysis / "interaction.log",
+                analysis / "interaction_energy.xvg",
+            ),
+            env=_gromacs_env(config.force_field.name, root),
+            state={
+                "analysis.interaction_energy": config.analysis.interaction_energy,
+                "input.ligand_resname": config.input.ligand_resname,
+                "force_field.name": config.force_field.name,
+            },
+        )
+
+
+@dataclass
+class SasaStep(GromacsCommandStep):
+    """Calculate solvent-accessible surface areas and approximate BSA."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path, config_path: Path
+    ) -> SasaStep:
+        root = project_root.expanduser().resolve()
+        analysis = root / "work" / "analysis"
+        prod = root / "work" / "prod"
+        return cls(
+            id="sasa",
+            name="Calcular SASA e BSA aproximado receptor-ligante.",
+            command=(
+                "gmxflow",
+                "sasa",
+                "--project",
+                str(config_path.expanduser().resolve()),
+            ),
+            workdir=analysis,
+            input_paths=(
+                analysis / "lig.ndx",
+                prod / "md.tpr",
+                prod / "md_fit.xtc",
+            ),
+            output_paths=(
+                analysis / "sasa_receptor.xvg",
+                analysis / "sasa_ligante.xvg",
+                analysis / "sasa_complexo.xvg",
+                analysis / "bsa.xvg",
+            ),
+            env=_gromacs_env(config.force_field.name, root),
+            state={
+                "analysis.sasa": config.analysis.sasa,
+                "input.ligand_resname": config.input.ligand_resname,
+            },
+        )
+
+
 @dataclass(frozen=True)
 class Sequence:
     """An ordered composition of workflow items."""
@@ -1300,8 +1384,6 @@ def build_pipeline(
 
     prep = work_dir / "prep"
     topo = work_dir / "topo"
-    ionized_topology = topo / "topol_ions.top"
-    prod = work_dir / "prod"
     analysis = work_dir / "analysis"
     outputs = project_root / "outputs"
     prepare_step = PrepareComplexStep.from_config(config, project_root, config_path)
@@ -1460,59 +1542,16 @@ def build_pipeline(
         ).to_pipeline_step()
     )
     if config.analysis.interaction_energy:
-        steps.append(
-            PipelineStep(
-                name="interaction-energy",
-                description="Calcular energia aproximada de interação receptor-ligante por rerun.",
-                workdir=analysis,
-                command=["gmxflow", "interaction-energy", "--project", str(config_path)],
-                inputs=[
-                    analysis / "rerun.mdp",
-                    analysis / "lig.ndx",
-                    prod / "md.gro",
-                    prod / "md_fit.xtc",
-                    ionized_topology,
-                ],
-                outputs=[
-                    analysis / "interaction.tpr",
-                    analysis / "interaction.edr",
-                    analysis / "interaction.log",
-                    analysis / "interaction_energy.xvg",
-                ],
-                env=gromacs_env,
-                state={
-                    "analysis.interaction_energy": config.analysis.interaction_energy,
-                    "input.ligand_resname": config.input.ligand_resname,
-                    "force_field.name": config.force_field.name,
-                },
-            )
+        interaction_step = InteractionEnergyStep.from_config(
+            config, project_root, config_path
         )
+        steps.append(interaction_step.to_pipeline_step())
         final_analysis_inputs.append(analysis / "interaction_energy.xvg")
     if config.analysis.sasa:
-        steps.append(
-            PipelineStep(
-                name="sasa",
-                description="Calcular SASA e BSA aproximado receptor-ligante.",
-                workdir=analysis,
-                command=["gmxflow", "sasa", "--project", str(config_path)],
-                inputs=[
-                    analysis / "lig.ndx",
-                    prod / "md.tpr",
-                    prod / "md_fit.xtc",
-                ],
-                outputs=[
-                    analysis / "sasa_receptor.xvg",
-                    analysis / "sasa_ligante.xvg",
-                    analysis / "sasa_complexo.xvg",
-                    analysis / "bsa.xvg",
-                ],
-                env=gromacs_env,
-                state={
-                    "analysis.sasa": config.analysis.sasa,
-                    "input.ligand_resname": config.input.ligand_resname,
-                },
-            )
+        sasa_step = SasaStep.from_config(
+            config, project_root, config_path
         )
+        steps.append(sasa_step.to_pipeline_step())
         final_analysis_inputs.extend(
             [
                 analysis / "sasa_receptor.xvg",
@@ -1672,6 +1711,12 @@ def build_workflow(
             ThermodynamicsStep.from_config(config, root, resolved_config),
         ]
     )
+    if config.analysis.interaction_energy:
+        concrete_steps.append(
+            InteractionEnergyStep.from_config(config, root, resolved_config)
+        )
+    if config.analysis.sasa:
+        concrete_steps.append(SasaStep.from_config(config, root, resolved_config))
     by_id = {step.id: step for step in concrete_steps}
     workflow_steps: list[Step] = []
     for pipeline_step in plan:

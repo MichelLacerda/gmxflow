@@ -348,9 +348,10 @@ e `EnergyMinimizationStep`); `nvt-grompp` e `nvt` também (`PrepareNvtStep` e
 trajetória (`pbc-nojump`, `pbc-center` e `fit`) também tem Steps concretos:
 `RemovePeriodicJumpsStep`, `CenterTrajectoryStep` e `FitTrajectoryStep`. As
 etapas `analysis` e `thermodynamics` também agora são `AnalyzeTrajectoryStep` e
-`ThermodynamicsStep`. As demais etapas ainda passam por `PipelineCommandStep`,
-um adaptador temporário; elas ainda não são classes de domínio próprias. A
-sequência atual não usa `Parallel`.
+`ThermodynamicsStep`; quando habilitadas, `interaction-energy` e `sasa` são
+`InteractionEnergyStep` e `SasaStep`. Plotagem, relatório e demais etapas ainda
+passam por `PipelineCommandStep`, um adaptador temporário; elas ainda não são
+classes de domínio próprias. A sequência atual não usa `Parallel`.
 
 **Compatibilidade do executor:** toda execução pela API usa agora
 `work/workflow_state.json`; o CLI segue usando `work/state.json`. Esses estados
