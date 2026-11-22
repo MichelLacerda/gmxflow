@@ -350,9 +350,12 @@ trajetória (`pbc-nojump`, `pbc-center` e `fit`) também tem Steps concretos:
 etapas `analysis` e `thermodynamics` também agora são `AnalyzeTrajectoryStep` e
 `ThermodynamicsStep`; quando habilitadas, `interaction-energy` e `sasa` são
 `InteractionEnergyStep` e `SasaStep`. Plotagem e relatório são `PlotAnalysisStep`
-e `ReportStep`. As etapas restantes ainda passam por `PipelineCommandStep`, um
-adaptador temporário; elas ainda não são classes de domínio próprias. A
-sequência atual não usa `Parallel`.
+e `ReportStep`. Para projetos sem molécula pequena, a topologia agora é
+`BuildTopologyStep`; a classe preserva os caminhos de saída distintos para
+proteína isolada e peptídeo. Assim, todas as etapas produzidas atualmente são
+classes concretas. `PipelineCommandStep` permanece como fallback de
+compatibilidade para planos legados ou etapas ainda não mapeadas. A sequência
+atual não usa `Parallel`.
 
 **Compatibilidade do executor:** toda execução pela API usa agora
 `work/workflow_state.json`; o CLI segue usando `work/state.json`. Esses estados

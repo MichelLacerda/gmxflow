@@ -102,7 +102,9 @@ class PipelineCommandStep:
 
 def _path_artifact(path: Path) -> Artifact:
     resolved_path = path.expanduser().resolve()
-    return Artifact(key=str(resolved_path), kind=resolved_path.suffix.lstrip(".") or "file")
+    return Artifact(
+        key=str(resolved_path), kind=resolved_path.suffix.lstrip(".") or "file"
+    )
 
 
 @dataclass(frozen=True)
@@ -334,6 +336,59 @@ class ProteinTopologyStep(GromacsCommandStep):
 
 
 @dataclass
+class BuildTopologyStep(GromacsCommandStep):
+    """Build the topology for protein-only and protein-peptide projects."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> BuildTopologyStep:
+        root = project_root.expanduser().resolve()
+        prep = root / "work" / "prep"
+        topo = root / "work" / "topo"
+        chains = 1 if config.input.ligand_kind == "none" else 2
+        outputs = [topo / "complexo.gro", topo / "topol.top"]
+        chain_ids = ("A",) if chains == 1 else ("A", "B")
+        outputs.extend(topo / f"topol_Protein_chain_{chain}.itp" for chain in chain_ids)
+        outputs.extend(topo / f"posre_Protein_chain_{chain}.itp" for chain in chain_ids)
+        return cls(
+            id="topology",
+            name="Gerar topologia com pdb2gmx.",
+            command=(
+                _gmx_command(config),
+                "pdb2gmx",
+                "-f",
+                str(prep / "complexo.pdb"),
+                "-o",
+                "complexo.gro",
+                "-p",
+                "topol.top",
+                "-i",
+                "posre.itp",
+                "-ff",
+                config.force_field.name,
+                "-water",
+                config.force_field.water,
+                "-ignh",
+                "-ter",
+                "-chainsep",
+                "ter",
+                "-merge",
+                "no",
+            ),
+            workdir=topo,
+            input_paths=(prep / "complexo.pdb",),
+            output_paths=tuple(outputs),
+            stdin=_terminal_selection_stdin(config, chains=chains),
+            env=_gromacs_env(config.force_field.name, root),
+            state={
+                "input.ph": config.input.ph,
+                "force_field.name": config.force_field.name,
+            },
+        )
+
+
+@dataclass
 class AssembleComplexStep(GromacsCommandStep):
     """Assemble protein and ligand while preserving the protein topology."""
 
@@ -382,9 +437,7 @@ class CreateBoxStep(GromacsCommandStep):
     """Create the periodic simulation box around the prepared complex."""
 
     @classmethod
-    def from_config(
-        cls, config: GmxFlowConfig, project_root: Path
-    ) -> CreateBoxStep:
+    def from_config(cls, config: GmxFlowConfig, project_root: Path) -> CreateBoxStep:
         root = project_root.expanduser().resolve()
         topo = root / "work" / "topo"
         box = root / "work" / "box"
@@ -461,9 +514,7 @@ class PrepareIonsStep(GromacsCommandStep):
     """Generate the binary input required by GROMACS genion."""
 
     @classmethod
-    def from_config(
-        cls, config: GmxFlowConfig, project_root: Path
-    ) -> PrepareIonsStep:
+    def from_config(cls, config: GmxFlowConfig, project_root: Path) -> PrepareIonsStep:
         root = project_root.expanduser().resolve()
         box = root / "work" / "box"
         topology = root / "work" / "topo" / "topol_solvated.top"
@@ -570,9 +621,7 @@ class EnergyMinimizationStep(GromacsCommandStep):
         return cls(
             id="em",
             name="Executar minimização de energia.",
-            command=tuple(
-                _mdrun_command(config, _gmx_command(config), "em")
-            ),
+            command=tuple(_mdrun_command(config, _gmx_command(config), "em")),
             workdir=em,
             input_paths=(em / "em.tpr",),
             output_paths=(
@@ -590,9 +639,7 @@ class PrepareNvtStep(GromacsCommandStep):
     """Prepare the GROMACS run input for NVT equilibration."""
 
     @classmethod
-    def from_config(
-        cls, config: GmxFlowConfig, project_root: Path
-    ) -> PrepareNvtStep:
+    def from_config(cls, config: GmxFlowConfig, project_root: Path) -> PrepareNvtStep:
         root = project_root.expanduser().resolve()
         em = root / "work" / "em"
         nvt = root / "work" / "nvt"
@@ -634,9 +681,7 @@ class NvtEquilibrationStep(GromacsCommandStep):
         return cls(
             id="nvt",
             name="Executar equilíbrio NVT.",
-            command=tuple(
-                _mdrun_command(config, _gmx_command(config), "nvt")
-            ),
+            command=tuple(_mdrun_command(config, _gmx_command(config), "nvt")),
             workdir=nvt,
             input_paths=(nvt / "nvt.tpr",),
             output_paths=(
@@ -655,9 +700,7 @@ class PrepareNptStep(GromacsCommandStep):
     """Prepare the GROMACS run input for NPT equilibration."""
 
     @classmethod
-    def from_config(
-        cls, config: GmxFlowConfig, project_root: Path
-    ) -> PrepareNptStep:
+    def from_config(cls, config: GmxFlowConfig, project_root: Path) -> PrepareNptStep:
         root = project_root.expanduser().resolve()
         nvt = root / "work" / "nvt"
         npt = root / "work" / "npt"
@@ -706,9 +749,7 @@ class NptEquilibrationStep(GromacsCommandStep):
         return cls(
             id="npt",
             name="Executar equilíbrio NPT.",
-            command=tuple(
-                _mdrun_command(config, _gmx_command(config), "npt")
-            ),
+            command=tuple(_mdrun_command(config, _gmx_command(config), "npt")),
             workdir=npt,
             input_paths=(npt / "npt.tpr",),
             output_paths=(
@@ -768,17 +809,13 @@ class ProductionStep(GromacsCommandStep):
     """Run the configured production molecular-dynamics simulation."""
 
     @classmethod
-    def from_config(
-        cls, config: GmxFlowConfig, project_root: Path
-    ) -> ProductionStep:
+    def from_config(cls, config: GmxFlowConfig, project_root: Path) -> ProductionStep:
         root = project_root.expanduser().resolve()
         prod = root / "work" / "prod"
         return cls(
             id="production",
             name="Executar produção MD.",
-            command=tuple(
-                _mdrun_command(config, _gmx_command(config), "md")
-            ),
+            command=tuple(_mdrun_command(config, _gmx_command(config), "md")),
             workdir=prod,
             input_paths=(prod / "md.tpr",),
             output_paths=(
@@ -856,10 +893,7 @@ class CenterTrajectoryStep(GromacsCommandStep):
             workdir=prod,
             input_paths=(prod / "md.tpr", prod / "md_nojump.xtc"),
             output_paths=(prod / "md_nopbc.xtc",),
-            stdin=(
-                f"{config.analysis.center_group}\n"
-                f"{config.analysis.output_group}\n"
-            ),
+            stdin=(f"{config.analysis.center_group}\n{config.analysis.output_group}\n"),
             env=_gromacs_env(config.force_field.name, root),
         )
 
@@ -892,10 +926,7 @@ class FitTrajectoryStep(GromacsCommandStep):
             workdir=prod,
             input_paths=(prod / "md.tpr", prod / "md_nopbc.xtc"),
             output_paths=(prod / "md_fit.xtc",),
-            stdin=(
-                f"{config.analysis.fit_group}\n"
-                f"{config.analysis.output_group}\n"
-            ),
+            stdin=(f"{config.analysis.fit_group}\n{config.analysis.output_group}\n"),
             env=_gromacs_env(config.force_field.name, root),
         )
 
@@ -1244,9 +1275,7 @@ class ReportStep(GromacsCommandStep):
             ]
         )
         input_paths.extend(
-            PlotAnalysisStep.from_config(
-                config, root, config_path
-            ).output_paths
+            PlotAnalysisStep.from_config(config, root, config_path).output_paths
         )
         return cls(
             id="report",
@@ -1348,10 +1377,13 @@ class WorkflowGraph:
                     branch_nodes = _workflow_step_ids(branch)
                     if any(not steps[step_id].parallel for step_id in branch_nodes):
                         ineligible = sorted(
-                            step_id for step_id in branch_nodes if not steps[step_id].parallel
+                            step_id
+                            for step_id in branch_nodes
+                            if not steps[step_id].parallel
                         )
                         raise ValueError(
-                            "Etapas não elegíveis para Parallel: " + ", ".join(ineligible)
+                            "Etapas não elegíveis para Parallel: "
+                            + ", ".join(ineligible)
                         )
                     branch_sets.append(frozenset(branch_nodes))
                     all_entries.update(branch_entries)
@@ -1375,9 +1407,7 @@ class WorkflowGraph:
                 raise ValueError(f"Entrada de projeto duplicada: {artifact.key!r}")
             external_inputs[artifact.key] = artifact
 
-        producers: dict[str, str | None] = {
-            key: None for key in external_inputs
-        }
+        producers: dict[str, str | None] = {key: None for key in external_inputs}
         artifacts = dict(external_inputs)
         for step in steps.values():
             for artifact in step.outputs:
@@ -1452,10 +1482,11 @@ class WorkflowGraph:
     @property
     def topological_order(self) -> tuple[str, ...]:
         """Return a deterministic order consistent with all dependencies."""
-        successors: dict[str, set[str]] = {
-            step_id: set() for step_id in self.steps
+        successors: dict[str, set[str]] = {step_id: set() for step_id in self.steps}
+        indegree = {
+            step_id: len(predecessors)
+            for step_id, predecessors in self.dependencies.items()
         }
-        indegree = {step_id: len(predecessors) for step_id, predecessors in self.dependencies.items()}
         for step_id, predecessors in self.dependencies.items():
             for predecessor in predecessors:
                 successors[predecessor].add(step_id)
@@ -1498,9 +1529,7 @@ def _validate_step(step: Step) -> None:
             )
         keys = [artifact.key for artifact in artifacts]
         if len(keys) != len(set(keys)):
-            raise ValueError(
-                f"Step {step.id!r}: chaves duplicadas em {field_name}"
-            )
+            raise ValueError(f"Step {step.id!r}: chaves duplicadas em {field_name}")
 
 
 def _workflow_step_ids(item: WorkflowItem) -> set[str]:
@@ -1560,12 +1589,13 @@ def build_pipeline(
     strict_inputs: bool = False,
 ) -> list[PipelineStep]:
     project_root = config_dir.expanduser().resolve()
-    work_dir = project_root / "work"
     receptor_pdb = _resolve_from_config(config.input.receptor_pdb, project_root)
     ligand_pdb = _resolve_from_config(config.input.ligand_pdb, project_root)
     ligand_mol2 = _resolve_from_config(config.input.ligand_mol2, project_root)
     ligand_str = _resolve_from_config(config.input.ligand_str, project_root)
-    config_path = (config_path or (project_root / "project.toml")).expanduser().resolve()
+    config_path = (
+        (config_path or (project_root / "project.toml")).expanduser().resolve()
+    )
 
     if strict_inputs:
         _require_file(receptor_pdb)
@@ -1575,11 +1605,6 @@ def build_pipeline(
             _require_file(ligand_mol2)
             _require_file(ligand_str)
 
-    gmx = _gmx_command(config)
-    gromacs_env = _gromacs_env(config.force_field.name, project_root)
-
-    prep = work_dir / "prep"
-    topo = work_dir / "topo"
     prepare_step = PrepareComplexStep.from_config(config, project_root, config_path)
     steps = [prepare_step.to_pipeline_step()]
 
@@ -1591,60 +1616,8 @@ def build_pipeline(
         )
         steps.extend(step.to_pipeline_step() for step in typed_steps)
     else:
-        topology_chains = 1 if config.input.ligand_kind == "none" else 2
-        topology_outputs = [topo / "complexo.gro", topo / "topol.top"]
-        if config.input.ligand_kind == "none":
-            topology_outputs.extend(
-                [
-                    topo / "topol_Protein_chain_A.itp",
-                    topo / "posre_Protein_chain_A.itp",
-                ]
-            )
-        else:
-            topology_outputs.extend(
-                [
-                    topo / "topol_Protein_chain_A.itp",
-                    topo / "topol_Protein_chain_B.itp",
-                    topo / "posre_Protein_chain_A.itp",
-                    topo / "posre_Protein_chain_B.itp",
-                ]
-            )
         steps.append(
-            PipelineStep(
-                name="topology",
-                description="Gerar topologia com pdb2gmx.",
-                workdir=topo,
-                command=[
-                    gmx,
-                    "pdb2gmx",
-                    "-f",
-                    str(prep / "complexo.pdb"),
-                    "-o",
-                    "complexo.gro",
-                    "-p",
-                    "topol.top",
-                    "-i",
-                    "posre.itp",
-                    "-ff",
-                    config.force_field.name,
-                    "-water",
-                    config.force_field.water,
-                    "-ignh",
-                    "-ter",
-                    "-chainsep",
-                    "ter",
-                    "-merge",
-                    "no",
-                ],
-                stdin=_terminal_selection_stdin(config, chains=topology_chains),
-                inputs=[prep / "complexo.pdb"],
-                outputs=topology_outputs,
-                env=gromacs_env,
-                state={
-                    "input.ph": config.input.ph,
-                    "force_field.name": config.force_field.name,
-                },
-            ),
+            BuildTopologyStep.from_config(config, project_root).to_pipeline_step()
         )
 
     steps.extend(
@@ -1660,30 +1633,18 @@ def build_pipeline(
             PrepareEnergyMinimizationStep.from_config(
                 config, project_root
             ).to_pipeline_step(),
-            EnergyMinimizationStep.from_config(
-                config, project_root
-            ).to_pipeline_step(),
+            EnergyMinimizationStep.from_config(config, project_root).to_pipeline_step(),
             PrepareNvtStep.from_config(config, project_root).to_pipeline_step(),
-            NvtEquilibrationStep.from_config(
-                config, project_root
-            ).to_pipeline_step(),
+            NvtEquilibrationStep.from_config(config, project_root).to_pipeline_step(),
             PrepareNptStep.from_config(config, project_root).to_pipeline_step(),
-            NptEquilibrationStep.from_config(
-                config, project_root
-            ).to_pipeline_step(),
-            PrepareProductionStep.from_config(
-                config, project_root
-            ).to_pipeline_step(),
+            NptEquilibrationStep.from_config(config, project_root).to_pipeline_step(),
+            PrepareProductionStep.from_config(config, project_root).to_pipeline_step(),
             ProductionStep.from_config(config, project_root).to_pipeline_step(),
             RemovePeriodicJumpsStep.from_config(
                 config, project_root
             ).to_pipeline_step(),
-            CenterTrajectoryStep.from_config(
-                config, project_root
-            ).to_pipeline_step(),
-            FitTrajectoryStep.from_config(
-                config, project_root
-            ).to_pipeline_step(),
+            CenterTrajectoryStep.from_config(config, project_root).to_pipeline_step(),
+            FitTrajectoryStep.from_config(config, project_root).to_pipeline_step(),
             AnalyzeTrajectoryStep.from_config(
                 config, project_root, config_path
             ).to_pipeline_step(),
@@ -1700,9 +1661,7 @@ def build_pipeline(
         )
         steps.append(interaction_step.to_pipeline_step())
     if config.analysis.sasa:
-        sasa_step = SasaStep.from_config(
-            config, project_root, config_path
-        )
+        sasa_step = SasaStep.from_config(config, project_root, config_path)
         steps.append(sasa_step.to_pipeline_step())
     steps.extend(
         [
@@ -1748,6 +1707,8 @@ def build_workflow(
                 AssembleComplexStep.from_config(config, root, resolved_config),
             ]
         )
+    else:
+        concrete_steps.append(BuildTopologyStep.from_config(config, root))
     concrete_steps.extend(
         [
             CreateBoxStep.from_config(config, root),
@@ -1782,9 +1743,7 @@ def build_workflow(
     for pipeline_step in plan:
         concrete = by_id.get(pipeline_step.name)
         if concrete is None:
-            workflow_steps.append(
-                PipelineCommandStep.from_pipeline_step(pipeline_step)
-            )
+            workflow_steps.append(PipelineCommandStep.from_pipeline_step(pipeline_step))
             continue
         if concrete.to_pipeline_step() != pipeline_step:
             raise ValueError(

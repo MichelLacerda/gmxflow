@@ -10,6 +10,7 @@ from gmxflow.pipeline import (
     AnalyzeTrajectoryStep,
     AssembleComplexStep,
     Artifact,
+    BuildTopologyStep,
     CreateBoxStep,
     CenterTrajectoryStep,
     EnergyMinimizationStep,
@@ -232,6 +233,29 @@ def test_topology_command_uses_force_field_and_water(tmp_path: Path) -> None:
     ]
 
 
+@pytest.mark.parametrize("ligand_kind", ["none", "peptide"])
+def test_protein_topology_workflow_uses_concrete_step(
+    tmp_path: Path, ligand_kind: str
+) -> None:
+    config = default_config("concrete_topology")
+    config.input.ligand_kind = ligand_kind
+    workflow = build_workflow(config, config_dir=tmp_path)
+    topology = next(step for step in workflow.items if step.id == "topology")
+    legacy = next(
+        step
+        for step in build_pipeline(config, config_dir=tmp_path)
+        if step.name == "topology"
+    )
+
+    assert isinstance(topology, BuildTopologyStep)
+    assert topology.to_pipeline_step() == legacy
+    expected_chains = ("A",) if ligand_kind == "none" else ("A", "B")
+    assert [path.name for path in topology.output_paths[2:]] == [
+        *(f"topol_Protein_chain_{chain}.itp" for chain in expected_chains),
+        *(f"posre_Protein_chain_{chain}.itp" for chain in expected_chains),
+    ]
+
+
 def test_protein_only_pipeline_omits_ligand_steps_and_metrics(tmp_path: Path) -> None:
     receptor = tmp_path / "inputs" / "receptor.pdb"
     receptor.parent.mkdir()
@@ -306,9 +330,7 @@ def test_gromacs_steps_use_gmxlib_for_project_force_field(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setattr("gmxflow.forcefields._installed_roots", lambda: [])
-    monkeypatch.setenv(
-        "GMXFLOW_FORCEFIELD_DIR", str(tmp_path / "user-forcefields")
-    )
+    monkeypatch.setenv("GMXFLOW_FORCEFIELD_DIR", str(tmp_path / "user-forcefields"))
     config = default_config("local_force_field_test")
     config.force_field.name = "charmm36-feb2026_cgenff-5.0"
     forcefield = tmp_path / "charmm36-feb2026_cgenff-5.0.ff"
@@ -343,7 +365,9 @@ def test_gromacs_steps_use_central_forcefield_directory(
     assert topology.env == {"GMXLIB": str(central_root.resolve())}
 
 
-def test_gromacs_steps_do_not_set_gmxlib_for_installed_force_field(tmp_path: Path) -> None:
+def test_gromacs_steps_do_not_set_gmxlib_for_installed_force_field(
+    tmp_path: Path,
+) -> None:
     config = default_config("installed_force_field_test")
     config.force_field.name = "amber99sb-ildn"
 
@@ -356,7 +380,9 @@ def test_gromacs_steps_do_not_set_gmxlib_for_installed_force_field(tmp_path: Pat
 def test_prepare_step_uses_internal_cli_command(tmp_path: Path) -> None:
     config_path = tmp_path / "project.toml"
 
-    steps = build_pipeline(default_config("prepare_test"), config_dir=tmp_path, config_path=config_path)
+    steps = build_pipeline(
+        default_config("prepare_test"), config_dir=tmp_path, config_path=config_path
+    )
     prepare = steps[0]
 
     assert prepare.command == [
@@ -610,7 +636,9 @@ def test_em_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
 
 def test_solvate_uses_internal_topology_reset_command(tmp_path: Path) -> None:
     config_path = tmp_path / "project.toml"
-    steps = build_pipeline(default_config("solvate_test"), config_dir=tmp_path, config_path=config_path)
+    steps = build_pipeline(
+        default_config("solvate_test"), config_dir=tmp_path, config_path=config_path
+    )
     solvate = next(step for step in steps if step.name == "solvate")
 
     assert solvate.command == [
@@ -727,7 +755,9 @@ def test_npt_mdrun_outputs_restartable_artifacts(tmp_path: Path) -> None:
 
 
 def test_production_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("production_grompp_test"), config_dir=tmp_path)
+    steps = build_pipeline(
+        default_config("production_grompp_test"), config_dir=tmp_path
+    )
     production_grompp = next(step for step in steps if step.name == "production-grompp")
 
     project_root = tmp_path.resolve()
@@ -748,7 +778,19 @@ def test_production_mdrun_honors_gpu_off(tmp_path: Path) -> None:
     steps = build_pipeline(config, config_dir=tmp_path)
     production = next(step for step in steps if step.name == "production")
 
-    assert production.command == ["gmx", "mdrun", "-v", "-deffnm", "md", "-ntmpi", "1", "-ntomp", "8", "-nb", "cpu"]
+    assert production.command == [
+        "gmx",
+        "mdrun",
+        "-v",
+        "-deffnm",
+        "md",
+        "-ntmpi",
+        "1",
+        "-ntomp",
+        "8",
+        "-nb",
+        "cpu",
+    ]
 
 
 def test_production_mdrun_outputs_restartable_artifacts(tmp_path: Path) -> None:
@@ -788,9 +830,7 @@ def test_pbc_nojump_uses_production_trajectory(tmp_path: Path) -> None:
         project_root / "work" / "prod" / "md.tpr",
         project_root / "work" / "prod" / "md.xtc",
     ]
-    assert pbc_nojump.outputs == [
-        project_root / "work" / "prod" / "md_nojump.xtc"
-    ]
+    assert pbc_nojump.outputs == [project_root / "work" / "prod" / "md_nojump.xtc"]
 
 
 def test_pbc_center_uses_configured_groups(tmp_path: Path) -> None:
@@ -822,9 +862,7 @@ def test_pbc_center_uses_configured_groups(tmp_path: Path) -> None:
         project_root / "work" / "prod" / "md.tpr",
         project_root / "work" / "prod" / "md_nojump.xtc",
     ]
-    assert pbc_center.outputs == [
-        project_root / "work" / "prod" / "md_nopbc.xtc"
-    ]
+    assert pbc_center.outputs == [project_root / "work" / "prod" / "md_nopbc.xtc"]
 
 
 def test_fit_uses_configured_groups(tmp_path: Path) -> None:
@@ -904,7 +942,12 @@ def test_analysis_step_uses_explicit_config_path(tmp_path: Path) -> None:
     )
     analysis = next(step for step in steps if step.name == "analysis")
 
-    assert analysis.command == ["gmxflow", "analyze", "--project", str(config_path.resolve())]
+    assert analysis.command == [
+        "gmxflow",
+        "analyze",
+        "--project",
+        str(config_path.resolve()),
+    ]
     assert analysis.inputs == [
         tmp_path.resolve() / "work" / "prod" / "md.tpr",
         tmp_path.resolve() / "work" / "prod" / "md_fit.xtc",
@@ -933,7 +976,12 @@ def test_plots_step_uses_analysis_outputs(tmp_path: Path) -> None:
     plots = next(step for step in steps if step.name == "plots")
 
     assert plots.name == "plots"
-    assert plots.command == ["gmxflow", "plot-analysis", "--project", str(config_path.resolve())]
+    assert plots.command == [
+        "gmxflow",
+        "plot-analysis",
+        "--project",
+        str(config_path.resolve()),
+    ]
     assert plots.inputs == [
         tmp_path.resolve() / "work" / "analysis" / "rmsd_backbone.xvg",
         tmp_path.resolve() / "work" / "analysis" / "rmsd_ligante.xvg",
@@ -972,7 +1020,12 @@ def test_report_step_uses_analysis_outputs_and_plots(tmp_path: Path) -> None:
     report = steps[-1]
 
     assert report.name == "report"
-    assert report.command == ["gmxflow", "report", "--project", str(config_path.resolve())]
+    assert report.command == [
+        "gmxflow",
+        "report",
+        "--project",
+        str(config_path.resolve()),
+    ]
     assert report.workdir == tmp_path.resolve() / "outputs"
     assert report.inputs == [
         tmp_path.resolve() / "work" / "analysis" / "rmsd_backbone.xvg",
@@ -1038,7 +1091,10 @@ def test_pipeline_adds_interaction_energy_when_enabled(tmp_path: Path) -> None:
         tmp_path.resolve() / "work" / "analysis" / "interaction.log",
         tmp_path.resolve() / "work" / "analysis" / "interaction_energy.xvg",
     ]
-    assert tmp_path.resolve() / "work" / "analysis" / "interaction_energy.xvg" in report.inputs
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "interaction_energy.xvg"
+        in report.inputs
+    )
 
 
 def test_pipeline_adds_sasa_when_enabled(tmp_path: Path) -> None:
@@ -1078,14 +1134,38 @@ def test_pipeline_adds_catalytic_outputs_when_configured(tmp_path: Path) -> None
     plots = next(step for step in steps if step.name == "plots")
     report = steps[-1]
 
-    assert tmp_path.resolve() / "work" / "analysis" / "catalytic_distance.xvg" in analysis.outputs
-    assert tmp_path.resolve() / "work" / "analysis" / "catalytic_occupancy.xvg" in analysis.outputs
-    assert tmp_path.resolve() / "work" / "analysis" / "catalytic_distance.xvg" in plots.inputs
-    assert tmp_path.resolve() / "work" / "analysis" / "catalytic_occupancy.xvg" in plots.inputs
-    assert tmp_path.resolve() / "work" / "analysis" / "catalytic_distance.png" in plots.outputs
-    assert tmp_path.resolve() / "work" / "analysis" / "catalytic_occupancy.png" in plots.outputs
-    assert tmp_path.resolve() / "work" / "analysis" / "catalytic_distance.png" in report.inputs
-    assert tmp_path.resolve() / "work" / "analysis" / "catalytic_occupancy.png" in report.inputs
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "catalytic_distance.xvg"
+        in analysis.outputs
+    )
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "catalytic_occupancy.xvg"
+        in analysis.outputs
+    )
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "catalytic_distance.xvg"
+        in plots.inputs
+    )
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "catalytic_occupancy.xvg"
+        in plots.inputs
+    )
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "catalytic_distance.png"
+        in plots.outputs
+    )
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "catalytic_occupancy.png"
+        in plots.outputs
+    )
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "catalytic_distance.png"
+        in report.inputs
+    )
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "catalytic_occupancy.png"
+        in report.inputs
+    )
 
 
 def test_pipeline_adds_sasa_plot_outputs_when_enabled(tmp_path: Path) -> None:
@@ -1097,14 +1177,24 @@ def test_pipeline_adds_sasa_plot_outputs_when_enabled(tmp_path: Path) -> None:
     plots = next(step for step in steps if step.name == "plots")
     report = steps[-1]
 
-    assert tmp_path.resolve() / "work" / "analysis" / "sasa_complexo.xvg" in plots.inputs
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "sasa_complexo.xvg" in plots.inputs
+    )
     assert tmp_path.resolve() / "work" / "analysis" / "sasa_ligante.xvg" in plots.inputs
     assert tmp_path.resolve() / "work" / "analysis" / "bsa.xvg" in plots.inputs
-    assert tmp_path.resolve() / "work" / "analysis" / "sasa_complexo.png" in plots.outputs
-    assert tmp_path.resolve() / "work" / "analysis" / "sasa_ligante.png" in plots.outputs
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "sasa_complexo.png" in plots.outputs
+    )
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "sasa_ligante.png" in plots.outputs
+    )
     assert tmp_path.resolve() / "work" / "analysis" / "bsa.png" in plots.outputs
-    assert tmp_path.resolve() / "work" / "analysis" / "sasa_complexo.png" in report.inputs
-    assert tmp_path.resolve() / "work" / "analysis" / "sasa_ligante.png" in report.inputs
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "sasa_complexo.png" in report.inputs
+    )
+    assert (
+        tmp_path.resolve() / "work" / "analysis" / "sasa_ligante.png" in report.inputs
+    )
     assert tmp_path.resolve() / "work" / "analysis" / "bsa.png" in report.inputs
 
 
