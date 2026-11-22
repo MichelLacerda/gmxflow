@@ -272,6 +272,11 @@ class GmxFlowProject:
         }
         if self.config.input.ligand_kind in {"peptide", "none"}:
             graph_step_names.update({"analysis", "thermodynamics"})
+        if (
+            self.config.input.ligand_kind == "peptide"
+            and self.config.analysis.interaction_energy
+        ):
+            graph_step_names.add("interaction-energy")
         if steps and steps[0].name in graph_step_names:
             graph_step_count = next(
                 (
