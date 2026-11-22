@@ -338,9 +338,9 @@ pbc-nojump → pbc-center → fit → analysis → thermodynamics` é
 executado pelo grafo quando o plano começa em `prepare`. Também é possível
 iniciar diretamente em qualquer etapa desse trecho, de `topology` a
 `thermodynamics`, desde que suas entradas já existam. As etapas posteriores
-continuam no executor legado, exceto `interaction-energy` quando habilitada em
-um projeto `peptide`, que também é executada pelo grafo e pode ser iniciada
-diretamente se suas entradas existirem. O fluxo
+continuam no executor legado, exceto `interaction-energy` e `sasa` quando
+habilitadas em um projeto `peptide`: essas etapas também são executadas pelo
+grafo e podem ser iniciadas diretamente se suas entradas existirem. O fluxo
 `small_molecule` (`ligand-topology`, `protein-topology` e `assemble-complex`)
 não foi migrado.
 

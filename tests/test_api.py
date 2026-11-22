@@ -1264,6 +1264,54 @@ def test_interaction_energy_runs_through_graph_when_enabled(
     )
 
 
+def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> None:
+    project_root = tmp_path / "sasa_project"
+    project = GmxFlowProject.open(_write_project_config(project_root))
+    project.config.analysis.sasa = True
+
+    inputs_dir = project_root / "inputs"
+    inputs_dir.mkdir()
+    (inputs_dir / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (inputs_dir / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
+    analysis_dir = project_root / "work" / "analysis"
+    analysis_dir.mkdir(parents=True)
+    (analysis_dir / "lig.ndx").write_text("INDEX\n", encoding="utf-8")
+    production_dir = project_root / "work" / "prod"
+    production_dir.mkdir(parents=True)
+    (production_dir / "md.tpr").write_text("TPR\n", encoding="utf-8")
+    (production_dir / "md_fit.xtc").write_text("TRAJECTORY\n", encoding="utf-8")
+
+    monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
+    monkeypatch.setattr(
+        "gmxflow.api.run_workspace_setup",
+        lambda config, project_root: StepResult(
+            step_name="workspace",
+            command=["<internal>", "ensure-workspace"],
+            workdir=project_root / "work",
+            log_path=project_root / "work" / "logs" / "00_workspace.log",
+            returncode=0,
+            elapsed_seconds=0.0,
+        ),
+    )
+
+    calls: list[tuple[str, ...]] = []
+
+    def fake_subprocess_run(command, *, cwd, **kwargs):
+        calls.append(tuple(command))
+        for output in project.plan(until="sasa")[-1].outputs:
+            (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
+
+    report = project.run(from_step="sasa", until="sasa")
+
+    assert len(calls) == 1
+    assert report.steps[0].step_name == "sasa"
+    assert report.steps[0].returncode == 0
+    assert all(output.is_file() for output in project.plan(until="sasa")[-1].outputs)
+
+
 def test_run_rejects_unreleased_steps_before_workspace_setup(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -277,6 +277,11 @@ class GmxFlowProject:
             and self.config.analysis.interaction_energy
         ):
             graph_step_names.add("interaction-energy")
+        if (
+            self.config.input.ligand_kind == "peptide"
+            and self.config.analysis.sasa
+        ):
+            graph_step_names.add("sasa")
         if steps and steps[0].name in graph_step_names:
             graph_step_count = next(
                 (
