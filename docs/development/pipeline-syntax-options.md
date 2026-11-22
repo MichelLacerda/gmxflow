@@ -332,12 +332,12 @@ cada fatia. Definir e testar a compatibilidade de identificadores, opções de
 seleção de etapas e estado salvo para projetos existentes.
 
 **Fatia implementada:** nos fluxos `peptide` e `none`, o prefixo
-`prepare → topology → box → solvate → ions-grompp → ions → em-grompp` é
+`prepare → topology → box → solvate → ions-grompp → ions → em-grompp → em` é
 executado pelo grafo
 quando o plano começa em `prepare`; também é possível começar em `topology`,
-`box`, `solvate`, `ions-grompp`, `ions` ou `em-grompp` se as entradas
-necessárias já existirem. As etapas posteriores começam por `em` e continuam no
-executor legado. O fluxo
+`box`, `solvate`, `ions-grompp`, `ions`, `em-grompp` ou `em` se as entradas
+necessárias já existirem. As etapas posteriores começam por `nvt-grompp` e
+continuam no executor legado. O fluxo
 `small_molecule` (`ligand-topology`, `protein-topology` e `assemble-complex`)
 não foi migrado.
 

@@ -372,6 +372,14 @@ def test_run_validates_then_uses_shared_executor(
         returncode=0,
         elapsed_seconds=0.9,
     )
+    nvt_grompp_result = StepResult(
+        step_name="nvt-grompp",
+        command=runtime_command(project.plan(until="nvt-grompp")[8].command),
+        workdir=project.root / "work" / "nvt",
+        log_path=project.root / "work" / "logs" / "09_nvt-grompp.log",
+        returncode=0,
+        elapsed_seconds=1.0,
+    )
 
     monkeypatch.setattr(
         "gmxflow.api.GmxFlowProject.validate",
@@ -392,6 +400,7 @@ def test_run_validates_then_uses_shared_executor(
             "ions-grompp",
             "ions",
             "em-grompp",
+            "em",
         )
         assert kwargs["project_root"] == project.root
         step_results = {
@@ -402,6 +411,7 @@ def test_run_validates_then_uses_shared_executor(
             "ions-grompp": ions_grompp_result,
             "ions": ions_result,
             "em-grompp": em_grompp_result,
+            "em": em_result,
         }
         return WorkflowExecutionReport(
             results=tuple(
@@ -421,14 +431,14 @@ def test_run_validates_then_uses_shared_executor(
 
     def fake_run_steps(steps, **kwargs):
         events.append("run_steps")
-        assert [step.name for step in steps] == ["em"]
+        assert [step.name for step in steps] == ["nvt-grompp"]
         assert kwargs["project_root"] == project.root
-        assert kwargs["start_index"] == 8
-        return [em_result]
+        assert kwargs["start_index"] == 9
+        return [nvt_grompp_result]
 
     monkeypatch.setattr("gmxflow.api.run_steps", fake_run_steps)
 
-    report = project.run(until="em")
+    report = project.run(until="nvt-grompp")
 
     assert events == ["validate", "workspace", "workflow_graph", "run_steps"]
     assert report.workspace is workspace
@@ -441,6 +451,7 @@ def test_run_validates_then_uses_shared_executor(
         ions_result,
         em_grompp_result,
         em_result,
+        nvt_grompp_result,
     )
     assert report.results == (
         workspace,
@@ -452,10 +463,11 @@ def test_run_validates_then_uses_shared_executor(
         ions_result,
         em_grompp_result,
         em_result,
+        nvt_grompp_result,
     )
 
 
-def test_graph_prefix_through_em_grompp_matches_legacy_commands_and_outputs(
+def test_graph_prefix_through_em_matches_legacy_commands_and_outputs(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -529,6 +541,14 @@ def test_graph_prefix_through_em_grompp_matches_legacy_commands_and_outputs(
                 output_file: f"{Path(output_file).stem.upper()}_TPR\n",
                 "mdout.mdp": "MDTOUT\n",
             }
+        elif "mdrun" in command:
+            output_prefix = command[command.index("-deffnm") + 1]
+            output_content = {
+                f"{output_prefix}.gro": "EM_GRO\n",
+                f"{output_prefix}.edr": "EM_EDR\n",
+                f"{output_prefix}.log": "EM_LOG\n",
+                f"{output_prefix}.trr": "EM_TRR\n",
+            }
         else:
             output_content = {
                 "complexo.gro": "GRO\n",
@@ -558,7 +578,7 @@ def test_graph_prefix_through_em_grompp_matches_legacy_commands_and_outputs(
 
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run(
-        until="em-grompp",
+        until="em",
         on_step_start=lambda index, step: callback_events.append(
             ("start", index, step.name)
         ),
@@ -566,7 +586,7 @@ def test_graph_prefix_through_em_grompp_matches_legacy_commands_and_outputs(
             ("done", index, result.step_name)
         ),
     )
-    resumed_report = project.run(until="em-grompp")
+    resumed_report = project.run(until="em")
 
     topology_only_root = tmp_path / "topology_only_project"
     topology_only_project = GmxFlowProject.open(
@@ -679,14 +699,25 @@ def test_graph_prefix_through_em_grompp_matches_legacy_commands_and_outputs(
         from_step="em-grompp", until="em-grompp"
     )
 
+    em_only_root = tmp_path / "em_only_project"
+    em_only_project = GmxFlowProject.open(_write_project_config(em_only_root))
+    em_only_inputs = em_only_root / "inputs"
+    em_only_inputs.mkdir()
+    (em_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (em_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
+    em_only_dir = em_only_root / "work" / "em"
+    em_only_dir.mkdir(parents=True)
+    (em_only_dir / "em.tpr").write_text("EM_TPR\n", encoding="utf-8")
+    em_only_report = em_only_project.run(from_step="em", until="em")
+
     legacy_steps = build_pipeline(
         project.config,
         config_dir=legacy_root,
         config_path=legacy_config,
-    )[:7]
+    )[:8]
     legacy_results = run_steps(legacy_steps, project_root=legacy_root)
 
-    assert len(graph_report.steps) == len(legacy_results) == 7
+    assert len(graph_report.steps) == len(legacy_results) == 8
     for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
         graph_command = [
             argument.replace(str(project_root), "<project-root>")
@@ -711,7 +742,9 @@ def test_graph_prefix_through_em_grompp_matches_legacy_commands_and_outputs(
     assert ions_only_report.steps[0].returncode == 0
     assert em_grompp_only_report.steps[0].step_name == "em-grompp"
     assert em_grompp_only_report.steps[0].returncode == 0
-    assert len(subprocess_calls) == 20  # graph twice, isolated steps, legacy prefix
+    assert em_only_report.steps[0].step_name == "em"
+    assert em_only_report.steps[0].returncode == 0
+    assert len(subprocess_calls) == 23  # graph twice, isolated steps, legacy prefix
     assert legacy_state.read_bytes() == legacy_state_before
     assert (project_root / "work" / "workflow_state.json").is_file()
     assert callback_events == [
@@ -729,11 +762,14 @@ def test_graph_prefix_through_em_grompp_matches_legacy_commands_and_outputs(
         ("done", 6, "ions"),
         ("start", 7, "em-grompp"),
         ("done", 7, "em-grompp"),
+        ("start", 8, "em"),
+        ("done", 8, "em"),
     ]
     for relative_dir in (
         Path("work/prep"),
         Path("work/topo"),
         Path("work/box"),
+        Path("work/em"),
     ):
         graph_outputs = sorted((project_root / relative_dir).glob("*"))
         legacy_outputs = sorted((legacy_root / relative_dir).glob("*"))
