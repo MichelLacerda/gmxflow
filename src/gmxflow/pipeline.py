@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
+from typing import Protocol, TypeAlias
 
 from pydantic import BaseModel, Field
 
@@ -50,6 +54,302 @@ class PipelineStep(BaseModel):
     stdin: str | None = None
     env: dict[str, str] = Field(default_factory=dict)
     state: dict[str, object] = Field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Artifact:
+    """Logical artifact declaration; physical paths are resolved elsewhere."""
+
+    key: str
+    kind: str
+
+    def __post_init__(self) -> None:
+        if not self.key.strip():
+            raise ValueError("Artifact.key não pode ser vazio")
+        if not self.kind.strip():
+            raise ValueError("Artifact.kind não pode ser vazio")
+
+
+class Step(Protocol):
+    """Structural contract for a step in a declarative workflow."""
+
+    id: str
+    name: str
+    inputs: tuple[Artifact, ...]
+    outputs: tuple[Artifact, ...]
+    parallel: bool
+
+    def run(self, context: RunContext) -> None: ...
+
+
+class RunContext(Protocol):
+    """Execution context interface, completed with the executor migration."""
+
+
+@dataclass(frozen=True)
+class Sequence:
+    """An ordered composition of workflow items."""
+
+    items: tuple[WorkflowItem, ...]
+
+    def __init__(self, *items: WorkflowItem) -> None:
+        if not items:
+            raise ValueError("Sequence precisa conter ao menos um item")
+        object.__setattr__(self, "items", items)
+
+
+@dataclass(frozen=True)
+class Parallel:
+    """Independent workflow branches followed by an implicit join."""
+
+    branches: tuple[WorkflowItem, ...]
+
+    def __init__(self, *branches: WorkflowItem) -> None:
+        if not branches:
+            raise ValueError("Parallel precisa conter ao menos um ramo")
+        object.__setattr__(self, "branches", branches)
+
+
+WorkflowItem: TypeAlias = Step | Sequence | Parallel
+
+
+@dataclass(frozen=True)
+class WorkflowGraph:
+    """Validated dependency graph; this model does not execute its steps."""
+
+    steps: Mapping[str, Step]
+    dependencies: Mapping[str, frozenset[str]]
+    producers: Mapping[str, str | None]
+    parallel_groups: tuple[tuple[frozenset[str], ...], ...]
+
+    @classmethod
+    def from_workflow(
+        cls,
+        workflow: WorkflowItem,
+        project_inputs: Iterable[Artifact] = (),
+    ) -> WorkflowGraph:
+        steps: dict[str, Step] = {}
+        graph: dict[str, set[str]] = {}
+        parallel_groups: list[tuple[frozenset[str], ...]] = []
+
+        def visit(item: WorkflowItem) -> tuple[set[str], set[str]]:
+            if isinstance(item, Sequence):
+                entries: set[str] = set()
+                previous_exits: set[str] = set()
+                for child in item.items:
+                    child_entries, child_exits = visit(child)
+                    if not entries:
+                        entries = child_entries
+                    for predecessor in previous_exits:
+                        for successor in child_entries:
+                            graph[predecessor].add(successor)
+                    previous_exits = child_exits
+                return entries, previous_exits
+
+            if isinstance(item, Parallel):
+                branch_sets: list[frozenset[str]] = []
+                all_entries: set[str] = set()
+                all_exits: set[str] = set()
+                for branch in item.branches:
+                    branch_entries, branch_exits = visit(branch)
+                    branch_nodes = _workflow_step_ids(branch)
+                    if any(not steps[step_id].parallel for step_id in branch_nodes):
+                        ineligible = sorted(
+                            step_id for step_id in branch_nodes if not steps[step_id].parallel
+                        )
+                        raise ValueError(
+                            "Etapas não elegíveis para Parallel: " + ", ".join(ineligible)
+                        )
+                    branch_sets.append(frozenset(branch_nodes))
+                    all_entries.update(branch_entries)
+                    all_exits.update(branch_exits)
+                parallel_groups.append(tuple(branch_sets))
+                return all_entries, all_exits
+
+            step = item
+            _validate_step(step)
+            if step.id in steps:
+                raise ValueError(f"ID de etapa duplicado no workflow: {step.id!r}")
+            steps[step.id] = step
+            graph[step.id] = set()
+            return {step.id}, {step.id}
+
+        visit(workflow)
+
+        external_inputs: dict[str, Artifact] = {}
+        for artifact in project_inputs:
+            if artifact.key in external_inputs:
+                raise ValueError(f"Entrada de projeto duplicada: {artifact.key!r}")
+            external_inputs[artifact.key] = artifact
+
+        producers: dict[str, str | None] = {
+            key: None for key in external_inputs
+        }
+        for step in steps.values():
+            for artifact in step.outputs:
+                if artifact.key in producers:
+                    raise ValueError(
+                        f"Artefato {artifact.key!r} tem mais de uma origem "
+                        "ou também foi declarado como entrada do projeto"
+                    )
+                producers[artifact.key] = step.id
+
+        for step in steps.values():
+            for artifact in step.inputs:
+                producer_id = producers.get(artifact.key, "missing")
+                if producer_id == "missing":
+                    raise ValueError(
+                        f"Etapa {step.id!r} requer artefato sem origem: {artifact.key!r}"
+                    )
+                producer_artifact = (
+                    external_inputs[artifact.key]
+                    if producer_id is None
+                    else next(
+                        output
+                        for output in steps[producer_id].outputs
+                        if output.key == artifact.key
+                    )
+                )
+                if producer_artifact.kind != artifact.kind:
+                    raise ValueError(
+                        f"Tipo incompatível para artefato {artifact.key!r}: "
+                        f"esperado {artifact.kind!r}, produzido como "
+                        f"{producer_artifact.kind!r}"
+                    )
+                if producer_id is not None:
+                    graph[producer_id].add(step.id)
+
+        cycle = _find_cycle(graph)
+        if cycle:
+            raise ValueError(f"Workflow contém dependência cíclica: {cycle}")
+
+        for branches in parallel_groups:
+            for index, left in enumerate(branches):
+                for right in branches[index + 1 :]:
+                    if any(
+                        _has_path(graph, left_step, right_step)
+                        or _has_path(graph, right_step, left_step)
+                        for left_step in left
+                        for right_step in right
+                    ):
+                        raise ValueError(
+                            "Ramos de Parallel possuem dependência entre si"
+                        )
+
+        return cls(
+            steps=MappingProxyType(steps),
+            dependencies=MappingProxyType(
+                {
+                    step_id: frozenset(
+                        predecessor
+                        for predecessor, successors in graph.items()
+                        if step_id in successors
+                    )
+                    for step_id in graph
+                }
+            ),
+            producers=MappingProxyType(producers),
+            parallel_groups=tuple(parallel_groups),
+        )
+
+    @property
+    def topological_order(self) -> tuple[str, ...]:
+        """Return a deterministic order consistent with all dependencies."""
+        successors: dict[str, set[str]] = {
+            step_id: set() for step_id in self.steps
+        }
+        indegree = {step_id: len(predecessors) for step_id, predecessors in self.dependencies.items()}
+        for step_id, predecessors in self.dependencies.items():
+            for predecessor in predecessors:
+                successors[predecessor].add(step_id)
+
+        ready = sorted(step_id for step_id, count in indegree.items() if count == 0)
+        ordered: list[str] = []
+        while ready:
+            step_id = ready.pop(0)
+            ordered.append(step_id)
+            for successor in sorted(successors[step_id]):
+                indegree[successor] -= 1
+                if indegree[successor] == 0:
+                    ready.append(successor)
+                    ready.sort()
+        if len(ordered) != len(self.steps):
+            raise ValueError("Workflow contém dependência cíclica")
+        return tuple(ordered)
+
+
+def _validate_step(step: Step) -> None:
+    if not isinstance(step.id, str) or not step.id.strip():
+        raise ValueError("Step.id deve ser uma string não vazia")
+    if not isinstance(step.name, str) or not step.name.strip():
+        raise ValueError(f"Step {step.id!r} precisa de um name não vazio")
+    if not isinstance(step.parallel, bool):
+        raise ValueError(f"Step {step.id!r}: parallel deve ser bool")
+    if not callable(getattr(step, "run", None)):
+        raise ValueError(f"Step {step.id!r}: run(context) deve ser implementado")
+    for field_name in ("inputs", "outputs"):
+        artifacts = getattr(step, field_name)
+        if not isinstance(artifacts, tuple) or any(
+            not isinstance(artifact, Artifact) for artifact in artifacts
+        ):
+            raise ValueError(
+                f"Step {step.id!r}: {field_name} deve ser uma tupla de Artifact"
+            )
+        keys = [artifact.key for artifact in artifacts]
+        if len(keys) != len(set(keys)):
+            raise ValueError(
+                f"Step {step.id!r}: chaves duplicadas em {field_name}"
+            )
+
+
+def _workflow_step_ids(item: WorkflowItem) -> set[str]:
+    if isinstance(item, Sequence):
+        return set().union(*(_workflow_step_ids(child) for child in item.items))
+    if isinstance(item, Parallel):
+        return set().union(*(_workflow_step_ids(branch) for branch in item.branches))
+    return {item.id}
+
+
+def _has_path(graph: Mapping[str, set[str]], start: str, goal: str) -> bool:
+    pending = [start]
+    visited: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if current == goal:
+            return True
+        if current not in visited:
+            visited.add(current)
+            pending.extend(graph[current] - visited)
+    return False
+
+
+def _find_cycle(graph: Mapping[str, set[str]]) -> str | None:
+    active: list[str] = []
+    active_set: set[str] = set()
+    complete: set[str] = set()
+
+    def visit(step_id: str) -> list[str] | None:
+        if step_id in active_set:
+            cycle_start = active.index(step_id)
+            return [*active[cycle_start:], step_id]
+        if step_id in complete:
+            return None
+        active.append(step_id)
+        active_set.add(step_id)
+        for successor in graph[step_id]:
+            cycle = visit(successor)
+            if cycle is not None:
+                return cycle
+        active.pop()
+        active_set.remove(step_id)
+        complete.add(step_id)
+        return None
+
+    for step_id in graph:
+        cycle = visit(step_id)
+        if cycle is not None:
+            return " -> ".join(cycle)
+    return None
 
 
 def build_pipeline(

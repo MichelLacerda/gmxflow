@@ -1,10 +1,23 @@
 from pathlib import Path
+from dataclasses import dataclass
 
 import pytest
 
 from gmxflow.config import default_config
 from gmxflow.executor import select_steps
-from gmxflow.pipeline import build_pipeline
+from gmxflow.pipeline import Artifact, Parallel, Sequence, WorkflowGraph, build_pipeline
+
+
+@dataclass(frozen=True)
+class _GraphStep:
+    id: str
+    name: str
+    inputs: tuple[Artifact, ...] = ()
+    outputs: tuple[Artifact, ...] = ()
+    parallel: bool = True
+
+    def run(self, context: object) -> None:
+        del context
 
 
 def test_build_pipeline_returns_expected_order(tmp_path: Path) -> None:
@@ -18,6 +31,127 @@ def test_build_pipeline_returns_expected_order(tmp_path: Path) -> None:
         "ions-grompp",
     ]
     assert steps[-1].name == "report"
+
+
+def test_workflow_graph_builds_sequence_dependencies_from_artifacts() -> None:
+    source = Artifact("structure", "pdb")
+    prepared = Artifact("prepared-structure", "pdb")
+    topology = Artifact("topology", "top")
+    workflow = Sequence(
+        _GraphStep("prepare", "Prepare", (source,), (prepared,)),
+        _GraphStep("topology", "Topology", (prepared,), (topology,)),
+    )
+
+    graph = WorkflowGraph.from_workflow(workflow, project_inputs=(source,))
+
+    assert graph.dependencies == {
+        "prepare": frozenset(),
+        "topology": frozenset({"prepare"}),
+    }
+    assert graph.producers == {
+        "structure": None,
+        "prepared-structure": "prepare",
+        "topology": "topology",
+    }
+    assert graph.topological_order == ("prepare", "topology")
+
+
+def test_workflow_graph_parallel_branches_join_before_following_step() -> None:
+    trajectory = Artifact("trajectory", "xtc")
+    rmsd = Artifact("rmsd", "xvg")
+    dssp = Artifact("dssp", "dat")
+    report = Artifact("analysis-report", "json")
+    workflow = Sequence(
+        _GraphStep("production", "Production", outputs=(trajectory,), parallel=False),
+        Parallel(
+            _GraphStep("rmsd", "RMSD", inputs=(trajectory,), outputs=(rmsd,)),
+            _GraphStep("dssp", "DSSP", inputs=(trajectory,), outputs=(dssp,)),
+        ),
+        _GraphStep(
+            "collect",
+            "Collect",
+            inputs=(rmsd, dssp),
+            outputs=(report,),
+            parallel=False,
+        ),
+    )
+
+    graph = WorkflowGraph.from_workflow(workflow)
+
+    assert graph.dependencies["rmsd"] == frozenset({"production"})
+    assert graph.dependencies["dssp"] == frozenset({"production"})
+    assert graph.dependencies["collect"] == frozenset({"rmsd", "dssp"})
+    assert graph.parallel_groups == ((frozenset({"rmsd"}), frozenset({"dssp"})),)
+
+
+@pytest.mark.parametrize(
+    ("workflow", "project_inputs", "message"),
+    [
+        (
+            _GraphStep("consumer", "Consumer", inputs=(Artifact("missing", "xvg"),)),
+            (),
+            "sem origem",
+        ),
+        (
+            Sequence(
+                _GraphStep("a", "A", outputs=(Artifact("same", "xvg"),)),
+                _GraphStep("b", "B", outputs=(Artifact("same", "xvg"),)),
+            ),
+            (),
+            "mais de uma origem",
+        ),
+        (
+            _GraphStep("consumer", "Consumer", inputs=(Artifact("source", "gro"),)),
+            (Artifact("source", "pdb"),),
+            "Tipo incompatível",
+        ),
+        (
+            Sequence(
+                _GraphStep("consumer", "Consumer", inputs=(Artifact("later", "xvg"),)),
+                _GraphStep("producer", "Producer", outputs=(Artifact("later", "xvg"),)),
+            ),
+            (),
+            "cíclica",
+        ),
+    ],
+)
+def test_workflow_graph_rejects_invalid_artifact_dependencies(
+    workflow, project_inputs: tuple[Artifact, ...], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        WorkflowGraph.from_workflow(workflow, project_inputs=project_inputs)
+
+
+def test_workflow_graph_rejects_duplicate_ids_and_project_input_conflicts() -> None:
+    with pytest.raises(ValueError, match="ID de etapa duplicado"):
+        WorkflowGraph.from_workflow(
+            Sequence(_GraphStep("same", "First"), _GraphStep("same", "Second"))
+        )
+
+    artifact = Artifact("provided", "pdb")
+    with pytest.raises(ValueError, match="mais de uma origem"):
+        WorkflowGraph.from_workflow(
+            _GraphStep("producer", "Producer", outputs=(artifact,)),
+            project_inputs=(artifact,),
+        )
+
+
+def test_workflow_graph_rejects_dependent_parallel_branches() -> None:
+    intermediate = Artifact("intermediate", "xvg")
+    workflow = Parallel(
+        _GraphStep("first", "First", outputs=(intermediate,)),
+        _GraphStep("second", "Second", inputs=(intermediate,)),
+    )
+
+    with pytest.raises(ValueError, match="dependência entre si"):
+        WorkflowGraph.from_workflow(workflow)
+
+
+def test_workflow_graph_rejects_non_parallel_eligible_step() -> None:
+    workflow = Parallel(_GraphStep("serial", "Serial", parallel=False))
+
+    with pytest.raises(ValueError, match="não elegíveis para Parallel"):
+        WorkflowGraph.from_workflow(workflow)
 
 
 def test_topology_command_uses_force_field_and_water(tmp_path: Path) -> None:
