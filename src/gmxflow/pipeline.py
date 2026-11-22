@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence as SequenceABC
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -78,12 +78,40 @@ class Step(Protocol):
     inputs: tuple[Artifact, ...]
     outputs: tuple[Artifact, ...]
     parallel: bool
+    version: str
+    state: Mapping[str, object]
 
     def run(self, context: RunContext) -> None: ...
 
 
+@dataclass(frozen=True)
+class CommandResult:
+    """Captured result of one command started through ``RunContext``."""
+
+    argv: tuple[str, ...]
+    returncode: int
+    stdout: str
+    stderr: str
+    elapsed_seconds: float
+
+
 class RunContext(Protocol):
-    """Execution context interface, completed with the executor migration."""
+    """Capabilities available to a step while the executor runs it."""
+
+    project_root: Path
+
+    def input_path(self, artifact: Artifact) -> Path: ...
+
+    def output_path(self, artifact: Artifact) -> Path: ...
+
+    def run_command(
+        self,
+        argv: SequenceABC[str],
+        *,
+        cwd: Path | None = None,
+        env: Mapping[str, str] | None = None,
+        stdin: str | None = None,
+    ) -> CommandResult: ...
 
 
 @dataclass(frozen=True)
@@ -115,11 +143,13 @@ WorkflowItem: TypeAlias = Step | Sequence | Parallel
 
 @dataclass(frozen=True)
 class WorkflowGraph:
-    """Validated dependency graph; this model does not execute its steps."""
+    """Validated dependency graph consumed by the workflow executor."""
 
     steps: Mapping[str, Step]
     dependencies: Mapping[str, frozenset[str]]
     producers: Mapping[str, str | None]
+    artifacts: Mapping[str, Artifact]
+    project_inputs: frozenset[str]
     parallel_groups: tuple[tuple[frozenset[str], ...], ...]
 
     @classmethod
@@ -185,6 +215,7 @@ class WorkflowGraph:
         producers: dict[str, str | None] = {
             key: None for key in external_inputs
         }
+        artifacts = dict(external_inputs)
         for step in steps.values():
             for artifact in step.outputs:
                 if artifact.key in producers:
@@ -193,6 +224,7 @@ class WorkflowGraph:
                         "ou também foi declarado como entrada do projeto"
                     )
                 producers[artifact.key] = step.id
+                artifacts[artifact.key] = artifact
 
         for step in steps.values():
             for artifact in step.inputs:
@@ -249,6 +281,8 @@ class WorkflowGraph:
                 }
             ),
             producers=MappingProxyType(producers),
+            artifacts=MappingProxyType(artifacts),
+            project_inputs=frozenset(external_inputs),
             parallel_groups=tuple(parallel_groups),
         )
 
@@ -285,6 +319,10 @@ def _validate_step(step: Step) -> None:
         raise ValueError(f"Step {step.id!r} precisa de um name não vazio")
     if not isinstance(step.parallel, bool):
         raise ValueError(f"Step {step.id!r}: parallel deve ser bool")
+    if not isinstance(step.version, str) or not step.version.strip():
+        raise ValueError(f"Step {step.id!r}: version deve ser uma string não vazia")
+    if not isinstance(step.state, Mapping):
+        raise ValueError(f"Step {step.id!r}: state deve ser um mapeamento")
     if not callable(getattr(step, "run", None)):
         raise ValueError(f"Step {step.id!r}: run(context) deve ser implementado")
     for field_name in ("inputs", "outputs"):

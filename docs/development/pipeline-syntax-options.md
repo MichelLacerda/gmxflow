@@ -1,8 +1,9 @@
 # Demonstração de sintaxe para composição de pipelines
 
 Este documento descreve uma interface de workflow baseada em `Sequence` e
-`Parallel`. O modelo e a validação estrutural do grafo estão implementados;
-isso ainda não executa GROMACS nem altera o comportamento da pipeline atual.
+`Parallel`. O modelo, a validação estrutural e um executor sequencial do grafo
+estão implementados. Esse executor ainda não substitui nem altera a pipeline
+GROMACS atual do CLI.
 
 ## Exemplo de composição
 
@@ -33,7 +34,9 @@ graph = WorkflowGraph.from_workflow(workflow, project_inputs=project.artifacts)
 
 O exemplo é ilustrativo: as classes de etapa e `project.artifacts` ainda não
 fazem parte da API implementada. `WorkflowGraph.from_workflow(...)` valida e
-compila a estrutura, mas ainda não oferece execução.
+compila a estrutura. O executor pode executar implementações de `Step`, mas
+esta demonstração ainda não associa as classes ilustrativas aos comandos e
+artefatos da pipeline GROMACS atual.
 
 `Sequence` declara que cada etapa depende da anterior. `Parallel` declara que
 as análises são independentes entre si e recebem os dados necessários da
@@ -107,16 +110,23 @@ Cada passo declara:
   projeto/planejador, não usado como identidade do artefato.
 - `parallel`: declaração de elegibilidade para participar de `Parallel`, não
   promessa de execução simultânea.
+- `version` e `state`: versão explícita da implementação do passo e um
+  mapeamento JSON serializável com os parâmetros que afetam suas saídas. A
+  versão deve ser incrementada quando uma alteração de implementação puder
+  mudar os resultados sem que isso apareça em `state`.
 - `run(context)`: execução do passo pelo executor comum. O contexto oferece
-  apenas os artefatos de entrada declarados e os destinos de saída planejados;
-  os detalhes concretos de `RunContext` serão definidos junto com a API de
-  execução, sem transferir a responsabilidade operacional do executor para o
-  passo.
+  apenas os caminhos dos artefatos de entrada/saída declarados e um método
+  `run_command(argv, ...)`. O método executa argv sem shell e registra
+  resultado, stdout e stderr no log do passo. Logging, verificação de arquivos,
+  estado e retomada continuam sob responsabilidade do executor.
 
 Esboço do contrato (tipos auxiliares são conceituais nesta etapa):
 
 ```python
+from collections.abc import Mapping
 from typing import Protocol
+
+from gmxflow.pipeline import Artifact, RunContext
 
 
 class Step(Protocol):
@@ -125,9 +135,19 @@ class Step(Protocol):
     inputs: tuple[Artifact, ...]
     outputs: tuple[Artifact, ...]
     parallel: bool
+    version: str
+    state: Mapping[str, object]
 
     def run(self, context: RunContext) -> None: ...
 ```
+
+`RunContext` expõe `project_root`, `input_path(artifact)`,
+`output_path(artifact)` e `run_command(argv, *, cwd=None, env=None,
+stdin=None)`. O chamador fornece ao executor o mapa de chaves lógicas para
+caminhos físicos; chaves ausentes, excedentes ou caminhos duplicados são
+rejeitados antes da execução. Steps são código confiável: o contexto limita a
+API suportada, mas Python não impede uma extensão de acessar arquivos ou
+processos diretamente fora dela.
 
 O passo sinaliza falha lançando uma exceção; o executor a captura, associa ao
 `id` do passo e produz o resultado/status estruturado do workflow. Não haverá
@@ -186,7 +206,9 @@ obrigatória.
    futuras já existam no disco.
 2. **Validação de execução:** entradas externas existem e são legíveis antes
    de iniciar os passos que delas dependem; saídas são verificadas após a
-   execução; fingerprints e estado são atualizados pelo executor.
+   execução; fingerprints e estado são atualizados pelo executor. Para
+   reutilizar uma saída, devem existir todas as saídas declaradas e coincidir
+   versão, `state`, fingerprints das entradas e fingerprints das saídas salvas.
 
 Restrições especiais de ordem, como exigir um artefato gerado por produção,
 devem primeiro ser expressas pela chave e pelo tipo do artefato requerido. Um
@@ -204,16 +226,22 @@ caso real não puder ser representado dessa forma.
   independência.
 - Definir `then(...)` após `Parallel(...)` como uma junção que aguarda todos os
   ramos e disponibiliza suas saídas ao passo seguinte.
-- Mostrar grafo, parâmetros, entradas e saídas no dry-run sem executar comandos.
+- No dry-run voltado ao usuário, mostrar grafo, parâmetros, entradas e saídas
+  sem executar comandos. O executor atual retorna a ordem, dependências e mapa
+  de caminhos; a apresentação de parâmetros por etapa e a integração ao dry-run
+  do CLI ficam para a migração vertical.
 - Preservar retomada e definir o significado de `--from-step` e `--until` em
   grafos com múltiplos ramos.
 - Manter escolhas científicas visíveis e sobrescrevíveis; defaults não devem
   ocultar protonação, seleções ou métodos.
 
 O grafo é a representação interna e pode futuramente alimentar um editor
-visual. `Sequence` e `Parallel` são os elementos visíveis nesta proposta; a
-execução ainda deve definir a resolução dos artefatos em caminhos físicos e
-integrar o grafo ao executor atual.
+visual. `Sequence` e `Parallel` são os elementos visíveis nesta proposta. O
+executor novo executa os Steps sequencialmente; `Parallel` ainda não agenda
+concorrência. O dry-run do grafo retorna etapas, dependências e caminhos sem
+chamar `Step.run`; como os comandos podem ser dinâmicos, ele não os prevê. O
+dry-run existente do CLI permanece inalterado enquanto a pipeline atual não
+for migrada.
 
 ## Plano de migração
 
@@ -256,18 +284,24 @@ caminho.
 de erro claras para estruturas inválidas; nenhum teste exige GROMACS. Atendido
 em `tests/test_pipeline.py`.
 
-### 3. Separar planejamento e execução
+### 3. Separar planejamento e execução — concluída
 
-**Escopo:** introduzir um executor que consuma o grafo e preserve os
-comportamentos operacionais existentes: comandos como sequências de
-argumentos, logs por etapa, dry-run, fingerprints e retomada.
+**Escopo realizado:** adicionar `RunContext` com acesso restrito aos artefatos
+declarados, resolução das chaves lógicas para caminhos físicos e execução de
+comandos argv; adicionar `version` e `state` ao contrato `Step`; implementar
+`run_workflow_graph(...)` com logs por etapa, dry-run estrutural, verificação
+de inputs/outputs, rejeição de caminhos duplicados, fingerprints, retomada e
+bloqueio de sucessores após falha. Ramo independente que ainda não depende da
+falha pode terminar; a execução continua sequencial.
 
-**Fora de escopo:** execução simultânea de etapas e mudanças nos comandos ou
-parâmetros científicos.
+**Fora de escopo:** conectar o novo executor ao CLI ou à pipeline GROMACS,
+execução concorrente, mudanças em comandos existentes ou parâmetros
+científicos. O dry-run estrutural não antecipa comandos gerados dinamicamente.
 
-**Critério de aceite:** testes com etapas falsas comprovam a ordem definida
-pelas dependências, o bloqueio de sucessores após falha, o dry-run e a
-preservação do estado sem depender de uma instalação de GROMACS.
+**Critério de aceite:** testes com Steps falsos comprovam ordem, bloqueio de
+sucessores, continuação de ramo independente, dry-run sem efeitos colaterais,
+logs argv e retomada por versão/estado/fingerprints sem depender de GROMACS.
+Atendido em `tests/test_workflow_executor.py`.
 
 ### 4. Migrar uma fatia vertical representativa
 

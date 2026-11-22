@@ -1,5 +1,5 @@
+from dataclasses import dataclass, field
 from pathlib import Path
-from dataclasses import dataclass
 
 import pytest
 
@@ -15,6 +15,8 @@ class _GraphStep:
     inputs: tuple[Artifact, ...] = ()
     outputs: tuple[Artifact, ...] = ()
     parallel: bool = True
+    version: str = "1"
+    state: dict[str, object] = field(default_factory=dict)
 
     def run(self, context: object) -> None:
         del context
