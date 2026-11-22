@@ -91,6 +91,13 @@ class Step(Protocol):
     def run(self, context: RunContext) -> None: ...
 
 
+class ComposableStep(Step):
+    """Optional mixin that enables ``step_a | step_b`` composition."""
+
+    def __or__(self, other: WorkflowItem) -> Sequence:
+        return Sequence(self, other)
+
+
 @dataclass(frozen=True)
 class CommandResult:
     """Captured result of one command started through ``RunContext``."""
@@ -122,7 +129,7 @@ class RunContext(Protocol):
 
 
 @dataclass
-class GromacsCommandStep:
+class GromacsCommandStep(ComposableStep):
     """Shared command execution mechanics for concrete workflow steps."""
 
     id: str
@@ -1273,6 +1280,9 @@ class Sequence:
             raise ValueError("Sequence precisa conter ao menos um item")
         object.__setattr__(self, "items", items)
 
+    def __or__(self, other: WorkflowItem) -> Sequence:
+        return Sequence(self, other)
+
 
 @dataclass(frozen=True)
 class Parallel:
@@ -1284,6 +1294,9 @@ class Parallel:
         if not branches:
             raise ValueError("Parallel precisa conter ao menos um ramo")
         object.__setattr__(self, "branches", branches)
+
+    def __or__(self, other: WorkflowItem) -> Sequence:
+        return Sequence(self, other)
 
 
 WorkflowItem: TypeAlias = Step | Sequence | Parallel

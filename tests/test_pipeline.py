@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -11,7 +12,9 @@ from gmxflow.pipeline import (
     AssembleComplexStep,
     Artifact,
     BuildTopologyStep,
+    ComposableStep,
     CreateBoxStep,
+    GromacsCommandStep,
     CenterTrajectoryStep,
     EnergyMinimizationStep,
     FitTrajectoryStep,
@@ -43,7 +46,7 @@ from gmxflow.pipeline import (
 
 
 @dataclass(frozen=True)
-class _GraphStep:
+class _GraphStep(ComposableStep):
     id: str
     name: str
     inputs: tuple[Artifact, ...] = ()
@@ -79,9 +82,7 @@ def test_prepare_step_projection_preserves_its_command_and_artifacts(
         config_dir=tmp_path,
         config_path=config_path,
     )[0]
-    concrete_step = PrepareComplexStep.from_config(
-        config, tmp_path, config_path
-    )
+    concrete_step = PrepareComplexStep.from_config(config, tmp_path, config_path)
 
     assert concrete_step.to_pipeline_step() == legacy_step
 
@@ -130,19 +131,18 @@ def test_workflow_graph_parallel_branches_join_before_following_step() -> None:
     rmsd = Artifact("rmsd", "xvg")
     dssp = Artifact("dssp", "dat")
     report = Artifact("analysis-report", "json")
-    workflow = Sequence(
-        _GraphStep("production", "Production", outputs=(trajectory,), parallel=False),
-        Parallel(
-            _GraphStep("rmsd", "RMSD", inputs=(trajectory,), outputs=(rmsd,)),
-            _GraphStep("dssp", "DSSP", inputs=(trajectory,), outputs=(dssp,)),
-        ),
-        _GraphStep(
-            "collect",
-            "Collect",
-            inputs=(rmsd, dssp),
-            outputs=(report,),
-            parallel=False,
-        ),
+    workflow = _GraphStep(
+        "production", "Production", outputs=(trajectory,), parallel=False
+    ) | Parallel(
+        _GraphStep("rmsd", "RMSD", inputs=(trajectory,), outputs=(rmsd,)),
+        _GraphStep("dssp", "DSSP", inputs=(trajectory,), outputs=(dssp,)),
+    )
+    workflow |= _GraphStep(
+        "collect",
+        "Collect",
+        inputs=(rmsd, dssp),
+        outputs=(report,),
+        parallel=False,
     )
 
     graph = WorkflowGraph.from_workflow(workflow)
@@ -246,12 +246,14 @@ def test_topology_command_uses_force_field_and_water(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("ligand_kind", ["none", "peptide"])
 def test_protein_topology_workflow_uses_concrete_step(
-    tmp_path: Path, ligand_kind: str
+    tmp_path: Path, ligand_kind: Literal["none", "peptide"]
 ) -> None:
     config = default_config("concrete_topology")
     config.input.ligand_kind = ligand_kind
     workflow = build_workflow(config, config_dir=tmp_path)
-    topology = next(step for step in workflow.items if step.id == "topology")
+    topology = next(
+        step for step in workflow.items if isinstance(step, BuildTopologyStep)
+    )
     legacy = next(
         step
         for step in build_pipeline(config, config_dir=tmp_path)
@@ -500,7 +502,7 @@ def test_small_molecule_pipeline_adds_ligand_topology_step(tmp_path: Path) -> No
     ]
 
 
-def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
+def test_small_molecule_workflow_composes_concrete_steps(
     tmp_path: Path,
 ) -> None:
     config = default_config("typed_small_molecule_workflow")
@@ -537,7 +539,11 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
         PlotAnalysisStep,
         ReportStep,
     ]
-    assert [step.id for step in workflow.items] == [
+    workflow_steps = [
+        step for step in workflow.items if isinstance(step, GromacsCommandStep)
+    ]
+    assert len(workflow_steps) == len(workflow.items)
+    assert [step.id for step in workflow_steps] == [
         "prepare",
         "ligand-topology",
         "protein-topology",
@@ -570,7 +576,9 @@ def test_optional_analysis_steps_are_concrete_when_enabled(tmp_path: Path) -> No
     config.analysis.sasa = True
 
     workflow = build_workflow(config, config_dir=tmp_path)
-    steps_by_id = {step.id: step for step in workflow.items}
+    steps_by_id = {
+        step.id: step for step in workflow.items if isinstance(step, GromacsCommandStep)
+    }
 
     assert isinstance(steps_by_id["interaction-energy"], InteractionEnergyStep)
     assert isinstance(steps_by_id["sasa"], SasaStep)

@@ -168,8 +168,13 @@ artefato produzido por um passo não pode também ser declarado como entrada
 externa.
 
 `Sequence(a, b, ...)` estabelece ordem e permite que os artefatos declarados
-como saída por um passo sejam consumidos por passos posteriores. A conexão
-entre dois passos é inferida pela chave de artefato coincidente, não por
+como saída por um passo sejam consumidos por passos posteriores. Steps que
+herdam o mixin opcional `ComposableStep` podem usar `a | b`; `Sequence` e
+`Parallel` também aceitam `|`, inclusive para continuar uma sequência após a
+barreira do grupo. A forma `workflow |= next_step` é a reatribuição normal do
+resultado de `|`, não altera o grafo já criado. Steps que apenas implementam o
+`Protocol` estrutural podem continuar usando `Sequence(a, b)` explicitamente.
+A conexão entre dois passos é inferida pela chave de artefato coincidente, não por
 posição de arquivo nem por passagem implícita de um objeto Python. A ordem da
 sequência, por si só, não cria dependências de dados para artefatos que nenhum
 passo consome.
@@ -193,9 +198,9 @@ esta decisão não autoriza reescrever ou descartar silenciosamente
 
 Pydantic poderá validar modelos de parâmetros de passos concretos, mas não é
 requisito do `Protocol` nem substitui a validação central do grafo. Uma
-implementação customizada deve satisfazer o contrato e declarar seus artefatos;
-uma futura classe concreta auxiliar poderá ser oferecida sem tornar herança
-obrigatória.
+implementação customizada deve satisfazer o contrato e declarar seus artefatos.
+`ComposableStep` é um mixin opcional para habilitar `|`; herança não é necessária
+para Steps compostos explicitamente com `Sequence` ou `Parallel`.
 
 ### Fronteiras de validação
 
