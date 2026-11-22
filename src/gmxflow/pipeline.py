@@ -900,6 +900,103 @@ class FitTrajectoryStep(GromacsCommandStep):
         )
 
 
+@dataclass
+class AnalyzeTrajectoryStep(GromacsCommandStep):
+    """Run the configured structural analyses over the production trajectory."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path, config_path: Path
+    ) -> AnalyzeTrajectoryStep:
+        root = project_root.expanduser().resolve()
+        analysis = root / "work" / "analysis"
+        prod = root / "work" / "prod"
+        input_paths = [prod / "md.tpr", prod / "md_fit.xtc"]
+        if config.input.ligand_kind == "none":
+            input_paths.append(root / "work" / "em" / "em.tpr")
+            output_paths = [
+                analysis / "rmsd_backbone.xvg",
+                analysis / "rmsd_reference.xvg",
+                analysis / "rmsf_residuos.xvg",
+                analysis / "gyrate.xvg",
+            ]
+        else:
+            output_paths = [
+                analysis / "lig.ndx",
+                analysis / "rmsd_backbone.xvg",
+                analysis / "rmsd_ligante.xvg",
+                analysis / "rmsf_residuos.xvg",
+                analysis / "gyrate.xvg",
+                analysis / "mindist.xvg",
+                analysis / "numcont.xvg",
+                analysis / "hbond.xvg",
+                analysis / "hbond.ndx",
+            ]
+        if config.analysis.catalytic_residues.strip():
+            output_paths.extend(
+                [
+                    analysis / "catalytic_distance.xvg",
+                    analysis / "catalytic_occupancy.xvg",
+                ]
+            )
+        return cls(
+            id="analysis",
+            name="Executar análises principais.",
+            command=(
+                "gmxflow",
+                "analyze",
+                "--project",
+                str(config_path.expanduser().resolve()),
+            ),
+            workdir=analysis,
+            input_paths=tuple(input_paths),
+            output_paths=tuple(output_paths),
+            state={
+                "input.ligand_kind": config.input.ligand_kind,
+                "input.ligand_resname": config.input.ligand_resname,
+                "analysis": config.analysis.model_dump(),
+            },
+        )
+
+
+@dataclass
+class ThermodynamicsStep(GromacsCommandStep):
+    """Extract thermodynamic time series from minimization and equilibration."""
+
+    @classmethod
+    def from_config(
+        cls,
+        config: GmxFlowConfig,
+        project_root: Path,
+        config_path: Path,
+    ) -> ThermodynamicsStep:
+        root = project_root.expanduser().resolve()
+        analysis = root / "work" / "analysis"
+        return cls(
+            id="thermodynamics",
+            name="Extrair propriedades termodinâmicas das etapas MD.",
+            command=(
+                "gmxflow",
+                "thermodynamics",
+                "--project",
+                str(config_path.expanduser().resolve()),
+            ),
+            workdir=analysis,
+            input_paths=(
+                root / "work" / "em" / "em.edr",
+                root / "work" / "nvt" / "nvt.edr",
+                root / "work" / "npt" / "npt.edr",
+            ),
+            output_paths=(
+                analysis / "em_potential.xvg",
+                analysis / "nvt_temperature.xvg",
+                analysis / "npt_pressure.xvg",
+                analysis / "npt_density.xvg",
+            ),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
 @dataclass(frozen=True)
 class Sequence:
     """An ordered composition of workflow items."""
@@ -1204,9 +1301,6 @@ def build_pipeline(
     prep = work_dir / "prep"
     topo = work_dir / "topo"
     ionized_topology = topo / "topol_ions.top"
-    em = work_dir / "em"
-    nvt = work_dir / "nvt"
-    npt = work_dir / "npt"
     prod = work_dir / "prod"
     analysis = work_dir / "analysis"
     outputs = project_root / "outputs"
@@ -1284,7 +1378,6 @@ def build_pipeline(
             analysis / "rmsf_residuos.xvg",
             analysis / "gyrate.xvg",
         ]
-        analysis_outputs = list(final_analysis_inputs)
         plot_inputs = list(final_analysis_inputs)
         plot_outputs = [
             analysis / "rmsd_bb.png",
@@ -1301,17 +1394,6 @@ def build_pipeline(
             analysis / "mindist.xvg",
             analysis / "numcont.xvg",
             analysis / "hbond.xvg",
-        ]
-        analysis_outputs = [
-            analysis / "lig.ndx",
-            analysis / "rmsd_backbone.xvg",
-            analysis / "rmsd_ligante.xvg",
-            analysis / "rmsf_residuos.xvg",
-            analysis / "gyrate.xvg",
-            analysis / "mindist.xvg",
-            analysis / "numcont.xvg",
-            analysis / "hbond.xvg",
-            analysis / "hbond.ndx",
         ]
         plot_inputs = [
             analysis / "rmsd_backbone.xvg",
@@ -1330,16 +1412,6 @@ def build_pipeline(
             analysis / "ncont.png",
             analysis / "hbond.png",
         ]
-    if config.analysis.catalytic_residues.strip():
-        analysis_outputs.extend(
-            [
-                analysis / "catalytic_distance.xvg",
-                analysis / "catalytic_occupancy.xvg",
-            ]
-        )
-    analysis_step_inputs = [prod / "md.tpr", prod / "md_fit.xtc"]
-    if config.input.ligand_kind == "none":
-        analysis_step_inputs.append(em / "em.tpr")
     steps.extend(
         [
             CreateBoxStep.from_config(config, project_root).to_pipeline_step(),
@@ -1377,36 +1449,15 @@ def build_pipeline(
             FitTrajectoryStep.from_config(
                 config, project_root
             ).to_pipeline_step(),
-            PipelineStep(
-                name="analysis",
-                description="Executar análises principais.",
-                workdir=analysis,
-                command=["gmxflow", "analyze", "--project", str(config_path)],
-                inputs=analysis_step_inputs,
-                outputs=analysis_outputs,
-                state={
-                    "input.ligand_kind": config.input.ligand_kind,
-                    "input.ligand_resname": config.input.ligand_resname,
-                    "analysis": config.analysis.model_dump(),
-                },
-            ),
+            AnalyzeTrajectoryStep.from_config(
+                config, project_root, config_path
+            ).to_pipeline_step(),
         ]
     )
     steps.append(
-        PipelineStep(
-            name="thermodynamics",
-            description="Extrair propriedades termodinâmicas das etapas MD.",
-            workdir=analysis,
-            command=["gmxflow", "thermodynamics", "--project", str(config_path)],
-            inputs=[em / "em.edr", nvt / "nvt.edr", npt / "npt.edr"],
-            outputs=[
-                analysis / "em_potential.xvg",
-                analysis / "nvt_temperature.xvg",
-                analysis / "npt_pressure.xvg",
-                analysis / "npt_density.xvg",
-            ],
-            env=gromacs_env,
-        )
+        ThermodynamicsStep.from_config(
+            config, project_root, config_path
+        ).to_pipeline_step()
     )
     if config.analysis.interaction_energy:
         steps.append(
@@ -1617,6 +1668,8 @@ def build_workflow(
             RemovePeriodicJumpsStep.from_config(config, root),
             CenterTrajectoryStep.from_config(config, root),
             FitTrajectoryStep.from_config(config, root),
+            AnalyzeTrajectoryStep.from_config(config, root, resolved_config),
+            ThermodynamicsStep.from_config(config, root, resolved_config),
         ]
     )
     by_id = {step.id: step for step in concrete_steps}

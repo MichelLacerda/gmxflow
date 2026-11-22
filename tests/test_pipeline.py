@@ -7,6 +7,7 @@ from gmxflow.config import default_config
 from gmxflow.executor import select_steps
 from gmxflow.pipeline import (
     AddIonsStep,
+    AnalyzeTrajectoryStep,
     AssembleComplexStep,
     Artifact,
     CreateBoxStep,
@@ -28,6 +29,7 @@ from gmxflow.pipeline import (
     RemovePeriodicJumpsStep,
     Sequence,
     SolvateSystemStep,
+    ThermodynamicsStep,
     NvtEquilibrationStep,
     WorkflowGraph,
     build_workflow,
@@ -469,7 +471,7 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
     workflow = build_workflow(config, config_dir=tmp_path)
 
     assert isinstance(workflow, Sequence)
-    assert [type(step) for step in workflow.items[:19]] == [
+    assert [type(step) for step in workflow.items[:21]] == [
         PrepareComplexStep,
         LigandTopologyStep,
         ProteinTopologyStep,
@@ -489,9 +491,11 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
         RemovePeriodicJumpsStep,
         CenterTrajectoryStep,
         FitTrajectoryStep,
+        AnalyzeTrajectoryStep,
+        ThermodynamicsStep,
     ]
-    assert isinstance(workflow.items[19], PipelineCommandStep)
-    assert [step.id for step in workflow.items[:19]] == [
+    assert isinstance(workflow.items[21], PipelineCommandStep)
+    assert [step.id for step in workflow.items[:21]] == [
         "prepare",
         "ligand-topology",
         "protein-topology",
@@ -511,6 +515,8 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
         "pbc-nojump",
         "pbc-center",
         "fit",
+        "analysis",
+        "thermodynamics",
     ]
 
 
