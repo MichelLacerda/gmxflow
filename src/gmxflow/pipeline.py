@@ -650,6 +650,78 @@ class NvtEquilibrationStep(GromacsCommandStep):
         )
 
 
+@dataclass
+class PrepareNptStep(GromacsCommandStep):
+    """Prepare the GROMACS run input for NPT equilibration."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> PrepareNptStep:
+        root = project_root.expanduser().resolve()
+        nvt = root / "work" / "nvt"
+        npt = root / "work" / "npt"
+        topology = root / "work" / "topo" / "topol_ions.top"
+        return cls(
+            id="npt-grompp",
+            name="Preparar equilíbrio NPT.",
+            command=(
+                _gmx_command(config),
+                "grompp",
+                "-f",
+                "npt.mdp",
+                "-c",
+                str(nvt / "nvt.gro"),
+                "-t",
+                str(nvt / "nvt.cpt"),
+                "-r",
+                str(nvt / "nvt.gro"),
+                "-p",
+                str(topology),
+                "-o",
+                "npt.tpr",
+            ),
+            workdir=npt,
+            input_paths=(
+                npt / "npt.mdp",
+                nvt / "nvt.gro",
+                nvt / "nvt.cpt",
+                topology,
+            ),
+            output_paths=(npt / "npt.tpr", npt / "mdout.mdp"),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
+@dataclass
+class NptEquilibrationStep(GromacsCommandStep):
+    """Run NPT equilibration and retain its restart checkpoint."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> NptEquilibrationStep:
+        root = project_root.expanduser().resolve()
+        npt = root / "work" / "npt"
+        return cls(
+            id="npt",
+            name="Executar equilíbrio NPT.",
+            command=tuple(
+                _mdrun_command(config, _gmx_command(config), "npt")
+            ),
+            workdir=npt,
+            input_paths=(npt / "npt.tpr",),
+            output_paths=(
+                npt / "npt.gro",
+                npt / "npt.cpt",
+                npt / "npt.edr",
+                npt / "npt.log",
+                npt / "npt.trr",
+            ),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
 @dataclass(frozen=True)
 class Sequence:
     """An ordered composition of workflow items."""
@@ -1110,50 +1182,10 @@ def build_pipeline(
             NvtEquilibrationStep.from_config(
                 config, project_root
             ).to_pipeline_step(),
-            PipelineStep(
-                name="npt-grompp",
-                description="Preparar equilíbrio NPT.",
-                workdir=npt,
-                command=[
-                    gmx,
-                    "grompp",
-                    "-f",
-                    "npt.mdp",
-                    "-c",
-                    str(nvt / "nvt.gro"),
-                    "-t",
-                    str(nvt / "nvt.cpt"),
-                    "-r",
-                    str(nvt / "nvt.gro"),
-                    "-p",
-                    str(ionized_topology),
-                    "-o",
-                    "npt.tpr",
-                ],
-                inputs=[
-                    npt / "npt.mdp",
-                    nvt / "nvt.gro",
-                    nvt / "nvt.cpt",
-                    ionized_topology,
-                ],
-                outputs=[npt / "npt.tpr", npt / "mdout.mdp"],
-                env=gromacs_env,
-            ),
-            PipelineStep(
-                name="npt",
-                description="Executar equilíbrio NPT.",
-                workdir=npt,
-                command=_mdrun_command(config, gmx, "npt"),
-                inputs=[npt / "npt.tpr"],
-                outputs=[
-                    npt / "npt.gro",
-                    npt / "npt.cpt",
-                    npt / "npt.edr",
-                    npt / "npt.log",
-                    npt / "npt.trr",
-                ],
-                env=gromacs_env,
-            ),
+            PrepareNptStep.from_config(config, project_root).to_pipeline_step(),
+            NptEquilibrationStep.from_config(
+                config, project_root
+            ).to_pipeline_step(),
             PipelineStep(
                 name="production-grompp",
                 description="Preparar produção MD.",
@@ -1495,6 +1527,8 @@ def build_workflow(
             EnergyMinimizationStep.from_config(config, root),
             PrepareNvtStep.from_config(config, root),
             NvtEquilibrationStep.from_config(config, root),
+            PrepareNptStep.from_config(config, root),
+            NptEquilibrationStep.from_config(config, root),
         ]
     )
     by_id = {step.id: step for step in concrete_steps}
