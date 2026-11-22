@@ -1435,7 +1435,7 @@ def test_report_runs_through_graph_when_started_directly(
     assert all(output.exists() for output in report_step.outputs)
 
 
-def test_small_molecule_ligand_topology_runs_through_graph(
+def test_small_molecule_topology_prefix_runs_through_graph(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "small_molecule_project"
@@ -1468,11 +1468,15 @@ def test_small_molecule_ligand_topology_runs_through_graph(
     )
 
     calls: list[tuple[str, ...]] = []
+    subprocess_inputs: list[str | None] = []
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
+        subprocess_inputs.append(kwargs.get("input"))
         if "prepare-complex" in command:
             outputs = project.plan(until="prepare")[0].outputs
+        elif "pdb2gmx" in command:
+            outputs = project.plan(until="protein-topology")[-1].outputs
         else:
             outputs = project.plan(until="ligand-topology")[-1].outputs
         for output in outputs:
@@ -1481,15 +1485,21 @@ def test_small_molecule_ligand_topology_runs_through_graph(
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run(until="ligand-topology")
+    report = project.run(until="protein-topology")
 
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert [result.step_name for result in report.steps] == [
         "prepare",
         "ligand-topology",
+        "protein-topology",
     ]
     assert all(result.returncode == 0 for result in report.steps)
-    assert all(output.is_file() for output in project.plan(until="ligand-topology")[-1].outputs)
+    assert "pdb2gmx" in calls[-1]
+    assert subprocess_inputs[-1] == "0\n0\n"
+    assert all(
+        output.is_file()
+        for output in project.plan(until="protein-topology")[-1].outputs
+    )
 
 
 def test_run_rejects_unreleased_steps_before_workspace_setup(

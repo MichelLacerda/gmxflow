@@ -340,9 +340,9 @@ iniciar diretamente em qualquer etapa desse trecho, de `topology` a `report`,
 desde que suas entradas já existam. As etapas `interaction-energy` e `sasa`,
 quando habilitadas em um projeto `peptide`, também são executadas pelo grafo e
 podem ser iniciadas diretamente se suas entradas existirem. No fluxo
-`small_molecule`, `prepare → ligand-topology` também usa o grafo; a conversão
-de topologia da proteína (`protein-topology`) e a montagem do complexo
-(`assemble-complex`) permanecem no executor legado.
+`small_molecule`, `prepare → ligand-topology → protein-topology` também usa o
+grafo; a montagem do complexo (`assemble-complex`) permanece no executor
+legado.
 
 **Versões de topologia:** a rota principal preserva `work/topo/topol.top` como
 saída original de `topology`. `solvate` cria `topol_solvated.top` e `genion`
