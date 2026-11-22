@@ -722,6 +722,76 @@ class NptEquilibrationStep(GromacsCommandStep):
         )
 
 
+@dataclass
+class PrepareProductionStep(GromacsCommandStep):
+    """Prepare the GROMACS run input for production molecular dynamics."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> PrepareProductionStep:
+        root = project_root.expanduser().resolve()
+        npt = root / "work" / "npt"
+        prod = root / "work" / "prod"
+        topology = root / "work" / "topo" / "topol_ions.top"
+        return cls(
+            id="production-grompp",
+            name="Preparar produção MD.",
+            command=(
+                _gmx_command(config),
+                "grompp",
+                "-f",
+                "md.mdp",
+                "-c",
+                str(npt / "npt.gro"),
+                "-t",
+                str(npt / "npt.cpt"),
+                "-p",
+                str(topology),
+                "-o",
+                "md.tpr",
+            ),
+            workdir=prod,
+            input_paths=(
+                prod / "md.mdp",
+                npt / "npt.gro",
+                npt / "npt.cpt",
+                topology,
+            ),
+            output_paths=(prod / "md.tpr", prod / "mdout.mdp"),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
+@dataclass
+class ProductionStep(GromacsCommandStep):
+    """Run the configured production molecular-dynamics simulation."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> ProductionStep:
+        root = project_root.expanduser().resolve()
+        prod = root / "work" / "prod"
+        return cls(
+            id="production",
+            name="Executar produção MD.",
+            command=tuple(
+                _mdrun_command(config, _gmx_command(config), "md")
+            ),
+            workdir=prod,
+            input_paths=(prod / "md.tpr",),
+            output_paths=(
+                prod / "md.xtc",
+                prod / "md.gro",
+                prod / "md.cpt",
+                prod / "md.edr",
+                prod / "md.log",
+            ),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
 @dataclass(frozen=True)
 class Sequence:
     """An ordered composition of workflow items."""
@@ -1186,48 +1256,10 @@ def build_pipeline(
             NptEquilibrationStep.from_config(
                 config, project_root
             ).to_pipeline_step(),
-            PipelineStep(
-                name="production-grompp",
-                description="Preparar produção MD.",
-                workdir=prod,
-                command=[
-                    gmx,
-                    "grompp",
-                    "-f",
-                    "md.mdp",
-                    "-c",
-                    str(npt / "npt.gro"),
-                    "-t",
-                    str(npt / "npt.cpt"),
-                    "-p",
-                    str(ionized_topology),
-                    "-o",
-                    "md.tpr",
-                ],
-                inputs=[
-                    prod / "md.mdp",
-                    npt / "npt.gro",
-                    npt / "npt.cpt",
-                    ionized_topology,
-                ],
-                outputs=[prod / "md.tpr", prod / "mdout.mdp"],
-                env=gromacs_env,
-            ),
-            PipelineStep(
-                name="production",
-                description="Executar produção MD.",
-                workdir=prod,
-                command=_mdrun_command(config, gmx, "md"),
-                inputs=[prod / "md.tpr"],
-                outputs=[
-                    prod / "md.xtc",
-                    prod / "md.gro",
-                    prod / "md.cpt",
-                    prod / "md.edr",
-                    prod / "md.log",
-                ],
-                env=gromacs_env,
-            ),
+            PrepareProductionStep.from_config(
+                config, project_root
+            ).to_pipeline_step(),
+            ProductionStep.from_config(config, project_root).to_pipeline_step(),
             PipelineStep(
                 name="pbc-nojump",
                 description="Remover saltos por condições periódicas.",
@@ -1529,6 +1561,8 @@ def build_workflow(
             NvtEquilibrationStep.from_config(config, root),
             PrepareNptStep.from_config(config, root),
             NptEquilibrationStep.from_config(config, root),
+            PrepareProductionStep.from_config(config, root),
+            ProductionStep.from_config(config, root),
         ]
     )
     by_id = {step.id: step for step in concrete_steps}

@@ -343,9 +343,10 @@ essas mesmas definições como `PipelineStep` para manter o CLI legado. As etapa
 `em-grompp` e `em` também são classes concretas (`PrepareEnergyMinimizationStep`
 e `EnergyMinimizationStep`); `nvt-grompp` e `nvt` também (`PrepareNvtStep` e
 `NvtEquilibrationStep`); `npt-grompp` e `npt` também (`PrepareNptStep` e
-`NptEquilibrationStep`). As etapas restantes ainda passam por
-`PipelineCommandStep`, um adaptador temporário; elas ainda não são classes de
-domínio próprias. A sequência atual não usa `Parallel`.
+`NptEquilibrationStep`); `production-grompp` e `production` também
+(`PrepareProductionStep` e `ProductionStep`). As etapas restantes ainda passam
+por `PipelineCommandStep`, um adaptador temporário; elas ainda não são classes
+de domínio próprias. A sequência atual não usa `Parallel`.
 
 **Compatibilidade do executor:** toda execução pela API usa agora
 `work/workflow_state.json`; o CLI segue usando `work/state.json`. Esses estados
