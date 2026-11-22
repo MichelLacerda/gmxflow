@@ -6,11 +6,16 @@ import pytest
 from gmxflow.config import default_config
 from gmxflow.executor import select_steps
 from gmxflow.pipeline import (
+    AssembleComplexStep,
     Artifact,
+    LigandTopologyStep,
     Parallel,
     PipelineCommandStep,
+    PrepareComplexStep,
+    ProteinTopologyStep,
     Sequence,
     WorkflowGraph,
+    build_workflow,
     build_pipeline,
 )
 
@@ -434,6 +439,33 @@ def test_small_molecule_pipeline_adds_ligand_topology_step(tmp_path: Path) -> No
     assert solvate.inputs == [
         project_root / "work" / "box" / "box.gro",
         project_root / "work" / "topo" / "topol_complex.top",
+    ]
+
+
+def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
+    tmp_path: Path,
+) -> None:
+    config = default_config("typed_small_molecule_workflow")
+    config.input.ligand_kind = "small_molecule"
+    config.input.ligand_mol2 = "inputs/ligand.mol2"
+    config.input.ligand_str = "inputs/ligand.str"
+    config.input.ligand_resname = "LIG"
+
+    workflow = build_workflow(config, config_dir=tmp_path)
+
+    assert isinstance(workflow, Sequence)
+    assert [type(step) for step in workflow.items[:4]] == [
+        PrepareComplexStep,
+        LigandTopologyStep,
+        ProteinTopologyStep,
+        AssembleComplexStep,
+    ]
+    assert isinstance(workflow.items[4], PipelineCommandStep)
+    assert [step.id for step in workflow.items[:4]] == [
+        "prepare",
+        "ligand-topology",
+        "protein-topology",
+        "assemble-complex",
     ]
 
 

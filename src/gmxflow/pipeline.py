@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence as SequenceABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, TypeAlias
@@ -161,6 +161,220 @@ class RunContext(Protocol):
         env: Mapping[str, str] | None = None,
         stdin: str | None = None,
     ) -> CommandResult: ...
+
+
+@dataclass
+class GromacsCommandStep:
+    """Shared command execution mechanics for concrete workflow steps."""
+
+    id: str
+    name: str
+    command: tuple[str, ...]
+    workdir: Path
+    input_paths: tuple[Path, ...]
+    output_paths: tuple[Path, ...]
+    inputs: tuple[Artifact, ...] = field(init=False)
+    outputs: tuple[Artifact, ...] = field(init=False)
+    stdin: str | None = None
+    env: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    state: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
+    parallel: bool = False
+    version: str = "1"
+
+    def __post_init__(self) -> None:
+        self.inputs = tuple(_path_artifact(path) for path in self.input_paths)
+        self.outputs = tuple(_path_artifact(path) for path in self.output_paths)
+
+    def run(self, context: RunContext) -> None:
+        for artifact in self.inputs:
+            context.input_path(artifact)
+        for artifact in self.outputs:
+            context.output_path(artifact)
+        context.run_command(
+            self.command,
+            cwd=self.workdir,
+            env=self.env,
+            stdin=self.stdin,
+        )
+
+    def to_pipeline_step(self) -> PipelineStep:
+        """Project this typed step into the legacy CLI pipeline definition."""
+        return PipelineStep(
+            name=self.id,
+            description=self.name,
+            workdir=self.workdir,
+            command=list(self.command),
+            inputs=list(self.input_paths),
+            outputs=list(self.output_paths),
+            stdin=self.stdin,
+            env=dict(self.env),
+            state=dict(self.state),
+        )
+
+
+@dataclass
+class PrepareComplexStep(GromacsCommandStep):
+    """Prepare receptor and optional ligand coordinates from project inputs."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path, config_path: Path
+    ) -> PrepareComplexStep:
+        root = project_root.expanduser().resolve()
+        prep = root / "work" / "prep"
+        inputs = [_resolve_from_config(config.input.receptor_pdb, root)]
+        outputs = [prep / "receptor_fixed.pdb", prep / "complexo.pdb"]
+        if config.input.remove_resnames:
+            outputs.insert(0, prep / "receptor_filtered.pdb")
+        if config.input.ligand_kind != "none":
+            inputs.append(_resolve_from_config(config.input.ligand_pdb, root))
+            outputs.insert(1, prep / "ligante_fixed.pdb")
+        return cls(
+            id="prepare",
+            name=(
+                "Preparar proteína sem ligante."
+                if config.input.ligand_kind == "none"
+                else "Preparar complexo receptor-ligante."
+            ),
+            command=(
+                "gmxflow",
+                "prepare-complex",
+                "--project",
+                str(config_path.expanduser().resolve()),
+                "--force",
+            ),
+            workdir=prep,
+            input_paths=tuple(inputs),
+            output_paths=tuple(outputs),
+            state={
+                "input.ph": config.input.ph,
+                "input.ligand_kind": config.input.ligand_kind,
+                "input.ligand_resname": config.input.ligand_resname,
+                "input.remove_resnames": config.input.remove_resnames,
+                "force_field.name": config.force_field.name,
+            },
+        )
+
+
+@dataclass
+class LigandTopologyStep(GromacsCommandStep):
+    """Convert CGenFF ligand inputs to GROMACS topology files."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path, config_path: Path
+    ) -> LigandTopologyStep:
+        root = project_root.expanduser().resolve()
+        ligand_dir = root / "work" / "ligand"
+        prefix = config.input.ligand_resname.lower()
+        return cls(
+            id="ligand-topology",
+            name="Converter topologia CGenFF do ligante para GROMACS.",
+            command=(
+                "gmxflow",
+                "prepare-ligand",
+                "--project",
+                str(config_path.expanduser().resolve()),
+            ),
+            workdir=ligand_dir,
+            input_paths=(
+                _resolve_from_config(config.input.ligand_mol2, root),
+                _resolve_from_config(config.input.ligand_str, root),
+            ),
+            output_paths=(
+                ligand_dir / f"{prefix}.itp",
+                ligand_dir / f"{prefix}.prm",
+                ligand_dir / f"{prefix}.top",
+                ligand_dir / f"{prefix}_ini.pdb",
+            ),
+            state={
+                "input.ligand_resname": config.input.ligand_resname,
+                "force_field.name": config.force_field.name,
+            },
+        )
+
+
+@dataclass
+class ProteinTopologyStep(GromacsCommandStep):
+    """Build the protein-only topology for a small-molecule workflow."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> ProteinTopologyStep:
+        root = project_root.expanduser().resolve()
+        topo = root / "work" / "topo"
+        return cls(
+            id="protein-topology",
+            name="Gerar topologia da proteína com pdb2gmx.",
+            command=(
+                _gmx_command(config),
+                "pdb2gmx",
+                "-f",
+                str(root / "work" / "prep" / "receptor_fixed.pdb"),
+                "-o",
+                "protein.gro",
+                "-p",
+                "topol.top",
+                "-i",
+                "posre.itp",
+                "-ff",
+                config.force_field.name,
+                "-water",
+                config.force_field.water,
+                "-ignh",
+                "-ter",
+            ),
+            workdir=topo,
+            input_paths=(root / "work" / "prep" / "receptor_fixed.pdb",),
+            output_paths=(topo / "protein.gro", topo / "topol.top"),
+            stdin=_terminal_selection_stdin(config, chains=1),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
+@dataclass
+class AssembleComplexStep(GromacsCommandStep):
+    """Assemble protein and ligand while preserving the protein topology."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path, config_path: Path
+    ) -> AssembleComplexStep:
+        root = project_root.expanduser().resolve()
+        topo = root / "work" / "topo"
+        ligand_dir = root / "work" / "ligand"
+        prefix = config.input.ligand_resname.lower()
+        return cls(
+            id="assemble-complex",
+            name="Montar complexo proteína-ligante pequeno.",
+            command=(
+                "gmxflow",
+                "assemble-complex",
+                "--project",
+                str(config_path.expanduser().resolve()),
+                "--topology-output",
+                str(topo / "topol_complex.top"),
+            ),
+            workdir=topo,
+            input_paths=(
+                topo / "protein.gro",
+                topo / "topol.top",
+                ligand_dir / f"{prefix}.itp",
+                ligand_dir / f"{prefix}.prm",
+                ligand_dir / f"{prefix}_ini.pdb",
+            ),
+            output_paths=(
+                topo / "complexo.gro",
+                topo / "topol_complex.top",
+                topo / ".small_molecule_complex.ok",
+            ),
+            state={
+                "input.ligand_resname": config.input.ligand_resname,
+                "solvent.positive_ion": config.solvent.positive_ion,
+                "solvent.negative_ion": config.solvent.negative_ion,
+            },
+        )
 
 
 @dataclass(frozen=True)
@@ -475,127 +689,16 @@ def build_pipeline(
     prod = work_dir / "prod"
     analysis = work_dir / "analysis"
     outputs = project_root / "outputs"
-    ligand = work_dir / "ligand"
-    ligand_prefix = config.input.ligand_resname.lower()
-
-    preparation_inputs = [receptor_pdb]
-    preparation_outputs = [prep / "receptor_fixed.pdb", prep / "complexo.pdb"]
-    if config.input.remove_resnames:
-        preparation_outputs.insert(0, prep / "receptor_filtered.pdb")
-    if config.input.ligand_kind != "none":
-        preparation_inputs.append(ligand_pdb)
-        preparation_outputs.insert(1, prep / "ligante_fixed.pdb")
-
-    steps = [
-        PipelineStep(
-            name="prepare",
-            description=(
-                "Preparar proteína sem ligante."
-                if config.input.ligand_kind == "none"
-                else "Preparar complexo receptor-ligante."
-            ),
-            workdir=prep,
-            command=[
-                "gmxflow",
-                "prepare-complex",
-                "--project",
-                str(config_path),
-                "--force",
-            ],
-            inputs=preparation_inputs,
-            outputs=preparation_outputs,
-            state={
-                "input.ph": config.input.ph,
-                "input.ligand_kind": config.input.ligand_kind,
-                "input.ligand_resname": config.input.ligand_resname,
-                "input.remove_resnames": config.input.remove_resnames,
-                "force_field.name": config.force_field.name,
-            },
-        ),
-    ]
+    prepare_step = PrepareComplexStep.from_config(config, project_root, config_path)
+    steps = [prepare_step.to_pipeline_step()]
 
     if config.input.ligand_kind == "small_molecule":
-        steps.extend(
-            [
-                PipelineStep(
-                    name="ligand-topology",
-                    description="Converter topologia CGenFF do ligante para GROMACS.",
-                    workdir=ligand,
-                    command=["gmxflow", "prepare-ligand", "--project", str(config_path)],
-                    inputs=[ligand_mol2, ligand_str],
-                    outputs=[
-                        ligand / f"{ligand_prefix}.itp",
-                        ligand / f"{ligand_prefix}.prm",
-                        ligand / f"{ligand_prefix}.top",
-                        ligand / f"{ligand_prefix}_ini.pdb",
-                    ],
-                    state={
-                        "input.ligand_resname": config.input.ligand_resname,
-                        "force_field.name": config.force_field.name,
-                    },
-                ),
-                PipelineStep(
-                    name="protein-topology",
-                    description="Gerar topologia da proteína com pdb2gmx.",
-                    workdir=topo,
-                    command=[
-                        gmx,
-                        "pdb2gmx",
-                        "-f",
-                        str(prep / "receptor_fixed.pdb"),
-                        "-o",
-                        "protein.gro",
-                        "-p",
-                        "topol.top",
-                        "-i",
-                        "posre.itp",
-                        "-ff",
-                        config.force_field.name,
-                        "-water",
-                        config.force_field.water,
-                        "-ignh",
-                        "-ter",
-                    ],
-                    stdin=_terminal_selection_stdin(config, chains=1),
-                    inputs=[prep / "receptor_fixed.pdb"],
-                    outputs=[
-                        topo / "protein.gro",
-                        topo / "topol.top",
-                    ],
-                    env=gromacs_env,
-                ),
-                PipelineStep(
-                    name="assemble-complex",
-                    description="Montar complexo proteína-ligante pequeno.",
-                    workdir=topo,
-                    command=[
-                        "gmxflow",
-                        "assemble-complex",
-                        "--project",
-                        str(config_path),
-                        "--topology-output",
-                        str(topo / "topol_complex.top"),
-                    ],
-                    inputs=[
-                        topo / "protein.gro",
-                        topo / "topol.top",
-                        ligand / f"{ligand_prefix}.itp",
-                        ligand / f"{ligand_prefix}.prm",
-                        ligand / f"{ligand_prefix}_ini.pdb",
-                    ],
-                    outputs=[
-                        topo / "complexo.gro",
-                        topo / "topol_complex.top",
-                        topo / ".small_molecule_complex.ok",
-                    ],
-                    state={
-                        "input.ligand_resname": config.input.ligand_resname,
-                        "solvent.positive_ion": config.solvent.positive_ion,
-                        "solvent.negative_ion": config.solvent.negative_ion,
-                    },
-                ),
-            ]
+        typed_steps: tuple[GromacsCommandStep, ...] = (
+            LigandTopologyStep.from_config(config, project_root, config_path),
+            ProteinTopologyStep.from_config(config, project_root),
+            AssembleComplexStep.from_config(config, project_root, config_path),
         )
+        steps.extend(step.to_pipeline_step() for step in typed_steps)
     else:
         topology_chains = 1 if config.input.ligand_kind == "none" else 2
         topology_outputs = [topo / "complexo.gro", topo / "topol.top"]
@@ -1215,6 +1318,55 @@ def build_pipeline(
         ]
     )
     return steps
+
+
+def build_workflow(
+    config: GmxFlowConfig,
+    config_dir: Path,
+    *,
+    config_path: Path | None = None,
+    selected_steps: list[PipelineStep] | None = None,
+) -> Sequence:
+    """Compose an API workflow from concrete steps and temporary legacy adapters.
+
+    The CLI continues to consume ``build_pipeline()``. The API reuses concrete
+    step implementations where available and adapts only steps not migrated yet.
+    """
+    root = config_dir.expanduser().resolve()
+    resolved_config = (config_path or root / "project.toml").expanduser().resolve()
+    plan = (
+        build_pipeline(config, root, config_path=resolved_config)
+        if selected_steps is None
+        else selected_steps
+    )
+
+    concrete_steps: list[GromacsCommandStep] = [
+        PrepareComplexStep.from_config(config, root, resolved_config)
+    ]
+    if config.input.ligand_kind == "small_molecule":
+        concrete_steps.extend(
+            [
+                LigandTopologyStep.from_config(config, root, resolved_config),
+                ProteinTopologyStep.from_config(config, root),
+                AssembleComplexStep.from_config(config, root, resolved_config),
+            ]
+        )
+    by_id = {step.id: step for step in concrete_steps}
+    workflow_steps: list[Step] = []
+    for pipeline_step in plan:
+        concrete = by_id.get(pipeline_step.name)
+        if concrete is None:
+            workflow_steps.append(
+                PipelineCommandStep.from_pipeline_step(pipeline_step)
+            )
+            continue
+        if concrete.to_pipeline_step() != pipeline_step:
+            raise ValueError(
+                f"A definição tipada da etapa {pipeline_step.name!r} "
+                "diverge do plano legado."
+            )
+        workflow_steps.append(concrete)
+    return Sequence(*workflow_steps)
 
 
 def _resolve_from_config(value: str, config_dir: Path) -> Path:

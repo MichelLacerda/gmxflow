@@ -331,21 +331,26 @@ novamente. Atendido em `tests/test_api.py` e `tests/test_pipeline.py`.
 cada fatia. Definir e testar a compatibilidade de identificadores, opções de
 seleção de etapas e estado salvo para projetos existentes.
 
-**Fatia implementada:** nos fluxos `peptide` e `none`, o prefixo
-`prepare → topology → box → solvate → ions-grompp → ions → em-grompp → em →
-nvt-grompp → nvt → npt-grompp → npt → production-grompp → production →
-pbc-nojump → pbc-center → fit → analysis → thermodynamics → plots → report` é
-executado pelo grafo quando o plano começa em `prepare`. Também é possível
-iniciar diretamente em qualquer etapa desse trecho, de `topology` a `report`,
-desde que suas entradas já existam. As etapas `interaction-energy` e `sasa`,
-quando habilitadas em um projeto `peptide`, também são executadas pelo grafo e
-podem ser iniciadas diretamente se suas entradas existirem. No fluxo
-`small_molecule`, `prepare → ligand-topology → protein-topology →
-assemble-complex` também usa o grafo, assim como as etapas `analysis` e
-`thermodynamics`, que podem ser iniciadas diretamente quando suas entradas já
-existem. A topologia original da proteína é preservada em
-`work/topo/topol.top`; `assemble-complex` cria `work/topo/topol_complex.top`,
-consumida pela etapa `solvate`.
+**Fatia implementada:** `GmxFlowProject.run()` compõe o plano selecionado em
+um único `Sequence` e o executa pelo executor do grafo; não há mais divisão da
+execução por uma allowlist de nomes de etapa. `PrepareComplexStep` é usado em
+todos os perfis e, para `small_molecule`, `LigandTopologyStep`,
+`ProteinTopologyStep` e `AssembleComplexStep` também são implementações
+concretas do contrato `Step`. `build_pipeline()` projeta essas mesmas
+definições como `PipelineStep` para manter o CLI legado. As demais etapas da
+pipeline ainda passam por `PipelineCommandStep`, um adaptador temporário; elas
+ainda não são classes de domínio próprias. A sequência atual não usa
+`Parallel`.
+
+**Compatibilidade do executor:** toda execução pela API usa agora
+`work/workflow_state.json`; o CLI segue usando `work/state.json`. Esses estados
+não são convertidos entre si, portanto a primeira execução pela API pode
+reexecutar etapas que só tenham estado salvo pelo executor antigo. A mudança
+não altera comandos, parâmetros ou ordem científica das etapas.
+
+No fluxo `small_molecule`, a topologia original da proteína é preservada em
+`work/topo/topol.top`; `AssembleComplexStep` cria
+`work/topo/topol_complex.top`, consumida pela etapa `solvate`.
 
 **Versões de topologia:** `work/topo/topol.top` permanece como saída original
 da geração de topologia. Para `small_molecule`, `assemble-complex` cria

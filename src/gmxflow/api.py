@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import shutil
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -13,7 +13,6 @@ from gmxflow.executor import (
     WorkflowExecutionError,
     WorkflowStepResult,
     WorkflowStepStatus,
-    run_steps,
     run_workflow_graph,
     run_workspace_setup,
     runtime_command,
@@ -22,12 +21,14 @@ from gmxflow.executor import (
 from gmxflow.forcefields import resolve_forcefield
 from gmxflow.pipeline import (
     REAL_EXECUTION_STEPS,
+    GromacsCommandStep,
     PipelineCommandStep,
     PipelineStep,
     Step,
     Sequence as WorkflowSequence,
     WorkflowGraph,
     build_pipeline,
+    build_workflow,
 )
 from gmxflow.preparation.structure import require_mdanalysis
 from gmxflow.project import create_project as create_project_files
@@ -229,9 +230,10 @@ class GmxFlowProject:
     ) -> ExecutionReport:
         """Validate prerequisites and execute the selected project steps.
 
-        Workspace setup preserves existing templates. Execution uses the same
-        logs, persistent state, and resume behavior as the CLI. A failed step
-        raises ``RuntimeError`` containing its name and log path.
+        Workspace setup preserves existing templates. The API executes the
+        selected workflow through the graph executor and persists its state in
+        ``work/workflow_state.json``, independently from the CLI state file. A
+        failed step raises ``RuntimeError`` containing its name and log path.
         """
         self.validate()
         steps = self.plan(strict_inputs=True, from_step=from_step, until=until)
@@ -247,83 +249,19 @@ class GmxFlowProject:
         workspace_result = run_workspace_setup(
             self.config, project_root=self.root
         )
-        results: list[StepResult] = []
-        remaining_steps = steps
-        start_index = 1
-        graph_step_count = 0
-        graph_step_names = {
-            "prepare",
-            "topology",
-            "box",
-            "solvate",
-            "ions-grompp",
-            "ions",
-            "em-grompp",
-            "em",
-            "nvt-grompp",
-            "nvt",
-            "npt-grompp",
-            "npt",
-            "production-grompp",
-            "production",
-            "pbc-nojump",
-            "pbc-center",
-            "fit",
-        }
-        if self.config.input.ligand_kind in {"peptide", "none"}:
-            graph_step_names.update(
-                {"analysis", "thermodynamics", "plots", "report"}
-            )
-        if (
-            self.config.input.ligand_kind == "peptide"
-            and self.config.analysis.interaction_energy
-        ):
-            graph_step_names.add("interaction-energy")
-        if (
-            self.config.input.ligand_kind == "peptide"
-            and self.config.analysis.sasa
-        ):
-            graph_step_names.add("sasa")
-        if self.config.input.ligand_kind == "small_molecule":
-            graph_step_names.update(
-                {
-                    "ligand-topology",
-                    "protein-topology",
-                    "assemble-complex",
-                    "analysis",
-                    "thermodynamics",
-                }
-            )
-        if steps and steps[0].name in graph_step_names:
-            graph_step_count = next(
-                (
-                    index
-                    for index, step in enumerate(steps)
-                    if step.name not in graph_step_names
-                ),
-                len(steps),
-            )
-        if graph_step_count:
-            results.extend(
-                _run_graph_steps(
-                    steps[:graph_step_count],
-                    project_root=self.root,
-                    on_step_start=on_step_start,
-                    on_step_done=on_step_done,
-                )
-            )
-            remaining_steps = steps[graph_step_count:]
-            start_index = graph_step_count + 1
-        if remaining_steps:
-            results.extend(
-                run_steps(
-                    remaining_steps,
-                    project_root=self.root,
-                    start_index=start_index,
-                    on_step_start=on_step_start,
-                    on_step_done=on_step_done,
-                )
-            )
+        workflow = build_workflow(
+            self.config,
+            self.root,
+            config_path=self.config_path,
+            selected_steps=steps,
+        )
+        results = _run_graph_steps(
+            steps,
+            workflow=workflow,
+            project_root=self.root,
+            on_step_start=on_step_start,
+            on_step_done=on_step_done,
+        )
         return ExecutionReport(
             workspace=workspace_result,
             steps=tuple(results),
@@ -333,23 +271,25 @@ class GmxFlowProject:
 def _run_graph_steps(
     steps: list[PipelineStep],
     *,
+    workflow: WorkflowSequence,
     project_root: Path,
     on_step_start: Callable[[int, PipelineStep], None] | None,
     on_step_done: Callable[[int, StepResult], None] | None,
 ) -> list[StepResult]:
-    """Run a selected prefix of legacy command steps through the graph."""
-    adapted_steps = [
-        replace(
-            PipelineCommandStep.from_pipeline_step(step),
-            command=tuple(runtime_command(step.command)),
-        )
-        for step in steps
-    ]
-    workflow = (
-        WorkflowSequence(*adapted_steps)
-        if len(adapted_steps) > 1
-        else adapted_steps[0]
-    )
+    """Execute a composed API workflow, using adapters only for legacy steps."""
+    adapted_steps: list[Step] = []
+    for step in workflow.items:
+        if isinstance(step, GromacsCommandStep):
+            step.command = tuple(runtime_command(list(step.command)))
+            adapted_steps.append(step)
+        elif isinstance(step, PipelineCommandStep):
+            step.command = tuple(runtime_command(list(step.command)))
+            adapted_steps.append(step)
+        else:
+            raise TypeError(
+                "build_workflow deve compor apenas etapas diretas em Sequence."
+            )
+    workflow = WorkflowSequence(*adapted_steps)
     produced_keys = {
         artifact.key for step in adapted_steps for artifact in step.outputs
     }
