@@ -1506,6 +1506,59 @@ def test_small_molecule_assembly_prefix_runs_through_graph(
     )
 
 
+def test_small_molecule_analysis_can_start_through_graph(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project_root = tmp_path / "small_molecule_analysis_project"
+    project_root.mkdir()
+    config = default_config(project_root.name)
+    config.input.ligand_kind = "small_molecule"
+    config.input.ligand_mol2 = "inputs/ligand.mol2"
+    config.input.ligand_str = "inputs/ligand.str"
+    config.input.ligand_resname = "LIG"
+    config_path = project_root / "project.toml"
+    config_path.write_text(to_toml(config), encoding="utf-8")
+    project = GmxFlowProject.open(config_path)
+    analysis_step = project.plan(from_step="analysis", until="analysis")[0]
+
+    inputs_dir = project_root / "inputs"
+    inputs_dir.mkdir()
+    for filename in ("receptor.pdb", "ligante.pdb", "ligand.mol2", "ligand.str"):
+        (inputs_dir / filename).write_text("INPUT\n", encoding="utf-8")
+    for input_path in analysis_step.inputs:
+        input_path.parent.mkdir(parents=True, exist_ok=True)
+        input_path.write_text("INPUT\n", encoding="utf-8")
+
+    monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
+    monkeypatch.setattr(
+        "gmxflow.api.run_workspace_setup",
+        lambda config, project_root: StepResult(
+            step_name="workspace",
+            command=["<internal>", "ensure-workspace"],
+            workdir=project_root / "work",
+            log_path=project_root / "work" / "logs" / "00_workspace.log",
+            returncode=0,
+            elapsed_seconds=0.0,
+        ),
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_subprocess_run(command, *, cwd, **kwargs):
+        calls.append(tuple(command))
+        for output in analysis_step.outputs:
+            (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
+
+    report = project.run(from_step="analysis", until="analysis")
+
+    assert len(calls) == 1
+    assert "analyze" in calls[0]
+    assert [result.step_name for result in report.steps] == ["analysis"]
+    assert all(output.is_file() for output in analysis_step.outputs)
+
+
 def test_run_rejects_unreleased_steps_before_workspace_setup(
     tmp_path: Path, monkeypatch
 ) -> None:
