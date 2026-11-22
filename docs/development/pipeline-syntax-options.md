@@ -340,15 +340,17 @@ iniciar diretamente em qualquer etapa desse trecho, de `topology` a `report`,
 desde que suas entradas já existam. As etapas `interaction-energy` e `sasa`,
 quando habilitadas em um projeto `peptide`, também são executadas pelo grafo e
 podem ser iniciadas diretamente se suas entradas existirem. No fluxo
-`small_molecule`, `prepare → ligand-topology → protein-topology` também usa o
-grafo; a montagem do complexo (`assemble-complex`) permanece no executor
-legado.
+`small_molecule`, `prepare → ligand-topology → protein-topology →
+assemble-complex` também usa o grafo. A topologia original da proteína é
+preservada em `work/topo/topol.top`; `assemble-complex` cria
+`work/topo/topol_complex.top`, consumida pela etapa `solvate`.
 
-**Versões de topologia:** a rota principal preserva `work/topo/topol.top` como
-saída original de `topology`. `solvate` cria `topol_solvated.top` e `genion`
-cria `topol_ions.top`; as etapas posteriores de simulação e a análise de
-interação consomem esta última. Isso permite inspecionar cada versão sem
-alterar os parâmetros ou a sequência científica.
+**Versões de topologia:** `work/topo/topol.top` permanece como saída original
+da geração de topologia. Para `small_molecule`, `assemble-complex` cria
+`topol_complex.top`; `solvate` usa essa versão como entrada e cria
+`topol_solvated.top`. `genion` cria `topol_ions.top`; as etapas posteriores de
+simulação e a análise de interação consomem esta última. Isso permite
+inspecionar cada versão sem alterar os parâmetros ou a sequência científica.
 
 **Decisão de compatibilidade já aplicada:** o CLI mantém `work/state.json`; a
 execução pelo grafo na API usa `work/workflow_state.json`. Os formatos não são

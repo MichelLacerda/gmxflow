@@ -573,6 +573,8 @@ def build_pipeline(
                         "assemble-complex",
                         "--project",
                         str(config_path),
+                        "--topology-output",
+                        str(topo / "topol_complex.top"),
                     ],
                     inputs=[
                         topo / "protein.gro",
@@ -583,7 +585,7 @@ def build_pipeline(
                     ],
                     outputs=[
                         topo / "complexo.gro",
-                        topo / "topol.top",
+                        topo / "topol_complex.top",
                         topo / ".small_molecule_complex.ok",
                     ],
                     state={
@@ -714,6 +716,11 @@ def build_pipeline(
     analysis_step_inputs = [prod / "md.tpr", prod / "md_fit.xtc"]
     if config.input.ligand_kind == "none":
         analysis_step_inputs.append(em / "em.tpr")
+    solvent_input_topology = (
+        topo / "topol_complex.top"
+        if config.input.ligand_kind == "small_molecule"
+        else topo / "topol.top"
+    )
     steps.extend(
         [
             PipelineStep(
@@ -746,10 +753,12 @@ def build_pipeline(
                     "solvate-system",
                     "--project",
                     str(config_path),
+                    "--topology-input",
+                    str(solvent_input_topology),
                     "--topology-output",
                     str(solvated_topology),
                 ],
-                inputs=[box / "box.gro", topo / "topol.top"],
+                inputs=[box / "box.gro", solvent_input_topology],
                 outputs=[box / "solv.gro", solvated_topology],
                 env=gromacs_env,
                 state={

@@ -485,6 +485,10 @@ def assemble_complex(
         Path,
         typer.Option("--project", "-p", help="Arquivo project.toml do projeto."),
     ] = Path("project.toml"),
+    topology_output: Annotated[
+        Path,
+        typer.Option("--topology-output", help="Arquivo de topologia para o complexo."),
+    ] = Path("work/topo/topol_complex.top"),
 ) -> None:
     """Monta complexo .gro e topologia para ligante pequeno."""
     loaded = load_config(config)
@@ -494,6 +498,7 @@ def assemble_complex(
         result = assemble_small_molecule_complex(
             loaded,
             project_root=config_path.parent,
+            topology_output=topology_output,
         )
     except (FileNotFoundError, RuntimeError, ValueError) as error:
         raise typer.BadParameter(str(error)) from error
@@ -514,12 +519,16 @@ def solvate_system(
         Path,
         typer.Option("--topology-output", help="Arquivo de topologia após solvatação."),
     ] = Path("work/topo/topol_solvated.top"),
+    topology_input: Annotated[
+        Path,
+        typer.Option("--topology-input", help="Topologia usada como base para solvatação."),
+    ] = Path("work/topo/topol.top"),
 ) -> None:
     """Normaliza a topologia e adiciona solvente."""
     loaded = load_config(config)
     config_path = config.expanduser().resolve()
     project_root = config_path.parent
-    source_topology = project_root / "work" / "topo" / "topol.top"
+    source_topology = _resolve_project_path(str(topology_input), project_root)
     output_topology = _resolve_project_path(str(topology_output), project_root)
 
     if not source_topology.is_file():

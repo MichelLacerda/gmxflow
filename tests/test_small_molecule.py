@@ -45,6 +45,9 @@ def test_assemble_small_molecule_complex_writes_gro_and_updates_topology(
     assert result.protein_atoms == 2
     assert result.ligand_atoms == 2
     assert result.marker.is_file()
+    original_topology = (topo / "topol.top").read_text(encoding="utf-8")
+    assert "JZ4" not in original_topology
+    assert result.topology == topo / "topol_complex.top"
     complex_lines = result.complex_gro.read_text(encoding="utf-8").splitlines()
     assert complex_lines[1].strip() == "4"
     assert "    2JZ4     C1    3   1.000   2.000   3.000" in complex_lines

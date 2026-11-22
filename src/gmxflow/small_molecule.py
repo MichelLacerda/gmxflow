@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ class SmallMoleculeComplexResult(BaseModel):
 def assemble_small_molecule_complex(
     config: GmxFlowConfig,
     project_root: Path,
+    topology_output: Path | None = None,
 ) -> SmallMoleculeComplexResult:
     project_root = project_root.expanduser().resolve()
     topo = project_root / "work" / "topo"
@@ -29,13 +31,19 @@ def assemble_small_molecule_complex(
     ligand_pdb = ligand_dir / f"{ligand_prefix}_ini.pdb"
     ligand_itp = ligand_dir / f"{ligand_prefix}.itp"
     ligand_prm = ligand_dir / f"{ligand_prefix}.prm"
-    topol_top = topo / "topol.top"
+    source_topology = topo / "topol.top"
+    topol_top = topology_output or (topo / "topol_complex.top")
+    if not topol_top.is_absolute():
+        topol_top = project_root / topol_top
+    topol_top = topol_top.resolve()
     complex_gro = topo / "complexo.gro"
     marker = topo / ".small_molecule_complex.ok"
 
-    for path in (protein_gro, ligand_pdb, ligand_itp, ligand_prm, topol_top):
+    for path in (protein_gro, ligand_pdb, ligand_itp, ligand_prm, source_topology):
         if not path.is_file():
             raise FileNotFoundError(f"Arquivo necessário não encontrado: {path}")
+    if topol_top == source_topology.resolve():
+        raise ValueError("A topologia do complexo deve ser diferente de topol.top.")
 
     protein = _read_gro(protein_gro)
     ligand_lines = _ligand_pdb_to_gro_lines(
@@ -50,6 +58,8 @@ def assemble_small_molecule_complex(
         atom_lines=[*protein.atom_lines, *ligand_lines],
         box_line=protein.box_line,
     )
+    topol_top.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_topology, topol_top)
     _update_topology(
         topol_top=topol_top,
         ligand_resname=config.input.ligand_resname,

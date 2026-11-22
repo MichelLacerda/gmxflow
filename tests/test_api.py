@@ -1435,7 +1435,7 @@ def test_report_runs_through_graph_when_started_directly(
     assert all(output.exists() for output in report_step.outputs)
 
 
-def test_small_molecule_topology_prefix_runs_through_graph(
+def test_small_molecule_assembly_prefix_runs_through_graph(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "small_molecule_project"
@@ -1477,6 +1477,8 @@ def test_small_molecule_topology_prefix_runs_through_graph(
             outputs = project.plan(until="prepare")[0].outputs
         elif "pdb2gmx" in command:
             outputs = project.plan(until="protein-topology")[-1].outputs
+        elif "assemble-complex" in command:
+            outputs = project.plan(until="assemble-complex")[-1].outputs
         else:
             outputs = project.plan(until="ligand-topology")[-1].outputs
         for output in outputs:
@@ -1485,20 +1487,22 @@ def test_small_molecule_topology_prefix_runs_through_graph(
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run(until="protein-topology")
+    report = project.run(until="assemble-complex")
 
-    assert len(calls) == 3
+    assert len(calls) == 4
     assert [result.step_name for result in report.steps] == [
         "prepare",
         "ligand-topology",
         "protein-topology",
+        "assemble-complex",
     ]
     assert all(result.returncode == 0 for result in report.steps)
-    assert "pdb2gmx" in calls[-1]
-    assert subprocess_inputs[-1] == "0\n0\n"
+    assert "pdb2gmx" in calls[-2]
+    assert "assemble-complex" in calls[-1]
+    assert subprocess_inputs[-2] == "0\n0\n"
     assert all(
         output.is_file()
-        for output in project.plan(until="protein-topology")[-1].outputs
+        for output in project.plan(until="assemble-complex")[-1].outputs
     )
 
 

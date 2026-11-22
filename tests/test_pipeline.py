@@ -414,6 +414,8 @@ def test_small_molecule_pipeline_adds_ligand_topology_step(tmp_path: Path) -> No
         "assemble-complex",
         "--project",
         str(config_path.resolve()),
+        "--topology-output",
+        str(project_root / "work" / "topo" / "topol_complex.top"),
     ]
     assert assemble_complex.inputs == [
         project_root / "work" / "topo" / "protein.gro",
@@ -424,8 +426,14 @@ def test_small_molecule_pipeline_adds_ligand_topology_step(tmp_path: Path) -> No
     ]
     assert assemble_complex.outputs == [
         project_root / "work" / "topo" / "complexo.gro",
-        project_root / "work" / "topo" / "topol.top",
+        project_root / "work" / "topo" / "topol_complex.top",
         project_root / "work" / "topo" / ".small_molecule_complex.ok",
+    ]
+    solvate = steps[5]
+    assert "--topology-input" in solvate.command
+    assert solvate.inputs == [
+        project_root / "work" / "box" / "box.gro",
+        project_root / "work" / "topo" / "topol_complex.top",
     ]
 
 
@@ -508,6 +516,8 @@ def test_solvate_uses_internal_topology_reset_command(tmp_path: Path) -> None:
         "solvate-system",
         "--project",
         str(config_path.resolve()),
+        "--topology-input",
+        str(tmp_path.resolve() / "work" / "topo" / "topol.top"),
         "--topology-output",
         str(tmp_path.resolve() / "work" / "topo" / "topol_solvated.top"),
     ]
