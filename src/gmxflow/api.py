@@ -267,6 +267,7 @@ class GmxFlowProject:
             "production-grompp",
             "production",
             "pbc-nojump",
+            "pbc-center",
         }
         if steps and steps[0].name in graph_step_names:
             graph_step_count = next(

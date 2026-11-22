@@ -436,6 +436,14 @@ def test_run_validates_then_uses_shared_executor(
         returncode=0,
         elapsed_seconds=1.7,
     )
+    fit_result = StepResult(
+        step_name="fit",
+        command=runtime_command(project.plan(until="fit")[16].command),
+        workdir=project.root / "work" / "prod",
+        log_path=project.root / "work" / "logs" / "17_fit.log",
+        returncode=0,
+        elapsed_seconds=1.8,
+    )
 
     monkeypatch.setattr(
         "gmxflow.api.GmxFlowProject.validate",
@@ -464,6 +472,7 @@ def test_run_validates_then_uses_shared_executor(
             "production-grompp",
             "production",
             "pbc-nojump",
+            "pbc-center",
         )
         assert kwargs["project_root"] == project.root
         step_results = {
@@ -482,6 +491,7 @@ def test_run_validates_then_uses_shared_executor(
             "production-grompp": production_grompp_result,
             "production": production_result,
             "pbc-nojump": pbc_nojump_result,
+            "pbc-center": pbc_center_result,
         }
         return WorkflowExecutionReport(
             results=tuple(
@@ -501,14 +511,14 @@ def test_run_validates_then_uses_shared_executor(
 
     def fake_run_steps(steps, **kwargs):
         events.append("run_steps")
-        assert [step.name for step in steps] == ["pbc-center"]
+        assert [step.name for step in steps] == ["fit"]
         assert kwargs["project_root"] == project.root
-        assert kwargs["start_index"] == 16
-        return [pbc_center_result]
+        assert kwargs["start_index"] == 17
+        return [fit_result]
 
     monkeypatch.setattr("gmxflow.api.run_steps", fake_run_steps)
 
-    report = project.run(until="pbc-center")
+    report = project.run(until="fit")
 
     assert events == ["validate", "workspace", "workflow_graph", "run_steps"]
     assert report.workspace is workspace
@@ -529,6 +539,7 @@ def test_run_validates_then_uses_shared_executor(
         production_result,
         pbc_nojump_result,
         pbc_center_result,
+        fit_result,
     )
     assert report.results == (
         workspace,
@@ -548,10 +559,11 @@ def test_run_validates_then_uses_shared_executor(
         production_result,
         pbc_nojump_result,
         pbc_center_result,
+        fit_result,
     )
 
 
-def test_graph_prefix_through_pbc_nojump_matches_legacy_commands_and_outputs(
+def test_graph_prefix_through_pbc_center_matches_legacy_commands_and_outputs(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -695,7 +707,7 @@ def test_graph_prefix_through_pbc_nojump_matches_legacy_commands_and_outputs(
 
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run(
-        until="pbc-nojump",
+        until="pbc-center",
         on_step_start=lambda index, step: callback_events.append(
             ("start", index, step.name)
         ),
@@ -703,7 +715,7 @@ def test_graph_prefix_through_pbc_nojump_matches_legacy_commands_and_outputs(
             ("done", index, result.step_name)
         ),
     )
-    resumed_report = project.run(until="pbc-nojump")
+    resumed_report = project.run(until="pbc-center")
 
     topology_only_root = tmp_path / "topology_only_project"
     topology_only_project = GmxFlowProject.open(
@@ -971,14 +983,36 @@ def test_graph_prefix_through_pbc_nojump_matches_legacy_commands_and_outputs(
         from_step="pbc-nojump", until="pbc-nojump"
     )
 
+    pbc_center_only_root = tmp_path / "pbc_center_only_project"
+    pbc_center_only_project = GmxFlowProject.open(
+        _write_project_config(pbc_center_only_root)
+    )
+    pbc_center_only_inputs = pbc_center_only_root / "inputs"
+    pbc_center_only_inputs.mkdir()
+    (pbc_center_only_inputs / "receptor.pdb").write_text(
+        "ATOM\n", encoding="utf-8"
+    )
+    (pbc_center_only_inputs / "ligante.pdb").write_text(
+        "ATOM\n", encoding="utf-8"
+    )
+    pbc_center_only_dir = pbc_center_only_root / "work" / "prod"
+    pbc_center_only_dir.mkdir(parents=True)
+    (pbc_center_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
+    (pbc_center_only_dir / "md_nojump.xtc").write_text(
+        "NOJUMP_XTC\n", encoding="utf-8"
+    )
+    pbc_center_only_report = pbc_center_only_project.run(
+        from_step="pbc-center", until="pbc-center"
+    )
+
     legacy_steps = build_pipeline(
         project.config,
         config_dir=legacy_root,
         config_path=legacy_config,
-    )[:15]
+    )[:16]
     legacy_results = run_steps(legacy_steps, project_root=legacy_root)
 
-    assert len(graph_report.steps) == len(legacy_results) == 15
+    assert len(graph_report.steps) == len(legacy_results) == 16
     for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
         graph_command = [
             argument.replace(str(project_root), "<project-root>")
@@ -1019,9 +1053,15 @@ def test_graph_prefix_through_pbc_nojump_matches_legacy_commands_and_outputs(
     assert production_only_report.steps[0].returncode == 0
     assert pbc_nojump_only_report.steps[0].step_name == "pbc-nojump"
     assert pbc_nojump_only_report.steps[0].returncode == 0
-    assert len(subprocess_calls) == 44  # graph twice, isolated steps, legacy prefix
+    assert pbc_center_only_report.steps[0].step_name == "pbc-center"
+    assert pbc_center_only_report.steps[0].returncode == 0
+    assert len(subprocess_calls) == 47  # graph twice, isolated steps, legacy prefix
     assert sum(
         command[-1:] == ("nojump",) and stdin == "0\n"
+        for command, stdin in subprocess_inputs
+    ) == 3  # graph run, isolated graph step, and legacy reference
+    assert sum(
+        "-center" in command and stdin == "Protein\nSystem\n"
         for command, stdin in subprocess_inputs
     ) == 3  # graph run, isolated graph step, and legacy reference
     assert legacy_state.read_bytes() == legacy_state_before
@@ -1057,6 +1097,8 @@ def test_graph_prefix_through_pbc_nojump_matches_legacy_commands_and_outputs(
         ("done", 14, "production"),
         ("start", 15, "pbc-nojump"),
         ("done", 15, "pbc-nojump"),
+        ("start", 16, "pbc-center"),
+        ("done", 16, "pbc-center"),
     ]
     for relative_dir in (
         Path("work/prep"),
