@@ -585,6 +585,71 @@ class EnergyMinimizationStep(GromacsCommandStep):
         )
 
 
+@dataclass
+class PrepareNvtStep(GromacsCommandStep):
+    """Prepare the GROMACS run input for NVT equilibration."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> PrepareNvtStep:
+        root = project_root.expanduser().resolve()
+        em = root / "work" / "em"
+        nvt = root / "work" / "nvt"
+        topology = root / "work" / "topo" / "topol_ions.top"
+        return cls(
+            id="nvt-grompp",
+            name="Preparar equilíbrio NVT.",
+            command=(
+                _gmx_command(config),
+                "grompp",
+                "-f",
+                "nvt.mdp",
+                "-c",
+                str(em / "em.gro"),
+                "-r",
+                str(em / "em.gro"),
+                "-p",
+                str(topology),
+                "-o",
+                "nvt.tpr",
+            ),
+            workdir=nvt,
+            input_paths=(nvt / "nvt.mdp", em / "em.gro", topology),
+            output_paths=(nvt / "nvt.tpr", nvt / "mdout.mdp"),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
+@dataclass
+class NvtEquilibrationStep(GromacsCommandStep):
+    """Run NVT equilibration and retain its restart checkpoint."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> NvtEquilibrationStep:
+        root = project_root.expanduser().resolve()
+        nvt = root / "work" / "nvt"
+        return cls(
+            id="nvt",
+            name="Executar equilíbrio NVT.",
+            command=tuple(
+                _mdrun_command(config, _gmx_command(config), "nvt")
+            ),
+            workdir=nvt,
+            input_paths=(nvt / "nvt.tpr",),
+            output_paths=(
+                nvt / "nvt.gro",
+                nvt / "nvt.cpt",
+                nvt / "nvt.edr",
+                nvt / "nvt.log",
+                nvt / "nvt.trr",
+            ),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
 @dataclass(frozen=True)
 class Sequence:
     """An ordered composition of workflow items."""
@@ -1041,43 +1106,10 @@ def build_pipeline(
             EnergyMinimizationStep.from_config(
                 config, project_root
             ).to_pipeline_step(),
-            PipelineStep(
-                name="nvt-grompp",
-                description="Preparar equilíbrio NVT.",
-                workdir=nvt,
-                command=[
-                    gmx,
-                    "grompp",
-                    "-f",
-                    "nvt.mdp",
-                    "-c",
-                    str(em / "em.gro"),
-                    "-r",
-                    str(em / "em.gro"),
-                    "-p",
-                    str(ionized_topology),
-                    "-o",
-                    "nvt.tpr",
-                ],
-                inputs=[nvt / "nvt.mdp", em / "em.gro", ionized_topology],
-                outputs=[nvt / "nvt.tpr", nvt / "mdout.mdp"],
-                env=gromacs_env,
-            ),
-            PipelineStep(
-                name="nvt",
-                description="Executar equilíbrio NVT.",
-                workdir=nvt,
-                command=_mdrun_command(config, gmx, "nvt"),
-                inputs=[nvt / "nvt.tpr"],
-                outputs=[
-                    nvt / "nvt.gro",
-                    nvt / "nvt.cpt",
-                    nvt / "nvt.edr",
-                    nvt / "nvt.log",
-                    nvt / "nvt.trr",
-                ],
-                env=gromacs_env,
-            ),
+            PrepareNvtStep.from_config(config, project_root).to_pipeline_step(),
+            NvtEquilibrationStep.from_config(
+                config, project_root
+            ).to_pipeline_step(),
             PipelineStep(
                 name="npt-grompp",
                 description="Preparar equilíbrio NPT.",
@@ -1461,6 +1493,8 @@ def build_workflow(
             AddIonsStep.from_config(config, root, resolved_config),
             PrepareEnergyMinimizationStep.from_config(config, root),
             EnergyMinimizationStep.from_config(config, root),
+            PrepareNvtStep.from_config(config, root),
+            NvtEquilibrationStep.from_config(config, root),
         ]
     )
     by_id = {step.id: step for step in concrete_steps}

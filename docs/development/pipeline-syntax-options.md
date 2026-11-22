@@ -341,7 +341,8 @@ concretas do contrato `Step`. As etapas `box`, `solvate`, `ions-grompp` e
 `PrepareIonsStep` e `AddIonsStep`) em todos os perfis. `build_pipeline()` projeta
 essas mesmas definições como `PipelineStep` para manter o CLI legado. As etapas
 `em-grompp` e `em` também são classes concretas (`PrepareEnergyMinimizationStep`
-e `EnergyMinimizationStep`). As etapas restantes ainda passam por
+e `EnergyMinimizationStep`); `nvt-grompp` e `nvt` também (`PrepareNvtStep` e
+`NvtEquilibrationStep`). As etapas restantes ainda passam por
 `PipelineCommandStep`, um adaptador temporário; elas ainda não são classes de
 domínio próprias. A sequência atual não usa `Parallel`.
 
