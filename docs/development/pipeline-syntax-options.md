@@ -340,9 +340,10 @@ concretas do contrato `Step`. As etapas `box`, `solvate`, `ions-grompp` e
 `ions` também são classes concretas (`CreateBoxStep`, `SolvateSystemStep`,
 `PrepareIonsStep` e `AddIonsStep`) em todos os perfis. `build_pipeline()` projeta
 essas mesmas definições como `PipelineStep` para manter o CLI legado. As etapas
-restantes ainda passam por `PipelineCommandStep`, um adaptador temporário; elas
-ainda não são classes de domínio próprias. A sequência atual não usa
-`Parallel`.
+`em-grompp` e `em` também são classes concretas (`PrepareEnergyMinimizationStep`
+e `EnergyMinimizationStep`). As etapas restantes ainda passam por
+`PipelineCommandStep`, um adaptador temporário; elas ainda não são classes de
+domínio próprias. A sequência atual não usa `Parallel`.
 
 **Compatibilidade do executor:** toda execução pela API usa agora
 `work/workflow_state.json`; o CLI segue usando `work/state.json`. Esses estados

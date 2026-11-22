@@ -523,6 +523,68 @@ class AddIonsStep(GromacsCommandStep):
         )
 
 
+@dataclass
+class PrepareEnergyMinimizationStep(GromacsCommandStep):
+    """Prepare the GROMACS run input for energy minimization."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> PrepareEnergyMinimizationStep:
+        root = project_root.expanduser().resolve()
+        em = root / "work" / "em"
+        box = root / "work" / "box"
+        topology = root / "work" / "topo" / "topol_ions.top"
+        return cls(
+            id="em-grompp",
+            name="Preparar minimização de energia.",
+            command=(
+                _gmx_command(config),
+                "grompp",
+                "-f",
+                "em.mdp",
+                "-c",
+                str(box / "ions.gro"),
+                "-p",
+                str(topology),
+                "-o",
+                "em.tpr",
+            ),
+            workdir=em,
+            input_paths=(em / "em.mdp", box / "ions.gro", topology),
+            output_paths=(em / "em.tpr", em / "mdout.mdp"),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
+@dataclass
+class EnergyMinimizationStep(GromacsCommandStep):
+    """Run the configured GROMACS energy-minimization job."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> EnergyMinimizationStep:
+        root = project_root.expanduser().resolve()
+        em = root / "work" / "em"
+        return cls(
+            id="em",
+            name="Executar minimização de energia.",
+            command=tuple(
+                _mdrun_command(config, _gmx_command(config), "em")
+            ),
+            workdir=em,
+            input_paths=(em / "em.tpr",),
+            output_paths=(
+                em / "em.gro",
+                em / "em.edr",
+                em / "em.log",
+                em / "em.trr",
+            ),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
 @dataclass(frozen=True)
 class Sequence:
     """An ordered composition of workflow items."""
@@ -827,7 +889,6 @@ def build_pipeline(
     prep = work_dir / "prep"
     topo = work_dir / "topo"
     ionized_topology = topo / "topol_ions.top"
-    box = work_dir / "box"
     em = work_dir / "em"
     nvt = work_dir / "nvt"
     npt = work_dir / "npt"
@@ -974,35 +1035,12 @@ def build_pipeline(
             AddIonsStep.from_config(
                 config, project_root, config_path
             ).to_pipeline_step(),
-            PipelineStep(
-                name="em-grompp",
-                description="Preparar minimização de energia.",
-                workdir=em,
-                command=[
-                    gmx,
-                    "grompp",
-                    "-f",
-                    "em.mdp",
-                    "-c",
-                    str(box / "ions.gro"),
-                    "-p",
-                    str(ionized_topology),
-                    "-o",
-                    "em.tpr",
-                ],
-                inputs=[em / "em.mdp", box / "ions.gro", ionized_topology],
-                outputs=[em / "em.tpr", em / "mdout.mdp"],
-                env=gromacs_env,
-            ),
-            PipelineStep(
-                name="em",
-                description="Executar minimização de energia.",
-                workdir=em,
-                command=_mdrun_command(config, gmx, "em"),
-                inputs=[em / "em.tpr"],
-                outputs=[em / "em.gro", em / "em.edr", em / "em.log", em / "em.trr"],
-                env=gromacs_env,
-            ),
+            PrepareEnergyMinimizationStep.from_config(
+                config, project_root
+            ).to_pipeline_step(),
+            EnergyMinimizationStep.from_config(
+                config, project_root
+            ).to_pipeline_step(),
             PipelineStep(
                 name="nvt-grompp",
                 description="Preparar equilíbrio NVT.",
@@ -1421,6 +1459,8 @@ def build_workflow(
             SolvateSystemStep.from_config(config, root, resolved_config),
             PrepareIonsStep.from_config(config, root),
             AddIonsStep.from_config(config, root, resolved_config),
+            PrepareEnergyMinimizationStep.from_config(config, root),
+            EnergyMinimizationStep.from_config(config, root),
         ]
     )
     by_id = {step.id: step for step in concrete_steps}
