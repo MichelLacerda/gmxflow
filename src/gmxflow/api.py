@@ -3,21 +3,27 @@
 from __future__ import annotations
 
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
 
 from gmxflow.config import GmxFlowConfig, load_config
 from gmxflow.executor import (
     StepResult,
+    WorkflowExecutionError,
+    WorkflowStepStatus,
     run_steps,
+    run_workflow_graph,
     run_workspace_setup,
+    runtime_command,
     select_steps,
 )
 from gmxflow.forcefields import resolve_forcefield
 from gmxflow.pipeline import (
     REAL_EXECUTION_STEPS,
+    PipelineCommandStep,
     PipelineStep,
+    WorkflowGraph,
     build_pipeline,
 )
 from gmxflow.preparation.structure import require_mdanalysis
@@ -238,14 +244,94 @@ class GmxFlowProject:
         workspace_result = run_workspace_setup(
             self.config, project_root=self.root
         )
-        results = run_steps(
-            steps,
-            project_root=self.root,
-            start_index=1,
-            on_step_start=on_step_start,
-            on_step_done=on_step_done,
-        )
+        results: list[StepResult] = []
+        remaining_steps = steps
+        start_index = 1
+        if steps and steps[0].name == "prepare":
+            preparation = steps[0]
+            results.append(
+                _run_graph_preparation(
+                    preparation,
+                    project_root=self.root,
+                    on_step_start=on_step_start,
+                    on_step_done=on_step_done,
+                )
+            )
+            remaining_steps = steps[1:]
+            start_index = 2
+        if remaining_steps:
+            results.extend(
+                run_steps(
+                    remaining_steps,
+                    project_root=self.root,
+                    start_index=start_index,
+                    on_step_start=on_step_start,
+                    on_step_done=on_step_done,
+                )
+            )
         return ExecutionReport(
             workspace=workspace_result,
             steps=tuple(results),
         )
+
+
+def _run_graph_preparation(
+    step: PipelineStep,
+    *,
+    project_root: Path,
+    on_step_start: Callable[[int, PipelineStep], None] | None,
+    on_step_done: Callable[[int, StepResult], None] | None,
+) -> StepResult:
+    """Run the existing preparation command through the workflow executor."""
+    if on_step_start is not None:
+        on_step_start(1, step)
+
+    adapted_step = PipelineCommandStep.from_pipeline_step(step)
+    adapted_step = replace(
+        adapted_step,
+        command=tuple(runtime_command(step.command)),
+    )
+    graph = WorkflowGraph.from_workflow(
+        adapted_step,
+        project_inputs=adapted_step.inputs,
+    )
+    artifact_paths = {
+        artifact.key: Path(artifact.key)
+        for artifact in (*adapted_step.inputs, *adapted_step.outputs)
+    }
+
+    try:
+        report = run_workflow_graph(
+            graph,
+            project_root=project_root,
+            artifact_paths=artifact_paths,
+        )
+    except WorkflowExecutionError as error:
+        report = error.report
+
+    workflow_result = report.results[0]
+    returncode = next(
+        (
+            command.returncode
+            for command in workflow_result.commands
+            if command.returncode != 0
+        ),
+        1 if workflow_result.status is WorkflowStepStatus.FAILED else 0,
+    )
+    result = StepResult(
+        step_name=step.name,
+        command=list(runtime_command(step.command)),
+        workdir=step.workdir,
+        log_path=workflow_result.log_path,
+        returncode=returncode,
+        elapsed_seconds=workflow_result.elapsed_seconds,
+        skipped=workflow_result.status is WorkflowStepStatus.SKIPPED,
+    )
+    if on_step_done is not None:
+        on_step_done(1, result)
+    if workflow_result.status is WorkflowStepStatus.FAILED:
+        raise RuntimeError(
+            f"Etapa '{step.name}' falhou com codigo {result.returncode}. "
+            f"Log: {result.log_path}"
+        )
+    return result

@@ -303,19 +303,26 @@ sucessores, continuação de ramo independente, dry-run sem efeitos colaterais,
 logs argv e retomada por versão/estado/fingerprints sem depender de GROMACS.
 Atendido em `tests/test_workflow_executor.py`.
 
-### 4. Migrar uma fatia vertical representativa
+### 4. Migrar uma fatia vertical representativa — concluída (API experimental)
 
-**Escopo:** selecionar um trecho pequeno de um exemplo existente e migrá-lo
-para o novo modelo, mantendo temporariamente a implementação antiga para
-comparação. A seleção deve cobrir entradas, saídas e dependências reais sem
-alterar escolhas científicas.
+**Escopo realizado:** a etapa `prepare` do pipeline real agora é adaptada ao
+contrato `Step` e executada pelo grafo quando `GmxFlowProject.run()` recebe um
+plano iniciado nessa etapa. A preparação continua usando o mesmo comando,
+entradas, saídas e estado definidos por `build_pipeline()`. Se houver etapas
+posteriores no plano, elas continuam no executor legado; o CLI permanece
+inalterado. A implementação antiga é mantida para comparação.
 
-**Fora de escopo:** migrar todo o exemplo, todos os tutoriais ou mudar
-force field, protonação, parâmetros de simulação e análise.
+**Fora de escopo:** migrar o CLI, as demais etapas, todo o exemplo ou todos os
+tutoriais; mudar force field, protonação, parâmetros de simulação e análise;
+validar resultados científicos com GROMACS.
 
-**Critério de aceite:** testes de regressão demonstram equivalência dos
-comandos e dos arquivos esperados para as etapas migradas; qualquer diferença
-necessária é documentada e aprovada explicitamente.
+**Critério de aceite:** testes confirmam que o grafo preserva os comandos e os
+artefatos declarados e comparam a chamada normalizada e os arquivos de saída
+com o executor legado usando um subprocesso simulado. Essa comparação valida a
+integração do software, não a preparação molecular nem a validade científica.
+O formato de estado dos dois executores ainda difere; alternar entre API e CLI
+pode executar `prepare` novamente, e a compatibilidade de retomada fica para a
+etapa 5. Atendido em `tests/test_api.py` e `tests/test_pipeline.py`.
 
 ### 5. Migrar as demais etapas incrementalmente
 

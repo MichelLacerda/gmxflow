@@ -815,7 +815,7 @@ def run_step(
     step.workdir.mkdir(parents=True, exist_ok=True)
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_path = logs_dir / f"{index:02d}_{step.name}.log"
-    command = _runtime_command(step.command)
+    command = runtime_command(step.command)
     state_path = state_path or logs_dir.parent / "state.json"
     produced_paths = produced_paths or set()
     global_inputs = global_inputs or []
@@ -998,7 +998,8 @@ def _step_index(names: list[str], name: str | None) -> int:
         ) from error
 
 
-def _runtime_command(command: list[str]) -> list[str]:
+def runtime_command(command: list[str]) -> list[str]:
+    """Resolve package-local commands the same way for every executor."""
     if command[:1] == ["gmxflow"]:
         return [
             sys.executable,

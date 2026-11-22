@@ -56,7 +56,7 @@ class PipelineStep(BaseModel):
     state: dict[str, object] = Field(default_factory=dict)
 
 
-@dataclass(frozen=True)
+@dataclass
 class PipelineCommandStep:
     """Workflow ``Step`` adapter that preserves a legacy command step."""
 

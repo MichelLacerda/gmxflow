@@ -1,10 +1,19 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from gmxflow.api import ExecutionReport, GmxFlowProject
 from gmxflow.config import default_config, to_toml
-from gmxflow.executor import StepResult
+from gmxflow.executor import (
+    StepResult,
+    WorkflowExecutionReport,
+    WorkflowStepResult,
+    WorkflowStepStatus,
+    run_step,
+    runtime_command,
+)
+from gmxflow.pipeline import build_pipeline
 
 
 def _write_project_config(project_dir: Path) -> Path:
@@ -299,11 +308,21 @@ def test_run_validates_then_uses_shared_executor(
     )
     step_result = StepResult(
         step_name="prepare",
-        command=["gmxflow", "prepare-complex"],
+        command=runtime_command(
+            project.plan(until="prepare")[0].command
+        ),
         workdir=project.root / "work" / "prep",
         log_path=project.root / "work" / "logs" / "01_prepare.log",
         returncode=0,
         elapsed_seconds=0.2,
+    )
+    topology_result = StepResult(
+        step_name="topology",
+        command=["gmx", "pdb2gmx"],
+        workdir=project.root / "work" / "topo",
+        log_path=project.root / "work" / "logs" / "02_topology.log",
+        returncode=0,
+        elapsed_seconds=0.3,
     )
 
     monkeypatch.setattr(
@@ -315,21 +334,123 @@ def test_run_validates_then_uses_shared_executor(
         lambda config, project_root: events.append("workspace") or workspace,
     )
 
+    def fake_run_workflow_graph(graph, **kwargs):
+        events.append("workflow_graph")
+        assert graph.topological_order == ("prepare",)
+        assert kwargs["project_root"] == project.root
+        return WorkflowExecutionReport(
+            results=(
+                WorkflowStepResult(
+                    step_id="prepare",
+                    status=WorkflowStepStatus.SUCCEEDED,
+                    log_path=step_result.log_path,
+                    elapsed_seconds=step_result.elapsed_seconds,
+                ),
+            ),
+            dependencies=graph.dependencies,
+            artifact_paths=kwargs["artifact_paths"],
+        )
+
+    monkeypatch.setattr("gmxflow.api.run_workflow_graph", fake_run_workflow_graph)
+
     def fake_run_steps(steps, **kwargs):
         events.append("run_steps")
-        assert [step.name for step in steps] == ["prepare"]
+        assert [step.name for step in steps] == ["topology"]
         assert kwargs["project_root"] == project.root
-        assert kwargs["start_index"] == 1
-        return [step_result]
+        assert kwargs["start_index"] == 2
+        return [topology_result]
 
     monkeypatch.setattr("gmxflow.api.run_steps", fake_run_steps)
 
-    report = project.run(until="prepare")
+    report = project.run(until="topology")
 
-    assert events == ["validate", "workspace", "run_steps"]
+    assert events == ["validate", "workspace", "workflow_graph", "run_steps"]
     assert report.workspace is workspace
-    assert report.steps == (step_result,)
-    assert report.results == (workspace, step_result)
+    assert report.steps == (step_result, topology_result)
+    assert report.results == (workspace, step_result, topology_result)
+
+
+def test_graph_preparation_matches_legacy_command_and_outputs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project_root = tmp_path / "graph_project"
+    project = GmxFlowProject.open(_write_project_config(project_root))
+    (project_root / "inputs").mkdir()
+    (project_root / "inputs" / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (project_root / "inputs" / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
+
+    legacy_root = tmp_path / "legacy_project"
+    legacy_config = _write_project_config(legacy_root)
+    (legacy_root / "inputs").mkdir()
+    (legacy_root / "inputs" / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (legacy_root / "inputs" / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
+
+    def fake_subprocess_run(command, *, cwd, **kwargs):
+        output_content = {
+            "receptor_fixed.pdb": "RECEPTOR\n",
+            "ligante_fixed.pdb": "LIGAND\n",
+            "complexo.pdb": "COMPLEX\n",
+        }
+        for filename, content in output_content.items():
+            (Path(cwd) / filename).write_text(content, encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
+    monkeypatch.setattr(
+        "gmxflow.api.run_workspace_setup",
+        lambda config, project_root: StepResult(
+            step_name="workspace",
+            command=["<internal>", "ensure-workspace"],
+            workdir=project_root / "work",
+            log_path=project_root / "work" / "logs" / "00_workspace.log",
+            returncode=0,
+            elapsed_seconds=0.0,
+        ),
+    )
+
+    callback_events: list[tuple[str, int, str]] = []
+    graph_report = project.run(
+        until="prepare",
+        on_step_start=lambda index, step: callback_events.append(
+            ("start", index, step.name)
+        ),
+        on_step_done=lambda index, result: callback_events.append(
+            ("done", index, result.step_name)
+        ),
+    )
+    legacy_step = build_pipeline(
+        project.config,
+        config_dir=legacy_root,
+        config_path=legacy_config,
+    )[0]
+    legacy_result = run_step(
+        legacy_step,
+        logs_dir=legacy_root / "work" / "logs",
+        index=1,
+    )
+
+    graph_result = graph_report.steps[0]
+    graph_command = [
+        argument.replace(str(project_root), "<project-root>")
+        for argument in graph_result.command
+    ]
+    legacy_command = [
+        argument.replace(str(legacy_root), "<project-root>")
+        for argument in legacy_result.command
+    ]
+    assert graph_command == legacy_command
+    assert graph_result.returncode == legacy_result.returncode == 0
+    assert callback_events == [
+        ("start", 1, "prepare"),
+        ("done", 1, "prepare"),
+    ]
+    graph_outputs = sorted((project_root / "work" / "prep").glob("*.pdb"))
+    legacy_outputs = sorted((legacy_root / "work" / "prep").glob("*.pdb"))
+    assert [path.name for path in graph_outputs] == [path.name for path in legacy_outputs]
+    assert [path.read_bytes() for path in graph_outputs] == [
+        path.read_bytes() for path in legacy_outputs
+    ]
 
 
 def test_run_rejects_unreleased_steps_before_workspace_setup(
