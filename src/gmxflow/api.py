@@ -251,14 +251,16 @@ class GmxFlowProject:
         remaining_steps = steps
         start_index = 1
         graph_step_count = 0
-        if steps and steps[0].name == "prepare":
-            graph_step_count = (
-                2
-                if len(steps) > 1 and steps[1].name == "topology"
-                else 1
+        graph_step_names = {"prepare", "topology", "box"}
+        if steps and steps[0].name in graph_step_names:
+            graph_step_count = next(
+                (
+                    index
+                    for index, step in enumerate(steps)
+                    if step.name not in graph_step_names
+                ),
+                len(steps),
             )
-        elif steps and steps[0].name == "topology":
-            graph_step_count = 1
         if graph_step_count:
             results.extend(
                 _run_graph_steps(
