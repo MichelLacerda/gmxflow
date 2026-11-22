@@ -85,6 +85,21 @@ def test_show_report_delegates_using_project_root(
     assert shown_projects == [(project.root, project.config)]
 
 
+def test_edit_config_delegates_to_notebook_form(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
+    shown_projects: list[GmxFlowProject] = []
+    monkeypatch.setattr(
+        "gmxflow.notebook_config.edit_project_config", shown_projects.append
+    )
+
+    result = project.edit_config()
+
+    assert result is None
+    assert shown_projects == [project]
+
+
 def test_show_execution_delegates_execution_results(
     tmp_path: Path, monkeypatch
 ) -> None:

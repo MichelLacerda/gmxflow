@@ -21,7 +21,7 @@ ligand_resname = "LIG"
 ph = 7.4
 
 [force_field]
-name = "amber99sb-ildn"
+name = "charmm36-feb2026_cgenff-5.0.ff"
 water = "tip3p"
 
 [box]
@@ -37,12 +37,12 @@ neutralize = true
 
 [simulation]
 profile = "smoke"
-temperature_k = 300
+temperature_k = 300.0
 pressure_bar = 1.0
 dt_ps = 0.002
 production_ns = 100
-nvt_ps = 100
-npt_ps = 100
+nvt_ps = 100.0
+npt_ps = 100.0
 
 [mdrun]
 engine = "auto"

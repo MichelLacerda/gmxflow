@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from gmxflow.config import GmxFlowConfig, load_config
 from gmxflow.executor import (
@@ -50,7 +50,7 @@ class ExecutionReport:
         return (self.workspace, *self.steps)
 
 
-@dataclass(frozen=True)
+@dataclass
 class GmxFlowProject:
     """A project loaded from its configuration file.
 
@@ -109,6 +109,12 @@ class GmxFlowProject:
         from gmxflow.notebook import show_report
 
         show_report(self.root, self.config)
+
+    def edit_config(self) -> Any:
+        """Display an interactive notebook form for editing ``project.toml``."""
+        from gmxflow.notebook_config import edit_project_config
+
+        return edit_project_config(self)
 
     def show_execution(self, report: ExecutionReport) -> None:
         """Display an execution summary with statuses, durations, and log paths."""

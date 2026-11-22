@@ -47,6 +47,7 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
         if cell["cell_type"] == "code"
     )
     assert "GmxFlowProject.open('project.toml')" in notebook_code
+    assert "project.edit_config()" in notebook_code
     assert "project.validate()" in notebook_code
     assert "project.run()" in notebook_code
     assert "execution_report = project.run()" in notebook_code

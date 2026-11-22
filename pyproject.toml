@@ -21,7 +21,14 @@ dependencies = [
 gmxflow = "gmxflow.cli:app"
 
 [project.optional-dependencies]
-notebook = ["ipython>=8", "ipympl>=0.9", "mdanalysis>=2.9", "pandas>=2"]
+notebook = [
+    "ipython>=8",
+    "ipympl>=0.9",
+    "ipywidgets>=8",
+    "mdanalysis>=2.9",
+    "pandas>=2",
+    "tomlkit>=0.13",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -33,7 +40,9 @@ markers = ["gromacs: requires a working GROMACS installation and force field"]
 
 [dependency-groups]
 dev = [
+    "ipywidgets>=8",
     "mypy>=2.1.0",
     "pytest>=9.0.3",
     "ruff>=0.15.14",
+    "tomlkit>=0.13",
 ]
