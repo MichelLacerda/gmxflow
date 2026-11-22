@@ -1081,6 +1081,202 @@ class SasaStep(GromacsCommandStep):
         )
 
 
+@dataclass
+class PlotAnalysisStep(GromacsCommandStep):
+    """Generate configured figures from analysis and thermodynamics data."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path, config_path: Path
+    ) -> PlotAnalysisStep:
+        root = project_root.expanduser().resolve()
+        analysis = root / "work" / "analysis"
+        if config.input.ligand_kind == "none":
+            input_paths = [
+                analysis / "rmsd_backbone.xvg",
+                analysis / "rmsd_reference.xvg",
+                analysis / "rmsf_residuos.xvg",
+                analysis / "gyrate.xvg",
+            ]
+            output_paths = [
+                analysis / "rmsd_bb.png",
+                analysis / "rmsd_reference.png",
+                analysis / "rmsf.png",
+                analysis / "rg.png",
+            ]
+        else:
+            input_paths = [
+                analysis / "rmsd_backbone.xvg",
+                analysis / "rmsd_ligante.xvg",
+                analysis / "rmsf_residuos.xvg",
+                analysis / "gyrate.xvg",
+                analysis / "numcont.xvg",
+                analysis / "hbond.xvg",
+            ]
+            output_paths = [
+                analysis / "painel_completo.png",
+                analysis / "rmsd_bb.png",
+                analysis / "rmsd_lig.png",
+                analysis / "rmsf.png",
+                analysis / "rg.png",
+                analysis / "ncont.png",
+                analysis / "hbond.png",
+            ]
+        input_paths.extend(
+            [
+                analysis / "em_potential.xvg",
+                analysis / "nvt_temperature.xvg",
+                analysis / "npt_pressure.xvg",
+                analysis / "npt_density.xvg",
+            ]
+        )
+        output_paths.extend(
+            [
+                analysis / "em_potential.png",
+                analysis / "nvt_temperature.png",
+                analysis / "npt_pressure.png",
+                analysis / "npt_density.png",
+            ]
+        )
+        if config.analysis.sasa:
+            input_paths.extend(
+                [
+                    analysis / "sasa_complexo.xvg",
+                    analysis / "sasa_ligante.xvg",
+                    analysis / "bsa.xvg",
+                ]
+            )
+            output_paths.extend(
+                [
+                    analysis / "sasa_complexo.png",
+                    analysis / "sasa_ligante.png",
+                    analysis / "bsa.png",
+                ]
+            )
+        if config.analysis.catalytic_residues.strip():
+            input_paths.extend(
+                [
+                    analysis / "catalytic_distance.xvg",
+                    analysis / "catalytic_occupancy.xvg",
+                ]
+            )
+            output_paths.extend(
+                [
+                    analysis / "catalytic_distance.png",
+                    analysis / "catalytic_occupancy.png",
+                ]
+            )
+        return cls(
+            id="plots",
+            name="Gerar figuras das análises.",
+            command=(
+                "gmxflow",
+                "plot-analysis",
+                "--project",
+                str(config_path.expanduser().resolve()),
+            ),
+            workdir=analysis,
+            input_paths=tuple(input_paths),
+            output_paths=tuple(output_paths),
+            state={
+                "plots": config.plots.model_dump(),
+                "analysis.sasa": config.analysis.sasa,
+                "analysis.catalytic_residues": config.analysis.catalytic_residues,
+                "analysis.catalytic_distance_cutoff_nm": (
+                    config.analysis.catalytic_distance_cutoff_nm
+                ),
+            },
+        )
+
+
+@dataclass
+class ReportStep(GromacsCommandStep):
+    """Build the distributable report and its associated data/figure folders."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path, config_path: Path
+    ) -> ReportStep:
+        root = project_root.expanduser().resolve()
+        analysis = root / "work" / "analysis"
+        outputs_dir = root / "outputs"
+        if config.input.ligand_kind == "none":
+            input_paths = [
+                analysis / "rmsd_backbone.xvg",
+                analysis / "rmsd_reference.xvg",
+                analysis / "rmsf_residuos.xvg",
+                analysis / "gyrate.xvg",
+            ]
+        else:
+            input_paths = [
+                analysis / "rmsd_backbone.xvg",
+                analysis / "rmsd_ligante.xvg",
+                analysis / "rmsf_residuos.xvg",
+                analysis / "gyrate.xvg",
+                analysis / "mindist.xvg",
+                analysis / "numcont.xvg",
+                analysis / "hbond.xvg",
+            ]
+        if config.analysis.interaction_energy:
+            input_paths.append(analysis / "interaction_energy.xvg")
+        if config.analysis.sasa:
+            input_paths.extend(
+                [
+                    analysis / "sasa_receptor.xvg",
+                    analysis / "sasa_ligante.xvg",
+                    analysis / "sasa_complexo.xvg",
+                    analysis / "bsa.xvg",
+                ]
+            )
+        if config.analysis.catalytic_residues.strip():
+            input_paths.extend(
+                [
+                    analysis / "catalytic_distance.xvg",
+                    analysis / "catalytic_occupancy.xvg",
+                ]
+            )
+        input_paths.extend(
+            [
+                analysis / "em_potential.xvg",
+                analysis / "nvt_temperature.xvg",
+                analysis / "npt_pressure.xvg",
+                analysis / "npt_density.xvg",
+            ]
+        )
+        input_paths.extend(
+            PlotAnalysisStep.from_config(
+                config, root, config_path
+            ).output_paths
+        )
+        return cls(
+            id="report",
+            name="Gerar relatório consolidado das análises.",
+            command=(
+                "gmxflow",
+                "report",
+                "--project",
+                str(config_path.expanduser().resolve()),
+            ),
+            workdir=outputs_dir,
+            input_paths=tuple(input_paths),
+            output_paths=(
+                outputs_dir / "figures",
+                outputs_dir / "data",
+                outputs_dir / "summary.json",
+                outputs_dir / "summary.txt",
+                outputs_dir / "report.html",
+            ),
+            state={
+                "project": config.project.model_dump(),
+                "input.ligand_kind": config.input.ligand_kind,
+                "input.ligand_resname": config.input.ligand_resname,
+                "simulation": config.simulation.model_dump(),
+                "analysis": config.analysis.model_dump(),
+                "plots": config.plots.model_dump(),
+            },
+        )
+
+
 @dataclass(frozen=True)
 class Sequence:
     """An ordered composition of workflow items."""
@@ -1384,8 +1580,6 @@ def build_pipeline(
 
     prep = work_dir / "prep"
     topo = work_dir / "topo"
-    analysis = work_dir / "analysis"
-    outputs = project_root / "outputs"
     prepare_step = PrepareComplexStep.from_config(config, project_root, config_path)
     steps = [prepare_step.to_pipeline_step()]
 
@@ -1453,47 +1647,6 @@ def build_pipeline(
             ),
         )
 
-    if config.input.ligand_kind == "none":
-        final_analysis_inputs = [
-            analysis / "rmsd_backbone.xvg",
-            analysis / "rmsd_reference.xvg",
-            analysis / "rmsf_residuos.xvg",
-            analysis / "gyrate.xvg",
-        ]
-        plot_inputs = list(final_analysis_inputs)
-        plot_outputs = [
-            analysis / "rmsd_bb.png",
-            analysis / "rmsd_reference.png",
-            analysis / "rmsf.png",
-            analysis / "rg.png",
-        ]
-    else:
-        final_analysis_inputs = [
-            analysis / "rmsd_backbone.xvg",
-            analysis / "rmsd_ligante.xvg",
-            analysis / "rmsf_residuos.xvg",
-            analysis / "gyrate.xvg",
-            analysis / "mindist.xvg",
-            analysis / "numcont.xvg",
-            analysis / "hbond.xvg",
-        ]
-        plot_inputs = [
-            analysis / "rmsd_backbone.xvg",
-            analysis / "rmsd_ligante.xvg",
-            analysis / "rmsf_residuos.xvg",
-            analysis / "gyrate.xvg",
-            analysis / "numcont.xvg",
-            analysis / "hbond.xvg",
-        ]
-        plot_outputs = [
-            analysis / "painel_completo.png",
-            analysis / "rmsd_bb.png",
-            analysis / "rmsd_lig.png",
-            analysis / "rmsf.png",
-            analysis / "rg.png",
-            analysis / "ncont.png",
-            analysis / "hbond.png",
-        ]
     steps.extend(
         [
             CreateBoxStep.from_config(config, project_root).to_pipeline_step(),
@@ -1546,114 +1699,19 @@ def build_pipeline(
             config, project_root, config_path
         )
         steps.append(interaction_step.to_pipeline_step())
-        final_analysis_inputs.append(analysis / "interaction_energy.xvg")
     if config.analysis.sasa:
         sasa_step = SasaStep.from_config(
             config, project_root, config_path
         )
         steps.append(sasa_step.to_pipeline_step())
-        final_analysis_inputs.extend(
-            [
-                analysis / "sasa_receptor.xvg",
-                analysis / "sasa_ligante.xvg",
-                analysis / "sasa_complexo.xvg",
-                analysis / "bsa.xvg",
-            ]
-        )
-    if config.analysis.catalytic_residues.strip():
-        final_analysis_inputs.extend(
-            [
-                analysis / "catalytic_distance.xvg",
-                analysis / "catalytic_occupancy.xvg",
-            ]
-        )
-    thermodynamic_outputs = [
-        analysis / "em_potential.xvg",
-        analysis / "nvt_temperature.xvg",
-        analysis / "npt_pressure.xvg",
-        analysis / "npt_density.xvg",
-    ]
-    final_analysis_inputs.extend(thermodynamic_outputs)
-    plot_inputs.extend(thermodynamic_outputs)
-    plot_outputs.extend(
-        [
-            analysis / "em_potential.png",
-            analysis / "nvt_temperature.png",
-            analysis / "npt_pressure.png",
-            analysis / "npt_density.png",
-        ]
-    )
-    if config.analysis.sasa:
-        plot_inputs.extend(
-            [
-                analysis / "sasa_complexo.xvg",
-                analysis / "sasa_ligante.xvg",
-                analysis / "bsa.xvg",
-            ]
-        )
-        plot_outputs.extend(
-            [
-                analysis / "sasa_complexo.png",
-                analysis / "sasa_ligante.png",
-                analysis / "bsa.png",
-            ]
-        )
-    if config.analysis.catalytic_residues.strip():
-        plot_inputs.extend(
-            [
-                analysis / "catalytic_distance.xvg",
-                analysis / "catalytic_occupancy.xvg",
-            ]
-        )
-        plot_outputs.extend(
-            [
-                analysis / "catalytic_distance.png",
-                analysis / "catalytic_occupancy.png",
-            ]
-        )
     steps.extend(
         [
-            PipelineStep(
-                name="plots",
-                description="Gerar figuras das análises.",
-                workdir=analysis,
-                command=["gmxflow", "plot-analysis", "--project", str(config_path)],
-                inputs=plot_inputs,
-                outputs=plot_outputs,
-                state={
-                    "plots": config.plots.model_dump(),
-                    "analysis.sasa": config.analysis.sasa,
-                    "analysis.catalytic_residues": config.analysis.catalytic_residues,
-                    "analysis.catalytic_distance_cutoff_nm": (
-                        config.analysis.catalytic_distance_cutoff_nm
-                    ),
-                },
-            ),
-            PipelineStep(
-                name="report",
-                description="Gerar relatório consolidado das análises.",
-                workdir=outputs,
-                command=["gmxflow", "report", "--project", str(config_path)],
-                inputs=[
-                    *final_analysis_inputs,
-                    *plot_outputs,
-                ],
-                outputs=[
-                    outputs / "figures",
-                    outputs / "data",
-                    outputs / "summary.json",
-                    outputs / "summary.txt",
-                    outputs / "report.html",
-                ],
-                state={
-                    "project": config.project.model_dump(),
-                    "input.ligand_kind": config.input.ligand_kind,
-                    "input.ligand_resname": config.input.ligand_resname,
-                    "simulation": config.simulation.model_dump(),
-                    "analysis": config.analysis.model_dump(),
-                    "plots": config.plots.model_dump(),
-                },
-            ),
+            PlotAnalysisStep.from_config(
+                config, project_root, config_path
+            ).to_pipeline_step(),
+            ReportStep.from_config(
+                config, project_root, config_path
+            ).to_pipeline_step(),
         ]
     )
     return steps
@@ -1709,6 +1767,8 @@ def build_workflow(
             FitTrajectoryStep.from_config(config, root),
             AnalyzeTrajectoryStep.from_config(config, root, resolved_config),
             ThermodynamicsStep.from_config(config, root, resolved_config),
+            PlotAnalysisStep.from_config(config, root, resolved_config),
+            ReportStep.from_config(config, root, resolved_config),
         ]
     )
     if config.analysis.interaction_energy:

@@ -349,9 +349,10 @@ trajetória (`pbc-nojump`, `pbc-center` e `fit`) também tem Steps concretos:
 `RemovePeriodicJumpsStep`, `CenterTrajectoryStep` e `FitTrajectoryStep`. As
 etapas `analysis` e `thermodynamics` também agora são `AnalyzeTrajectoryStep` e
 `ThermodynamicsStep`; quando habilitadas, `interaction-energy` e `sasa` são
-`InteractionEnergyStep` e `SasaStep`. Plotagem, relatório e demais etapas ainda
-passam por `PipelineCommandStep`, um adaptador temporário; elas ainda não são
-classes de domínio próprias. A sequência atual não usa `Parallel`.
+`InteractionEnergyStep` e `SasaStep`. Plotagem e relatório são `PlotAnalysisStep`
+e `ReportStep`. As etapas restantes ainda passam por `PipelineCommandStep`, um
+adaptador temporário; elas ainda não são classes de domínio próprias. A
+sequência atual não usa `Parallel`.
 
 **Compatibilidade do executor:** toda execução pela API usa agora
 `work/workflow_state.json`; o CLI segue usando `work/state.json`. Esses estados

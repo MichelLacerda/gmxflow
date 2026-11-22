@@ -19,6 +19,7 @@ from gmxflow.pipeline import (
     NptEquilibrationStep,
     Parallel,
     PipelineCommandStep,
+    PlotAnalysisStep,
     PrepareIonsStep,
     PrepareEnergyMinimizationStep,
     PrepareNvtStep,
@@ -27,6 +28,7 @@ from gmxflow.pipeline import (
     PrepareComplexStep,
     ProteinTopologyStep,
     ProductionStep,
+    ReportStep,
     RemovePeriodicJumpsStep,
     Sequence,
     SolvateSystemStep,
@@ -473,7 +475,7 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
     workflow = build_workflow(config, config_dir=tmp_path)
 
     assert isinstance(workflow, Sequence)
-    assert [type(step) for step in workflow.items[:21]] == [
+    assert [type(step) for step in workflow.items] == [
         PrepareComplexStep,
         LigandTopologyStep,
         ProteinTopologyStep,
@@ -495,9 +497,10 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
         FitTrajectoryStep,
         AnalyzeTrajectoryStep,
         ThermodynamicsStep,
+        PlotAnalysisStep,
+        ReportStep,
     ]
-    assert isinstance(workflow.items[21], PipelineCommandStep)
-    assert [step.id for step in workflow.items[:21]] == [
+    assert [step.id for step in workflow.items] == [
         "prepare",
         "ligand-topology",
         "protein-topology",
@@ -519,6 +522,8 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
         "fit",
         "analysis",
         "thermodynamics",
+        "plots",
+        "report",
     ]
 
 
