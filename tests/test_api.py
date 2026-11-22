@@ -359,10 +359,18 @@ def test_run_validates_then_uses_shared_executor(
     em_grompp_result = StepResult(
         step_name="em-grompp",
         command=runtime_command(project.plan(until="em-grompp")[6].command),
-        workdir=project.root / "work" / "minimization",
+        workdir=project.root / "work" / "em",
         log_path=project.root / "work" / "logs" / "07_em-grompp.log",
         returncode=0,
         elapsed_seconds=0.8,
+    )
+    em_result = StepResult(
+        step_name="em",
+        command=runtime_command(project.plan(until="em")[7].command),
+        workdir=project.root / "work" / "em",
+        log_path=project.root / "work" / "logs" / "08_em.log",
+        returncode=0,
+        elapsed_seconds=0.9,
     )
 
     monkeypatch.setattr(
@@ -383,6 +391,7 @@ def test_run_validates_then_uses_shared_executor(
             "solvate",
             "ions-grompp",
             "ions",
+            "em-grompp",
         )
         assert kwargs["project_root"] == project.root
         step_results = {
@@ -392,6 +401,7 @@ def test_run_validates_then_uses_shared_executor(
             "solvate": solvate_result,
             "ions-grompp": ions_grompp_result,
             "ions": ions_result,
+            "em-grompp": em_grompp_result,
         }
         return WorkflowExecutionReport(
             results=tuple(
@@ -411,14 +421,14 @@ def test_run_validates_then_uses_shared_executor(
 
     def fake_run_steps(steps, **kwargs):
         events.append("run_steps")
-        assert [step.name for step in steps] == ["em-grompp"]
+        assert [step.name for step in steps] == ["em"]
         assert kwargs["project_root"] == project.root
-        assert kwargs["start_index"] == 7
-        return [em_grompp_result]
+        assert kwargs["start_index"] == 8
+        return [em_result]
 
     monkeypatch.setattr("gmxflow.api.run_steps", fake_run_steps)
 
-    report = project.run(until="em-grompp")
+    report = project.run(until="em")
 
     assert events == ["validate", "workspace", "workflow_graph", "run_steps"]
     assert report.workspace is workspace
@@ -430,6 +440,7 @@ def test_run_validates_then_uses_shared_executor(
         ions_grompp_result,
         ions_result,
         em_grompp_result,
+        em_result,
     )
     assert report.results == (
         workspace,
@@ -440,10 +451,11 @@ def test_run_validates_then_uses_shared_executor(
         ions_grompp_result,
         ions_result,
         em_grompp_result,
+        em_result,
     )
 
 
-def test_graph_prefix_through_ions_matches_legacy_commands_and_outputs(
+def test_graph_prefix_through_em_grompp_matches_legacy_commands_and_outputs(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -454,6 +466,9 @@ def test_graph_prefix_through_ions_matches_legacy_commands_and_outputs(
     graph_ions_mdp = project_root / "work" / "box" / "ions.mdp"
     graph_ions_mdp.parent.mkdir(parents=True)
     graph_ions_mdp.write_text("MDP\n", encoding="utf-8")
+    graph_em_mdp = project_root / "work" / "em" / "em.mdp"
+    graph_em_mdp.parent.mkdir(parents=True)
+    graph_em_mdp.write_text("MDP\n", encoding="utf-8")
     legacy_state = project_root / "work" / "state.json"
     legacy_state.parent.mkdir(parents=True, exist_ok=True)
     legacy_state.write_text(
@@ -470,6 +485,9 @@ def test_graph_prefix_through_ions_matches_legacy_commands_and_outputs(
     legacy_ions_mdp = legacy_root / "work" / "box" / "ions.mdp"
     legacy_ions_mdp.parent.mkdir(parents=True)
     legacy_ions_mdp.write_text("MDP\n", encoding="utf-8")
+    legacy_em_mdp = legacy_root / "work" / "em" / "em.mdp"
+    legacy_em_mdp.parent.mkdir(parents=True)
+    legacy_em_mdp.write_text("MDP\n", encoding="utf-8")
 
     subprocess_calls: list[tuple[str, ...]] = []
 
@@ -506,7 +524,11 @@ def test_graph_prefix_through_ions_matches_legacy_commands_and_outputs(
                 encoding="utf-8",
             )
         elif "grompp" in command:
-            output_content = {"ions.tpr": "IONS_TPR\n", "mdout.mdp": "MDTOUT\n"}
+            output_file = command[command.index("-o") + 1]
+            output_content = {
+                output_file: f"{Path(output_file).stem.upper()}_TPR\n",
+                "mdout.mdp": "MDTOUT\n",
+            }
         else:
             output_content = {
                 "complexo.gro": "GRO\n",
@@ -536,7 +558,7 @@ def test_graph_prefix_through_ions_matches_legacy_commands_and_outputs(
 
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run(
-        until="ions",
+        until="em-grompp",
         on_step_start=lambda index, step: callback_events.append(
             ("start", index, step.name)
         ),
@@ -544,7 +566,7 @@ def test_graph_prefix_through_ions_matches_legacy_commands_and_outputs(
             ("done", index, result.step_name)
         ),
     )
-    resumed_report = project.run(until="ions")
+    resumed_report = project.run(until="em-grompp")
 
     topology_only_root = tmp_path / "topology_only_project"
     topology_only_project = GmxFlowProject.open(
@@ -630,14 +652,41 @@ def test_graph_prefix_through_ions_matches_legacy_commands_and_outputs(
     ions_only_topology.write_text("SOLVATED\n", encoding="utf-8")
     ions_only_report = ions_only_project.run(from_step="ions", until="ions")
 
+    em_grompp_only_root = tmp_path / "em_grompp_only_project"
+    em_grompp_only_project = GmxFlowProject.open(
+        _write_project_config(em_grompp_only_root)
+    )
+    em_grompp_only_inputs = em_grompp_only_root / "inputs"
+    em_grompp_only_inputs.mkdir()
+    (em_grompp_only_inputs / "receptor.pdb").write_text(
+        "ATOM\n", encoding="utf-8"
+    )
+    (em_grompp_only_inputs / "ligante.pdb").write_text(
+        "ATOM\n", encoding="utf-8"
+    )
+    em_grompp_only_dir = em_grompp_only_root / "work" / "em"
+    em_grompp_only_dir.mkdir(parents=True)
+    (em_grompp_only_dir / "em.mdp").write_text("MDP\n", encoding="utf-8")
+    em_grompp_only_box = em_grompp_only_root / "work" / "box"
+    em_grompp_only_box.mkdir(parents=True)
+    (em_grompp_only_box / "ions.gro").write_text("IONS\n", encoding="utf-8")
+    em_grompp_only_topology = (
+        em_grompp_only_root / "work" / "topo" / "topol_ions.top"
+    )
+    em_grompp_only_topology.parent.mkdir(parents=True)
+    em_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
+    em_grompp_only_report = em_grompp_only_project.run(
+        from_step="em-grompp", until="em-grompp"
+    )
+
     legacy_steps = build_pipeline(
         project.config,
         config_dir=legacy_root,
         config_path=legacy_config,
-    )[:6]
+    )[:7]
     legacy_results = run_steps(legacy_steps, project_root=legacy_root)
 
-    assert len(graph_report.steps) == len(legacy_results) == 6
+    assert len(graph_report.steps) == len(legacy_results) == 7
     for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
         graph_command = [
             argument.replace(str(project_root), "<project-root>")
@@ -660,7 +709,9 @@ def test_graph_prefix_through_ions_matches_legacy_commands_and_outputs(
     assert ions_grompp_only_report.steps[0].returncode == 0
     assert ions_only_report.steps[0].step_name == "ions"
     assert ions_only_report.steps[0].returncode == 0
-    assert len(subprocess_calls) == 17  # graph twice, isolated steps, legacy prefix
+    assert em_grompp_only_report.steps[0].step_name == "em-grompp"
+    assert em_grompp_only_report.steps[0].returncode == 0
+    assert len(subprocess_calls) == 20  # graph twice, isolated steps, legacy prefix
     assert legacy_state.read_bytes() == legacy_state_before
     assert (project_root / "work" / "workflow_state.json").is_file()
     assert callback_events == [
@@ -676,6 +727,8 @@ def test_graph_prefix_through_ions_matches_legacy_commands_and_outputs(
         ("done", 5, "ions-grompp"),
         ("start", 6, "ions"),
         ("done", 6, "ions"),
+        ("start", 7, "em-grompp"),
+        ("done", 7, "em-grompp"),
     ]
     for relative_dir in (
         Path("work/prep"),
