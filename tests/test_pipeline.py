@@ -10,7 +10,9 @@ from gmxflow.pipeline import (
     AssembleComplexStep,
     Artifact,
     CreateBoxStep,
+    CenterTrajectoryStep,
     EnergyMinimizationStep,
+    FitTrajectoryStep,
     LigandTopologyStep,
     NptEquilibrationStep,
     Parallel,
@@ -23,6 +25,7 @@ from gmxflow.pipeline import (
     PrepareComplexStep,
     ProteinTopologyStep,
     ProductionStep,
+    RemovePeriodicJumpsStep,
     Sequence,
     SolvateSystemStep,
     NvtEquilibrationStep,
@@ -466,7 +469,7 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
     workflow = build_workflow(config, config_dir=tmp_path)
 
     assert isinstance(workflow, Sequence)
-    assert [type(step) for step in workflow.items[:16]] == [
+    assert [type(step) for step in workflow.items[:19]] == [
         PrepareComplexStep,
         LigandTopologyStep,
         ProteinTopologyStep,
@@ -483,9 +486,12 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
         NptEquilibrationStep,
         PrepareProductionStep,
         ProductionStep,
+        RemovePeriodicJumpsStep,
+        CenterTrajectoryStep,
+        FitTrajectoryStep,
     ]
-    assert isinstance(workflow.items[16], PipelineCommandStep)
-    assert [step.id for step in workflow.items[:16]] == [
+    assert isinstance(workflow.items[19], PipelineCommandStep)
+    assert [step.id for step in workflow.items[:19]] == [
         "prepare",
         "ligand-topology",
         "protein-topology",
@@ -502,6 +508,9 @@ def test_small_molecule_workflow_composes_concrete_steps_and_legacy_adapters(
         "npt",
         "production-grompp",
         "production",
+        "pbc-nojump",
+        "pbc-center",
+        "fit",
     ]
 
 

@@ -792,6 +792,114 @@ class ProductionStep(GromacsCommandStep):
         )
 
 
+@dataclass
+class RemovePeriodicJumpsStep(GromacsCommandStep):
+    """Unwrap the production trajectory to remove periodic jumps."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> RemovePeriodicJumpsStep:
+        root = project_root.expanduser().resolve()
+        prod = root / "work" / "prod"
+        return cls(
+            id="pbc-nojump",
+            name="Remover saltos por condições periódicas.",
+            command=(
+                _gmx_command(config),
+                "trjconv",
+                "-s",
+                "md.tpr",
+                "-f",
+                "md.xtc",
+                "-o",
+                "md_nojump.xtc",
+                "-pbc",
+                "nojump",
+            ),
+            workdir=prod,
+            input_paths=(prod / "md.tpr", prod / "md.xtc"),
+            output_paths=(prod / "md_nojump.xtc",),
+            stdin="0\n",
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
+@dataclass
+class CenterTrajectoryStep(GromacsCommandStep):
+    """Center the trajectory and make molecules whole in the unit cell."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> CenterTrajectoryStep:
+        root = project_root.expanduser().resolve()
+        prod = root / "work" / "prod"
+        return cls(
+            id="pbc-center",
+            name="Centralizar sistema e manter moléculas compactas.",
+            command=(
+                _gmx_command(config),
+                "trjconv",
+                "-s",
+                "md.tpr",
+                "-f",
+                "md_nojump.xtc",
+                "-o",
+                "md_nopbc.xtc",
+                "-pbc",
+                "mol",
+                "-center",
+                "-ur",
+                "compact",
+            ),
+            workdir=prod,
+            input_paths=(prod / "md.tpr", prod / "md_nojump.xtc"),
+            output_paths=(prod / "md_nopbc.xtc",),
+            stdin=(
+                f"{config.analysis.center_group}\n"
+                f"{config.analysis.output_group}\n"
+            ),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
+@dataclass
+class FitTrajectoryStep(GromacsCommandStep):
+    """Fit the processed trajectory by configured rotational/translational groups."""
+
+    @classmethod
+    def from_config(
+        cls, config: GmxFlowConfig, project_root: Path
+    ) -> FitTrajectoryStep:
+        root = project_root.expanduser().resolve()
+        prod = root / "work" / "prod"
+        return cls(
+            id="fit",
+            name="Alinhar trajetória por rotação e translação.",
+            command=(
+                _gmx_command(config),
+                "trjconv",
+                "-s",
+                "md.tpr",
+                "-f",
+                "md_nopbc.xtc",
+                "-o",
+                "md_fit.xtc",
+                "-fit",
+                "rot+trans",
+            ),
+            workdir=prod,
+            input_paths=(prod / "md.tpr", prod / "md_nopbc.xtc"),
+            output_paths=(prod / "md_fit.xtc",),
+            stdin=(
+                f"{config.analysis.fit_group}\n"
+                f"{config.analysis.output_group}\n"
+            ),
+            env=_gromacs_env(config.force_field.name, root),
+        )
+
+
 @dataclass(frozen=True)
 class Sequence:
     """An ordered composition of workflow items."""
@@ -1260,72 +1368,15 @@ def build_pipeline(
                 config, project_root
             ).to_pipeline_step(),
             ProductionStep.from_config(config, project_root).to_pipeline_step(),
-            PipelineStep(
-                name="pbc-nojump",
-                description="Remover saltos por condições periódicas.",
-                workdir=prod,
-                command=[
-                    gmx,
-                    "trjconv",
-                    "-s",
-                    "md.tpr",
-                    "-f",
-                    "md.xtc",
-                    "-o",
-                    "md_nojump.xtc",
-                    "-pbc",
-                    "nojump",
-                ],
-                stdin="0\n",
-                inputs=[prod / "md.tpr", prod / "md.xtc"],
-                outputs=[prod / "md_nojump.xtc"],
-                env=gromacs_env,
-            ),
-            PipelineStep(
-                name="pbc-center",
-                description="Centralizar sistema e manter moléculas compactas.",
-                workdir=prod,
-                command=[
-                    gmx,
-                    "trjconv",
-                    "-s",
-                    "md.tpr",
-                    "-f",
-                    "md_nojump.xtc",
-                    "-o",
-                    "md_nopbc.xtc",
-                    "-pbc",
-                    "mol",
-                    "-center",
-                    "-ur",
-                    "compact",
-                ],
-                stdin=f"{config.analysis.center_group}\n{config.analysis.output_group}\n",
-                inputs=[prod / "md.tpr", prod / "md_nojump.xtc"],
-                outputs=[prod / "md_nopbc.xtc"],
-                env=gromacs_env,
-            ),
-            PipelineStep(
-                name="fit",
-                description="Alinhar trajetória por rotação e translação.",
-                workdir=prod,
-                command=[
-                    gmx,
-                    "trjconv",
-                    "-s",
-                    "md.tpr",
-                    "-f",
-                    "md_nopbc.xtc",
-                    "-o",
-                    "md_fit.xtc",
-                    "-fit",
-                    "rot+trans",
-                ],
-                stdin=f"{config.analysis.fit_group}\n{config.analysis.output_group}\n",
-                inputs=[prod / "md.tpr", prod / "md_nopbc.xtc"],
-                outputs=[prod / "md_fit.xtc"],
-                env=gromacs_env,
-            ),
+            RemovePeriodicJumpsStep.from_config(
+                config, project_root
+            ).to_pipeline_step(),
+            CenterTrajectoryStep.from_config(
+                config, project_root
+            ).to_pipeline_step(),
+            FitTrajectoryStep.from_config(
+                config, project_root
+            ).to_pipeline_step(),
             PipelineStep(
                 name="analysis",
                 description="Executar análises principais.",
@@ -1563,6 +1614,9 @@ def build_workflow(
             NptEquilibrationStep.from_config(config, root),
             PrepareProductionStep.from_config(config, root),
             ProductionStep.from_config(config, root),
+            RemovePeriodicJumpsStep.from_config(config, root),
+            CenterTrajectoryStep.from_config(config, root),
+            FitTrajectoryStep.from_config(config, root),
         ]
     )
     by_id = {step.id: step for step in concrete_steps}
