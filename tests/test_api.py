@@ -428,6 +428,14 @@ def test_run_validates_then_uses_shared_executor(
         returncode=0,
         elapsed_seconds=1.6,
     )
+    pbc_center_result = StepResult(
+        step_name="pbc-center",
+        command=runtime_command(project.plan(until="pbc-center")[15].command),
+        workdir=project.root / "work" / "prod",
+        log_path=project.root / "work" / "logs" / "16_pbc-center.log",
+        returncode=0,
+        elapsed_seconds=1.7,
+    )
 
     monkeypatch.setattr(
         "gmxflow.api.GmxFlowProject.validate",
@@ -455,6 +463,7 @@ def test_run_validates_then_uses_shared_executor(
             "npt",
             "production-grompp",
             "production",
+            "pbc-nojump",
         )
         assert kwargs["project_root"] == project.root
         step_results = {
@@ -472,6 +481,7 @@ def test_run_validates_then_uses_shared_executor(
             "npt": npt_result,
             "production-grompp": production_grompp_result,
             "production": production_result,
+            "pbc-nojump": pbc_nojump_result,
         }
         return WorkflowExecutionReport(
             results=tuple(
@@ -491,14 +501,14 @@ def test_run_validates_then_uses_shared_executor(
 
     def fake_run_steps(steps, **kwargs):
         events.append("run_steps")
-        assert [step.name for step in steps] == ["pbc-nojump"]
+        assert [step.name for step in steps] == ["pbc-center"]
         assert kwargs["project_root"] == project.root
-        assert kwargs["start_index"] == 15
-        return [pbc_nojump_result]
+        assert kwargs["start_index"] == 16
+        return [pbc_center_result]
 
     monkeypatch.setattr("gmxflow.api.run_steps", fake_run_steps)
 
-    report = project.run(until="pbc-nojump")
+    report = project.run(until="pbc-center")
 
     assert events == ["validate", "workspace", "workflow_graph", "run_steps"]
     assert report.workspace is workspace
@@ -518,6 +528,7 @@ def test_run_validates_then_uses_shared_executor(
         production_grompp_result,
         production_result,
         pbc_nojump_result,
+        pbc_center_result,
     )
     assert report.results == (
         workspace,
@@ -536,10 +547,11 @@ def test_run_validates_then_uses_shared_executor(
         production_grompp_result,
         production_result,
         pbc_nojump_result,
+        pbc_center_result,
     )
 
 
-def test_graph_prefix_through_production_matches_legacy_commands_and_outputs(
+def test_graph_prefix_through_pbc_nojump_matches_legacy_commands_and_outputs(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -592,9 +604,11 @@ def test_graph_prefix_through_production_matches_legacy_commands_and_outputs(
     legacy_prod_mdp.write_text("MDP\n", encoding="utf-8")
 
     subprocess_calls: list[tuple[str, ...]] = []
+    subprocess_inputs: list[tuple[tuple[str, ...], str | None]] = []
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         subprocess_calls.append(tuple(command))
+        subprocess_inputs.append((tuple(command), kwargs.get("input")))
         if "prepare-complex" in command:
             output_content = {
                 "receptor_fixed.pdb": "RECEPTOR\n",
@@ -631,6 +645,9 @@ def test_graph_prefix_through_production_matches_legacy_commands_and_outputs(
                 output_file: f"{Path(output_file).stem.upper()}_TPR\n",
                 "mdout.mdp": "MDTOUT\n",
             }
+        elif "trjconv" in command:
+            output_file = command[command.index("-o") + 1]
+            output_content = {output_file: "NOJUMP_XTC\n"}
         elif "mdrun" in command:
             output_prefix = command[command.index("-deffnm") + 1]
             output_content = {
@@ -678,7 +695,7 @@ def test_graph_prefix_through_production_matches_legacy_commands_and_outputs(
 
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run(
-        until="production",
+        until="pbc-nojump",
         on_step_start=lambda index, step: callback_events.append(
             ("start", index, step.name)
         ),
@@ -686,7 +703,7 @@ def test_graph_prefix_through_production_matches_legacy_commands_and_outputs(
             ("done", index, result.step_name)
         ),
     )
-    resumed_report = project.run(until="production")
+    resumed_report = project.run(until="pbc-nojump")
 
     topology_only_root = tmp_path / "topology_only_project"
     topology_only_project = GmxFlowProject.open(
@@ -934,14 +951,34 @@ def test_graph_prefix_through_production_matches_legacy_commands_and_outputs(
         from_step="production", until="production"
     )
 
+    pbc_nojump_only_root = tmp_path / "pbc_nojump_only_project"
+    pbc_nojump_only_project = GmxFlowProject.open(
+        _write_project_config(pbc_nojump_only_root)
+    )
+    pbc_nojump_only_inputs = pbc_nojump_only_root / "inputs"
+    pbc_nojump_only_inputs.mkdir()
+    (pbc_nojump_only_inputs / "receptor.pdb").write_text(
+        "ATOM\n", encoding="utf-8"
+    )
+    (pbc_nojump_only_inputs / "ligante.pdb").write_text(
+        "ATOM\n", encoding="utf-8"
+    )
+    pbc_nojump_only_dir = pbc_nojump_only_root / "work" / "prod"
+    pbc_nojump_only_dir.mkdir(parents=True)
+    (pbc_nojump_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
+    (pbc_nojump_only_dir / "md.xtc").write_text("MD_XTC\n", encoding="utf-8")
+    pbc_nojump_only_report = pbc_nojump_only_project.run(
+        from_step="pbc-nojump", until="pbc-nojump"
+    )
+
     legacy_steps = build_pipeline(
         project.config,
         config_dir=legacy_root,
         config_path=legacy_config,
-    )[:14]
+    )[:15]
     legacy_results = run_steps(legacy_steps, project_root=legacy_root)
 
-    assert len(graph_report.steps) == len(legacy_results) == 14
+    assert len(graph_report.steps) == len(legacy_results) == 15
     for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
         graph_command = [
             argument.replace(str(project_root), "<project-root>")
@@ -980,7 +1017,13 @@ def test_graph_prefix_through_production_matches_legacy_commands_and_outputs(
     assert production_grompp_only_report.steps[0].returncode == 0
     assert production_only_report.steps[0].step_name == "production"
     assert production_only_report.steps[0].returncode == 0
-    assert len(subprocess_calls) == 41  # graph twice, isolated steps, legacy prefix
+    assert pbc_nojump_only_report.steps[0].step_name == "pbc-nojump"
+    assert pbc_nojump_only_report.steps[0].returncode == 0
+    assert len(subprocess_calls) == 44  # graph twice, isolated steps, legacy prefix
+    assert sum(
+        command[-1:] == ("nojump",) and stdin == "0\n"
+        for command, stdin in subprocess_inputs
+    ) == 3  # graph run, isolated graph step, and legacy reference
     assert legacy_state.read_bytes() == legacy_state_before
     assert (project_root / "work" / "workflow_state.json").is_file()
     assert callback_events == [
@@ -1012,6 +1055,8 @@ def test_graph_prefix_through_production_matches_legacy_commands_and_outputs(
         ("done", 13, "production-grompp"),
         ("start", 14, "production"),
         ("done", 14, "production"),
+        ("start", 15, "pbc-nojump"),
+        ("done", 15, "pbc-nojump"),
     ]
     for relative_dir in (
         Path("work/prep"),
