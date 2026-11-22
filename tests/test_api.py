@@ -454,9 +454,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     thermodynamics_result = StepResult(
         step_name="thermodynamics",
-        command=runtime_command(
-            project.plan(until="thermodynamics")[18].command
-        ),
+        command=runtime_command(project.plan(until="thermodynamics")[18].command),
         workdir=project.root / "work" / "analysis",
         log_path=project.root / "work" / "logs" / "19_thermodynamics.log",
         returncode=0,
@@ -493,6 +491,7 @@ def test_run_validates_then_uses_shared_executor(
             "pbc-center",
             "fit",
             "analysis",
+            "thermodynamics",
         )
         assert kwargs["project_root"] == project.root
         step_results = {
@@ -514,6 +513,7 @@ def test_run_validates_then_uses_shared_executor(
             "pbc-center": pbc_center_result,
             "fit": fit_result,
             "analysis": analysis_result,
+            "thermodynamics": thermodynamics_result,
         }
         return WorkflowExecutionReport(
             results=tuple(
@@ -531,18 +531,9 @@ def test_run_validates_then_uses_shared_executor(
 
     monkeypatch.setattr("gmxflow.api.run_workflow_graph", fake_run_workflow_graph)
 
-    def fake_run_steps(steps, **kwargs):
-        events.append("run_steps")
-        assert [step.name for step in steps] == ["thermodynamics"]
-        assert kwargs["project_root"] == project.root
-        assert kwargs["start_index"] == 19
-        return [thermodynamics_result]
-
-    monkeypatch.setattr("gmxflow.api.run_steps", fake_run_steps)
-
     report = project.run(until="thermodynamics")
 
-    assert events == ["validate", "workspace", "workflow_graph", "run_steps"]
+    assert events == ["validate", "workspace", "workflow_graph"]
     assert report.workspace is workspace
     assert report.steps == (
         step_result,
@@ -589,7 +580,7 @@ def test_run_validates_then_uses_shared_executor(
     )
 
 
-def test_graph_prefix_through_analysis_matches_legacy_commands_and_outputs(
+def test_graph_prefix_through_thermodynamics_matches_legacy_commands_and_outputs(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -688,6 +679,11 @@ def test_graph_prefix_through_analysis_matches_legacy_commands_and_outputs(
                 Path(output).name: "ANALYSIS\n"
                 for output in project.plan(until="analysis")[-1].outputs
             }
+        elif "thermodynamics" in command:
+            output_content = {
+                Path(output).name: "THERMODYNAMICS\n"
+                for output in project.plan(until="thermodynamics")[-1].outputs
+            }
         elif "trjconv" in command:
             output_file = command[command.index("-o") + 1]
             output_content = {output_file: "NOJUMP_XTC\n"}
@@ -738,7 +734,7 @@ def test_graph_prefix_through_analysis_matches_legacy_commands_and_outputs(
 
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run(
-        until="analysis",
+        until="thermodynamics",
         on_step_start=lambda index, step: callback_events.append(
             ("start", index, step.name)
         ),
@@ -746,7 +742,7 @@ def test_graph_prefix_through_analysis_matches_legacy_commands_and_outputs(
             ("done", index, result.step_name)
         ),
     )
-    resumed_report = project.run(until="analysis")
+    resumed_report = project.run(until="thermodynamics")
 
     topology_only_root = tmp_path / "topology_only_project"
     topology_only_project = GmxFlowProject.open(
@@ -1064,14 +1060,28 @@ def test_graph_prefix_through_analysis_matches_legacy_commands_and_outputs(
         from_step="analysis", until="analysis"
     )
 
+    thermo_only_root = tmp_path / "thermo_only_project"
+    thermo_only_project = GmxFlowProject.open(_write_project_config(thermo_only_root))
+    thermo_only_inputs = thermo_only_root / "inputs"
+    thermo_only_inputs.mkdir()
+    (thermo_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (thermo_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
+    for phase in ("em", "nvt", "npt"):
+        phase_dir = thermo_only_root / "work" / phase
+        phase_dir.mkdir(parents=True)
+        (phase_dir / f"{phase}.edr").write_text("ENERGY\n", encoding="utf-8")
+    thermo_only_report = thermo_only_project.run(
+        from_step="thermodynamics", until="thermodynamics"
+    )
+
     legacy_steps = build_pipeline(
         project.config,
         config_dir=legacy_root,
         config_path=legacy_config,
-    )[:18]
+    )[:19]
     legacy_results = run_steps(legacy_steps, project_root=legacy_root)
 
-    assert len(graph_report.steps) == len(legacy_results) == 18
+    assert len(graph_report.steps) == len(legacy_results) == 19
     for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
         graph_command = [
             argument.replace(str(project_root), "<project-root>")
@@ -1118,7 +1128,9 @@ def test_graph_prefix_through_analysis_matches_legacy_commands_and_outputs(
     assert fit_only_report.steps[0].returncode == 0
     assert analysis_only_report.steps[0].step_name == "analysis"
     assert analysis_only_report.steps[0].returncode == 0
-    assert len(subprocess_calls) == 53  # graph twice, isolated steps, legacy prefix
+    assert thermo_only_report.steps[0].step_name == "thermodynamics"
+    assert thermo_only_report.steps[0].returncode == 0
+    assert len(subprocess_calls) == 56  # graph twice, isolated steps, legacy prefix
     assert sum(
         command[-1:] == ("nojump",) and stdin == "0\n"
         for command, stdin in subprocess_inputs
@@ -1170,6 +1182,8 @@ def test_graph_prefix_through_analysis_matches_legacy_commands_and_outputs(
         ("done", 17, "fit"),
         ("start", 18, "analysis"),
         ("done", 18, "analysis"),
+        ("start", 19, "thermodynamics"),
+        ("done", 19, "thermodynamics"),
     ]
     for relative_dir in (
         Path("work/prep"),

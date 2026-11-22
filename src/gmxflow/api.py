@@ -271,7 +271,7 @@ class GmxFlowProject:
             "fit",
         }
         if self.config.input.ligand_kind in {"peptide", "none"}:
-            graph_step_names.add("analysis")
+            graph_step_names.update({"analysis", "thermodynamics"})
         if steps and steps[0].name in graph_step_names:
             graph_step_count = next(
                 (
