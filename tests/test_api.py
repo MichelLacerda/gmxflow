@@ -412,6 +412,14 @@ def test_run_validates_then_uses_shared_executor(
         returncode=0,
         elapsed_seconds=1.4,
     )
+    production_result = StepResult(
+        step_name="production",
+        command=runtime_command(project.plan(until="production")[13].command),
+        workdir=project.root / "work" / "prod",
+        log_path=project.root / "work" / "logs" / "14_production.log",
+        returncode=0,
+        elapsed_seconds=1.5,
+    )
 
     monkeypatch.setattr(
         "gmxflow.api.GmxFlowProject.validate",
@@ -437,6 +445,7 @@ def test_run_validates_then_uses_shared_executor(
             "nvt",
             "npt-grompp",
             "npt",
+            "production-grompp",
         )
         assert kwargs["project_root"] == project.root
         step_results = {
@@ -452,6 +461,7 @@ def test_run_validates_then_uses_shared_executor(
             "nvt": nvt_result,
             "npt-grompp": npt_grompp_result,
             "npt": npt_result,
+            "production-grompp": production_grompp_result,
         }
         return WorkflowExecutionReport(
             results=tuple(
@@ -471,14 +481,14 @@ def test_run_validates_then_uses_shared_executor(
 
     def fake_run_steps(steps, **kwargs):
         events.append("run_steps")
-        assert [step.name for step in steps] == ["production-grompp"]
+        assert [step.name for step in steps] == ["production"]
         assert kwargs["project_root"] == project.root
-        assert kwargs["start_index"] == 13
-        return [production_grompp_result]
+        assert kwargs["start_index"] == 14
+        return [production_result]
 
     monkeypatch.setattr("gmxflow.api.run_steps", fake_run_steps)
 
-    report = project.run(until="production-grompp")
+    report = project.run(until="production")
 
     assert events == ["validate", "workspace", "workflow_graph", "run_steps"]
     assert report.workspace is workspace
@@ -496,6 +506,7 @@ def test_run_validates_then_uses_shared_executor(
         npt_grompp_result,
         npt_result,
         production_grompp_result,
+        production_result,
     )
     assert report.results == (
         workspace,
@@ -512,10 +523,11 @@ def test_run_validates_then_uses_shared_executor(
         npt_grompp_result,
         npt_result,
         production_grompp_result,
+        production_result,
     )
 
 
-def test_graph_prefix_through_npt_matches_legacy_commands_and_outputs(
+def test_graph_prefix_through_production_grompp_matches_legacy_commands_and_outputs(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -646,7 +658,7 @@ def test_graph_prefix_through_npt_matches_legacy_commands_and_outputs(
 
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run(
-        until="npt",
+        until="production-grompp",
         on_step_start=lambda index, step: callback_events.append(
             ("start", index, step.name)
         ),
@@ -654,7 +666,7 @@ def test_graph_prefix_through_npt_matches_legacy_commands_and_outputs(
             ("done", index, result.step_name)
         ),
     )
-    resumed_report = project.run(until="npt")
+    resumed_report = project.run(until="production-grompp")
 
     topology_only_root = tmp_path / "topology_only_project"
     topology_only_project = GmxFlowProject.open(
@@ -855,14 +867,42 @@ def test_graph_prefix_through_npt_matches_legacy_commands_and_outputs(
     (npt_only_dir / "npt.tpr").write_text("NPT_TPR\n", encoding="utf-8")
     npt_only_report = npt_only_project.run(from_step="npt", until="npt")
 
+    production_grompp_only_root = tmp_path / "production_grompp_only_project"
+    production_grompp_only_project = GmxFlowProject.open(
+        _write_project_config(production_grompp_only_root)
+    )
+    production_grompp_only_inputs = production_grompp_only_root / "inputs"
+    production_grompp_only_inputs.mkdir()
+    (production_grompp_only_inputs / "receptor.pdb").write_text(
+        "ATOM\n", encoding="utf-8"
+    )
+    (production_grompp_only_inputs / "ligante.pdb").write_text(
+        "ATOM\n", encoding="utf-8"
+    )
+    production_grompp_only_dir = production_grompp_only_root / "work" / "prod"
+    production_grompp_only_dir.mkdir(parents=True)
+    (production_grompp_only_dir / "md.mdp").write_text("MDP\n", encoding="utf-8")
+    production_grompp_only_npt = production_grompp_only_root / "work" / "npt"
+    production_grompp_only_npt.mkdir(parents=True)
+    (production_grompp_only_npt / "npt.gro").write_text("NPT_GRO\n", encoding="utf-8")
+    (production_grompp_only_npt / "npt.cpt").write_text("NPT_CPT\n", encoding="utf-8")
+    production_grompp_only_topology = (
+        production_grompp_only_root / "work" / "topo" / "topol_ions.top"
+    )
+    production_grompp_only_topology.parent.mkdir(parents=True)
+    production_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
+    production_grompp_only_report = production_grompp_only_project.run(
+        from_step="production-grompp", until="production-grompp"
+    )
+
     legacy_steps = build_pipeline(
         project.config,
         config_dir=legacy_root,
         config_path=legacy_config,
-    )[:12]
+    )[:13]
     legacy_results = run_steps(legacy_steps, project_root=legacy_root)
 
-    assert len(graph_report.steps) == len(legacy_results) == 12
+    assert len(graph_report.steps) == len(legacy_results) == 13
     for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
         graph_command = [
             argument.replace(str(project_root), "<project-root>")
@@ -897,7 +937,9 @@ def test_graph_prefix_through_npt_matches_legacy_commands_and_outputs(
     assert npt_grompp_only_report.steps[0].returncode == 0
     assert npt_only_report.steps[0].step_name == "npt"
     assert npt_only_report.steps[0].returncode == 0
-    assert len(subprocess_calls) == 35  # graph twice, isolated steps, legacy prefix
+    assert production_grompp_only_report.steps[0].step_name == "production-grompp"
+    assert production_grompp_only_report.steps[0].returncode == 0
+    assert len(subprocess_calls) == 38  # graph twice, isolated steps, legacy prefix
     assert legacy_state.read_bytes() == legacy_state_before
     assert (project_root / "work" / "workflow_state.json").is_file()
     assert callback_events == [
@@ -925,6 +967,8 @@ def test_graph_prefix_through_npt_matches_legacy_commands_and_outputs(
         ("done", 11, "npt-grompp"),
         ("start", 12, "npt"),
         ("done", 12, "npt"),
+        ("start", 13, "production-grompp"),
+        ("done", 13, "production-grompp"),
     ]
     for relative_dir in (
         Path("work/prep"),

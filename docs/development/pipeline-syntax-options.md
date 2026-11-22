@@ -333,10 +333,10 @@ seleção de etapas e estado salvo para projetos existentes.
 
 **Fatia implementada:** nos fluxos `peptide` e `none`, o prefixo
 `prepare → topology → box → solvate → ions-grompp → ions → em-grompp → em →
-nvt-grompp → nvt → npt-grompp → npt` é executado pelo grafo quando o plano
-começa em `prepare`. Também é possível iniciar diretamente em qualquer uma
-dessas etapas, de `topology` a `npt`, desde que suas entradas já existam. As
-etapas posteriores começam por `production-grompp` e continuam no executor
+nvt-grompp → nvt → npt-grompp → npt → production-grompp` é executado pelo grafo
+quando o plano começa em `prepare`. Também é possível iniciar diretamente em
+qualquer uma dessas etapas, de `topology` a `production-grompp`, desde que suas
+entradas já existam. A etapa posterior, `production`, continua no executor
 legado. O fluxo
 `small_molecule` (`ligand-topology`, `protein-topology` e `assemble-complex`)
 não foi migrado.
