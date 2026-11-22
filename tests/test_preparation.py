@@ -1,4 +1,6 @@
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from typer.testing import CliRunner
@@ -7,6 +9,7 @@ from gmxflow.config import default_config, to_toml
 from gmxflow.preparation import prepare_complex
 from gmxflow.preparation.disulfide import detect_disulfides
 from gmxflow.preparation.protonation import histidine_form_for_ph
+from gmxflow.preparation.structure import remove_residues
 
 
 def test_histidine_form_for_ph() -> None:
@@ -75,6 +78,107 @@ def test_prepare_complex_writes_outputs_and_preserves_ligand_pose(tmp_path: Path
     assert "CYS A   2" not in complex_text
     assert "ALA B   4" in complex_text
     assert "   9.000   8.000   7.000" in complex_text
+
+
+def test_prepare_complex_supports_protein_without_ligand(tmp_path: Path) -> None:
+    receptor = tmp_path / "receptor.pdb"
+    output_dir = tmp_path / "prep"
+    receptor.write_text(
+        _atom(1, "N", "HIS", "A", 1, 1.0, 2.0, 3.0, "N") + "\n",
+        encoding="utf-8",
+    )
+
+    result = prepare_complex(
+        receptor,
+        None,
+        output_dir,
+        ph=7.4,
+        ligand_kind="none",
+    )
+
+    assert result.ligand_pdb is None
+    assert result.ligand_atoms == 0
+    assert not (output_dir / "ligante_fixed.pdb").exists()
+    complex_text = result.complex_pdb.read_text(encoding="utf-8")
+    assert "sistema sem ligante" in complex_text
+    assert "HID A   1" in complex_text
+    assert " B " not in complex_text
+
+
+def test_remove_residues_uses_mdanalysis_and_writes_new_pdb(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_path = tmp_path / "input.pdb"
+    input_path.write_text("source\n", encoding="utf-8")
+    output_path = tmp_path / "work" / "filtered.pdb"
+    selections: list[str] = []
+
+    class FakeAtomGroup:
+        n_atoms = 3
+
+        def write(self, output: str) -> None:
+            Path(output).write_text("filtered atoms\n", encoding="utf-8")
+
+    class FakeUniverse:
+        class Atoms:
+            n_atoms = 5
+
+        atoms = Atoms()
+
+        def __init__(self, path: str) -> None:
+            assert path == str(input_path)
+
+        def select_atoms(self, selection: str) -> FakeAtomGroup:
+            selections.append(selection)
+            return FakeAtomGroup()
+
+    mdanalysis = ModuleType("MDAnalysis")
+    mdanalysis.Universe = FakeUniverse
+    monkeypatch.setitem(sys.modules, "MDAnalysis", mdanalysis)
+
+    removed_atoms = remove_residues(input_path, output_path, (" HOH ", "WAT"))
+
+    assert removed_atoms == 2
+    assert selections == ["not resname HOH WAT"]
+    assert input_path.read_text(encoding="utf-8") == "source\n"
+    assert output_path.read_text(encoding="utf-8") == "filtered atoms\n"
+
+
+def test_prepare_complex_filters_receptor_to_work_without_changing_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    receptor = tmp_path / "receptor.pdb"
+    protein_atom = _atom(1, "N", "HIS", "A", 1, 1, 2, 3, "N")
+    receptor.write_text(
+        protein_atom + "\n" + _atom(2, "O", "HOH", "A", 2, 4, 5, 6, "O") + "\n",
+        encoding="utf-8",
+    )
+    selections: list[tuple[Path, Path, tuple[str, ...]]] = []
+
+    def fake_remove_residues(source: Path, destination: Path, names: tuple[str, ...]) -> int:
+        selections.append((source, destination, names))
+        destination.write_text(protein_atom + "\n", encoding="utf-8")
+        return 1
+
+    monkeypatch.setattr(
+        "gmxflow.preparation.complex.remove_residues", fake_remove_residues
+    )
+
+    result = prepare_complex(
+        receptor,
+        None,
+        tmp_path / "work" / "prep",
+        ph=7.4,
+        ligand_kind="none",
+        remove_resnames=("HOH",),
+    )
+
+    assert result.cleaned_receptor_pdb == tmp_path / "work" / "prep" / "receptor_filtered.pdb"
+    assert selections == [
+        (receptor, result.cleaned_receptor_pdb, ("HOH",))
+    ]
+    assert "HOH" not in result.cleaned_receptor_pdb.read_text(encoding="utf-8")
+    assert "HOH" in receptor.read_text(encoding="utf-8")
 
 
 def test_prepare_complex_uses_charmm_histidine_names(tmp_path: Path) -> None:

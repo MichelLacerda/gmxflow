@@ -140,7 +140,7 @@ def startproject(
         str,
         typer.Option(
             "--ligand-kind",
-            help="Tipo de ligante inicial: peptide ou small_molecule.",
+            help="Tipo de sistema inicial: peptide, small_molecule ou none.",
         ),
     ] = "peptide",
     gpu: Annotated[
@@ -400,13 +400,17 @@ def prepare_complex(
         typer.Option("--force", help="Permite sobrescrever arquivos de preparação."),
     ] = False,
 ) -> None:
-    """Prepara receptor, ligante e complexo dentro de work/prep."""
+    """Prepara a proteína, o ligante opcional e o complexo em work/prep."""
     loaded = load_config(config)
     config_path = config.expanduser().resolve()
     project_root = config_path.parent
     output_dir = project_root / "work" / "prep"
     receptor_pdb = _resolve_project_path(loaded.input.receptor_pdb, project_root)
-    ligand_pdb = _resolve_project_path(loaded.input.ligand_pdb, project_root)
+    ligand_pdb = (
+        None
+        if loaded.input.ligand_kind == "none"
+        else _resolve_project_path(loaded.input.ligand_pdb, project_root)
+    )
 
     try:
         result = prepare_complex_files(
@@ -417,14 +421,18 @@ def prepare_complex(
             force_field_name=loaded.force_field.name,
             ligand_kind=loaded.input.ligand_kind,
             ligand_resname=loaded.input.ligand_resname,
+            remove_resnames=tuple(loaded.input.remove_resnames),
             force=force,
         )
-    except (FileExistsError, FileNotFoundError, ValueError) as error:
+    except (FileExistsError, FileNotFoundError, ValueError, RuntimeError) as error:
         raise typer.BadParameter(str(error)) from error
 
     console.print(f"Complexo preparado: [bold]{result.complex_pdb}[/bold]")
+    if result.cleaned_receptor_pdb is not None:
+        console.print(f"PDB filtrado: [bold]{result.cleaned_receptor_pdb}[/bold]")
     console.print(f"Átomos do receptor: {result.receptor_atoms}")
-    console.print(f"Átomos do ligante: {result.ligand_atoms}")
+    if result.ligand_pdb is not None:
+        console.print(f"Átomos do ligante: {result.ligand_atoms}")
     console.print(f"Histidina: {result.histidine_form}")
     console.print(f"Pontes S-S: {result.disulfide_residues or '-'}")
 

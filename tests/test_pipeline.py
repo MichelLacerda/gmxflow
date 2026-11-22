@@ -41,6 +41,42 @@ def test_topology_command_uses_force_field_and_water(tmp_path: Path) -> None:
     ]
 
 
+def test_protein_only_pipeline_omits_ligand_steps_and_metrics(tmp_path: Path) -> None:
+    receptor = tmp_path / "inputs" / "receptor.pdb"
+    receptor.parent.mkdir()
+    receptor.write_text("ATOM\n", encoding="utf-8")
+    config = default_config("protein_only")
+    config.input.ligand_kind = "none"
+    config.input.ligand_pdb = ""
+    config.input.remove_resnames = ["HOH"]
+    steps = build_pipeline(config, config_dir=tmp_path, strict_inputs=True)
+
+    prepare, topology, analysis, plots = (
+        next(step for step in steps if step.name == name)
+        for name in ("prepare", "topology", "analysis", "plots")
+    )
+    assert prepare.inputs == [tmp_path.resolve() / "inputs" / "receptor.pdb"]
+    assert prepare.outputs == [
+        tmp_path.resolve() / "work" / "prep" / "receptor_filtered.pdb",
+        tmp_path.resolve() / "work" / "prep" / "receptor_fixed.pdb",
+        tmp_path.resolve() / "work" / "prep" / "complexo.pdb",
+    ]
+    assert prepare.state["input.remove_resnames"] == ["HOH"]
+    assert "ligante_fixed.pdb" not in " ".join(map(str, prepare.outputs))
+    assert topology.stdin == "0\n0\n"
+    assert not any("chain_B" in str(path) for path in topology.outputs)
+    assert analysis.outputs == [
+        tmp_path.resolve() / "work" / "analysis" / "rmsd_backbone.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "rmsf_residuos.xvg",
+        tmp_path.resolve() / "work" / "analysis" / "gyrate.xvg",
+    ]
+    assert [path.name for path in plots.outputs] == [
+        "rmsd_bb.png",
+        "rmsf.png",
+        "rg.png",
+    ]
+
+
 def test_gromacs_steps_use_gmxlib_for_project_force_field(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -67,7 +67,8 @@ def build_pipeline(
 
     if strict_inputs:
         _require_file(receptor_pdb)
-        _require_file(ligand_pdb)
+        if config.input.ligand_kind != "none":
+            _require_file(ligand_pdb)
         if config.input.ligand_kind == "small_molecule":
             _require_file(ligand_mol2)
             _require_file(ligand_str)
@@ -87,10 +88,22 @@ def build_pipeline(
     ligand = work_dir / "ligand"
     ligand_prefix = config.input.ligand_resname.lower()
 
+    preparation_inputs = [receptor_pdb]
+    preparation_outputs = [prep / "receptor_fixed.pdb", prep / "complexo.pdb"]
+    if config.input.remove_resnames:
+        preparation_outputs.insert(0, prep / "receptor_filtered.pdb")
+    if config.input.ligand_kind != "none":
+        preparation_inputs.append(ligand_pdb)
+        preparation_outputs.insert(1, prep / "ligante_fixed.pdb")
+
     steps = [
         PipelineStep(
             name="prepare",
-            description="Preparar complexo receptor-ligante.",
+            description=(
+                "Preparar proteína sem ligante."
+                if config.input.ligand_kind == "none"
+                else "Preparar complexo receptor-ligante."
+            ),
             workdir=prep,
             command=[
                 "gmxflow",
@@ -99,16 +112,13 @@ def build_pipeline(
                 str(config_path),
                 "--force",
             ],
-            inputs=[receptor_pdb, ligand_pdb],
-            outputs=[
-                prep / "receptor_fixed.pdb",
-                prep / "ligante_fixed.pdb",
-                prep / "complexo.pdb",
-            ],
+            inputs=preparation_inputs,
+            outputs=preparation_outputs,
             state={
                 "input.ph": config.input.ph,
                 "input.ligand_kind": config.input.ligand_kind,
                 "input.ligand_resname": config.input.ligand_resname,
+                "input.remove_resnames": config.input.remove_resnames,
                 "force_field.name": config.force_field.name,
             },
         ),
@@ -195,6 +205,24 @@ def build_pipeline(
             ]
         )
     else:
+        topology_chains = 1 if config.input.ligand_kind == "none" else 2
+        topology_outputs = [topo / "complexo.gro", topo / "topol.top"]
+        if config.input.ligand_kind == "none":
+            topology_outputs.extend(
+                [
+                    topo / "topol_Protein_chain_A.itp",
+                    topo / "posre_Protein_chain_A.itp",
+                ]
+            )
+        else:
+            topology_outputs.extend(
+                [
+                    topo / "topol_Protein_chain_A.itp",
+                    topo / "topol_Protein_chain_B.itp",
+                    topo / "posre_Protein_chain_A.itp",
+                    topo / "posre_Protein_chain_B.itp",
+                ]
+            )
         steps.append(
             PipelineStep(
                 name="topology",
@@ -222,16 +250,9 @@ def build_pipeline(
                     "-merge",
                     "no",
                 ],
-                stdin=_terminal_selection_stdin(config, chains=2),
+                stdin=_terminal_selection_stdin(config, chains=topology_chains),
                 inputs=[prep / "complexo.pdb"],
-                outputs=[
-                    topo / "complexo.gro",
-                    topo / "topol.top",
-                    topo / "topol_Protein_chain_A.itp",
-                    topo / "topol_Protein_chain_B.itp",
-                    topo / "posre_Protein_chain_A.itp",
-                    topo / "posre_Protein_chain_B.itp",
-                ],
+                outputs=topology_outputs,
                 env=gromacs_env,
                 state={
                     "input.ph": config.input.ph,
@@ -240,26 +261,57 @@ def build_pipeline(
             ),
         )
 
-    final_analysis_inputs = [
-        analysis / "rmsd_backbone.xvg",
-        analysis / "rmsd_ligante.xvg",
-        analysis / "rmsf_residuos.xvg",
-        analysis / "gyrate.xvg",
-        analysis / "mindist.xvg",
-        analysis / "numcont.xvg",
-        analysis / "hbond.xvg",
-    ]
-    analysis_outputs = [
-        analysis / "lig.ndx",
-        analysis / "rmsd_backbone.xvg",
-        analysis / "rmsd_ligante.xvg",
-        analysis / "rmsf_residuos.xvg",
-        analysis / "gyrate.xvg",
-        analysis / "mindist.xvg",
-        analysis / "numcont.xvg",
-        analysis / "hbond.xvg",
-        analysis / "hbond.ndx",
-    ]
+    if config.input.ligand_kind == "none":
+        final_analysis_inputs = [
+            analysis / "rmsd_backbone.xvg",
+            analysis / "rmsf_residuos.xvg",
+            analysis / "gyrate.xvg",
+        ]
+        analysis_outputs = list(final_analysis_inputs)
+        plot_inputs = list(final_analysis_inputs)
+        plot_outputs = [
+            analysis / "rmsd_bb.png",
+            analysis / "rmsf.png",
+            analysis / "rg.png",
+        ]
+    else:
+        final_analysis_inputs = [
+            analysis / "rmsd_backbone.xvg",
+            analysis / "rmsd_ligante.xvg",
+            analysis / "rmsf_residuos.xvg",
+            analysis / "gyrate.xvg",
+            analysis / "mindist.xvg",
+            analysis / "numcont.xvg",
+            analysis / "hbond.xvg",
+        ]
+        analysis_outputs = [
+            analysis / "lig.ndx",
+            analysis / "rmsd_backbone.xvg",
+            analysis / "rmsd_ligante.xvg",
+            analysis / "rmsf_residuos.xvg",
+            analysis / "gyrate.xvg",
+            analysis / "mindist.xvg",
+            analysis / "numcont.xvg",
+            analysis / "hbond.xvg",
+            analysis / "hbond.ndx",
+        ]
+        plot_inputs = [
+            analysis / "rmsd_backbone.xvg",
+            analysis / "rmsd_ligante.xvg",
+            analysis / "rmsf_residuos.xvg",
+            analysis / "gyrate.xvg",
+            analysis / "numcont.xvg",
+            analysis / "hbond.xvg",
+        ]
+        plot_outputs = [
+            analysis / "painel_completo.png",
+            analysis / "rmsd_bb.png",
+            analysis / "rmsd_lig.png",
+            analysis / "rmsf.png",
+            analysis / "rg.png",
+            analysis / "ncont.png",
+            analysis / "hbond.png",
+        ]
     if config.analysis.catalytic_residues.strip():
         analysis_outputs.extend(
             [
@@ -659,23 +711,6 @@ def build_pipeline(
                 analysis / "catalytic_occupancy.xvg",
             ]
         )
-    plot_inputs = [
-        analysis / "rmsd_backbone.xvg",
-        analysis / "rmsd_ligante.xvg",
-        analysis / "rmsf_residuos.xvg",
-        analysis / "gyrate.xvg",
-        analysis / "numcont.xvg",
-        analysis / "hbond.xvg",
-    ]
-    plot_outputs = [
-        analysis / "painel_completo.png",
-        analysis / "rmsd_bb.png",
-        analysis / "rmsd_lig.png",
-        analysis / "rmsf.png",
-        analysis / "rg.png",
-        analysis / "ncont.png",
-        analysis / "hbond.png",
-    ]
     if config.analysis.sasa:
         plot_inputs.extend(
             [

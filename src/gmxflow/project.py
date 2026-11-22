@@ -70,9 +70,11 @@ def create_project(
         config.input.ligand_pdb = ligand
     config.input.ligand_kind = _validate_choice(
         ligand_kind,
-        allowed={"peptide", "small_molecule"},
+        allowed={"peptide", "small_molecule", "none"},
         field_name="ligand_kind",
     )
+    if config.input.ligand_kind == "none":
+        config.input.ligand_pdb = ""
     config.mdrun.gpu = _validate_choice(
         gpu,
         allowed={"auto", "off", "force"},
@@ -173,7 +175,7 @@ gmxflow startproject novo_projeto --ligand-kind small_molecule --profile smoke -
 
 Valores aceitos:
 
-- `--ligand-kind`: `peptide` ou `small_molecule`;
+- `--ligand-kind`: `peptide`, `small_molecule` ou `none` (sistema sem ligante);
 - `--profile`: `standard` ou `smoke`;
 - `--gpu`: `auto`, `off` ou `force`.
 
@@ -317,11 +319,14 @@ Ele documenta um uso avançado futuro: redirecionar arquivos pesados para outro 
 
 - `receptor_pdb`: caminho do PDB do receptor. Pode ser relativo ao `project.toml` ou absoluto.
 - `ligand_pdb`: caminho do PDB do ligante. Pode ser relativo ao `project.toml` ou absoluto.
-- `ligand_kind`: tipo do ligante. Use `peptide` para ligante peptídico ou `small_molecule` para molécula pequena com topologia externa CGenFF.
+- `ligand_kind`: `peptide`, `small_molecule` ou `none` para sistemas sem ligante.
+- `remove_resnames`: nomes de resíduos a remover do receptor durante a preparação. O PDB original é preservado; a estrutura filtrada é criada em `work/prep/receptor_filtered.pdb`. Esse recurso requer `gmxflow[notebook]` ou MDAnalysis instalado no ambiente.
 - `ligand_mol2`: arquivo `.mol2` do ligante pequeno, usado quando `ligand_kind = "small_molecule"`.
 - `ligand_str`: arquivo `.str` gerado externamente por CGenFF/ParamChem/SilcsBio.
 - `ligand_resname`: resname do ligante pequeno no `.str`, por exemplo `BEN` ou `LIG`.
 - `ph`: pH usado na preparação do complexo.
+
+Com `ligand_kind = "none"`, a pipeline prepara uma proteína sem ligante e limita as análises automáticas a RMSD do backbone, RMSF e raio de giro. Métricas de interação com ligante não se aplicam.
 
 Quando `ligand_kind = "small_molecule"`, o `gmxflow run` inclui as etapas `ligand-topology`, `protein-topology` e `assemble-complex`. A parametrização CGenFF ainda precisa ser feita fora do `gmxflow`; a CLI consome o `.mol2` e o `.str` já obtidos.
 

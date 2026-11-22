@@ -90,6 +90,33 @@ def test_run_analysis_executes_rms_and_rmsf(tmp_path: Path, monkeypatch) -> None
     assert calls[7]["command"][1] == "hbond"  # pyright: ignore[reportIndexIssue]
 
 
+def test_run_analysis_for_protein_only_system(tmp_path: Path, monkeypatch) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_run(command, cwd, input, text, capture_output, check):
+        calls.append({"command": command, "input": input})
+        return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+    monkeypatch.setattr("gmxflow.analysis.subprocess.run", fake_run)
+    config = default_config("protein_only_analysis")
+    config.input.ligand_kind = "none"
+
+    results = run_analysis(config, project_root=tmp_path)
+
+    assert [result.name for result in results] == [
+        "rmsd_backbone",
+        "rmsf_residuos",
+        "gyrate",
+    ]
+    assert [call["input"] for call in calls] == [
+        "Backbone\nBackbone\n",
+        "Backbone\n",
+        "Protein\n",
+    ]
+    assert [call["command"][1] for call in calls] == ["rms", "rmsf", "gyrate"]
+    assert all("-n" not in call["command"] for call in calls)
+
+
 def test_run_analysis_honors_gmx_mpi_engine(tmp_path: Path, monkeypatch) -> None:
     calls: list[list[str]] = []
 

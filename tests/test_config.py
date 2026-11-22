@@ -60,6 +60,16 @@ def test_invalid_ph_is_rejected() -> None:
         GmxFlowConfig.model_validate({"input": {"ph": 15}})
 
 
+def test_protein_only_config_rejects_ligand_dependent_analysis() -> None:
+    with pytest.raises(ValidationError, match="não estão disponíveis"):
+        GmxFlowConfig.model_validate(
+            {
+                "input": {"ligand_kind": "none"},
+                "analysis": {"interaction_energy": True},
+            }
+        )
+
+
 def test_smoke_example_config_is_valid() -> None:
     config = load_config(Path("examples/smoke_peptide_complex/project.toml"))
 

@@ -19,6 +19,7 @@ description = "Simulação de dinâmica molecular com GROMACS"
 receptor_pdb = "inputs/receptor.pdb"
 ligand_pdb = "inputs/ligante.pdb"
 ligand_kind = "peptide"
+remove_resnames = []
 ligand_mol2 = ""
 ligand_str = ""
 ligand_resname = "LIG"
@@ -101,12 +102,15 @@ Enquanto estiver comentado, não tem efeito.
 ### `[input]`
 
 - `receptor_pdb`: caminho do PDB do receptor, relativo ao `project.toml` ou absoluto.
-- `ligand_pdb`: caminho do PDB do ligante, relativo ao `project.toml` ou absoluto.
-- `ligand_kind`: tipo do ligante. Use `peptide` para ligante peptídico ou `small_molecule` para molécula pequena com topologia externa CGenFF.
+- `ligand_pdb`: caminho do PDB do ligante, relativo ao `project.toml` ou absoluto; não é usado quando `ligand_kind = "none"`.
+- `ligand_kind`: `peptide`, `small_molecule` ou `none` para sistema proteína-sem-ligante.
+- `remove_resnames`: resíduos removidos do PDB receptor durante a preparação, por exemplo `remove_resnames = ["HOH"]`. A entrada original não é alterada; a versão filtrada fica em `work/prep/receptor_filtered.pdb`. Requer MDAnalysis (`gmxflow[notebook]` ou `mdanalysis` Conda).
 - `ligand_mol2`: arquivo `.mol2` enviado ao CGenFF/ParamChem/SilcsBio, usado por `prepare-ligand`.
 - `ligand_str`: arquivo `.str` produzido externamente pelo CGenFF/ParamChem/SilcsBio, usado por `prepare-ligand`.
 - `ligand_resname`: resname do ligante no `.str`, por exemplo `JZ4` ou `LIG`.
 - `ph`: pH usado na preparação do complexo.
+
+Para `ligand_kind = "none"`, a análise automática cobre RMSD do backbone, RMSF e raio de giro. Análises de interação com ligante, SASA/BSA e energia de interação não são aceitas nesse modo.
 
 ### `[force_field]`
 

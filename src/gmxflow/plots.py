@@ -62,6 +62,13 @@ def create_analysis_figures(
         "catalytic_occupancy": _load_xvg(analysis / "catalytic_occupancy.xvg"),
     }
 
+    if config.input.ligand_kind == "none":
+        return _plot_individuals(
+            datasets,
+            config,
+            names if names is not None else {"rmsd_bb", "rmsf", "rg"},
+        )
+
     results = []
     if names is None or "painel_completo" in names:
         results.append(_plot_panel(title, datasets, config))

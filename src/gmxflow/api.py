@@ -20,6 +20,8 @@ from gmxflow.pipeline import (
     PipelineStep,
     build_pipeline,
 )
+from gmxflow.preparation.structure import require_mdanalysis
+from gmxflow.project import create_project as create_project_files
 from gmxflow.workspace import CleanResult, clean_workspace
 
 
@@ -52,12 +54,44 @@ class ExecutionReport:
 class GmxFlowProject:
     """A project loaded from its configuration file.
 
-    This experimental API supports loading, validating, planning, and running
-    a project. Its public contract is not yet stable.
+    This experimental API supports creating and loading projects, validating
+    prerequisites, planning, running, and displaying results. Its public
+    contract is not yet stable.
     """
 
     config_path: Path
     config: GmxFlowConfig
+
+    @classmethod
+    def create(
+        cls,
+        name: str,
+        destination: str | Path = ".",
+        *,
+        receptor: str | None = None,
+        ligand: str | None = None,
+        ligand_kind: str = "peptide",
+        gpu: str = "auto",
+        profile: str = "standard",
+        force: bool = False,
+    ) -> GmxFlowProject:
+        """Create a project directory and return the newly opened project.
+
+        ``destination`` is the parent directory; the project is created in a
+        child directory named ``name``. Existing projects are not overwritten
+        unless ``force=True`` is explicitly provided.
+        """
+        project_dir = create_project_files(
+            name=name,
+            destination=Path(destination).expanduser().resolve(),
+            force=force,
+            receptor=receptor,
+            ligand=ligand,
+            ligand_kind=ligand_kind,
+            gpu=gpu,
+            profile=profile,
+        )
+        return cls.open(project_dir / "project.toml")
 
     @classmethod
     def open(cls, config_path: str | Path = "project.toml") -> GmxFlowProject:
@@ -124,6 +158,13 @@ class GmxFlowProject:
         required input, force field, or executable cannot be found.
         """
         steps = self.plan(strict_inputs=True)
+        if self.config.input.remove_resnames:
+            try:
+                require_mdanalysis()
+            except RuntimeError as error:
+                raise RuntimeError(
+                    f"Pré-requisito ausente no projeto {self.config_path}: {error}"
+                ) from error
         gromacs_command = (
             self.config.mdrun.engine
             if self.config.mdrun.engine in {"gmx", "gmx_mpi"}

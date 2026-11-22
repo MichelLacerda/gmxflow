@@ -59,7 +59,7 @@ gmxflow --help
 Instale Jupyter e as bibliotecas para exibir os relatórios no mesmo ambiente onde estão GROMACS e `gmxflow`, ative esse ambiente e inicie o notebook por ele:
 
 ```sh
-micromamba install -n gmx_compile -c conda-forge jupyterlab python-lsp-server jupyterlab-lsp ipykernel ipython ipympl pandas -y
+micromamba install -n gmx_compile -c conda-forge jupyterlab python-lsp-server jupyterlab-lsp ipykernel ipython ipympl mdanalysis pandas -y
 micromamba activate gmx_compile
 jupyter lab
 ```
@@ -70,7 +70,17 @@ Assim, o kernel iniciado pelo Jupyter encontra os mesmos comandos `gmx` e `gmxfl
 python -m ipykernel install --user --name gmx_compile --display-name "Python (gmx_compile)"
 ```
 
-No notebook, selecione o kernel **Python (gmx_compile)**. O repositório mantém projetos prontos para abrir em [examples/smoke_peptide_complex/project.ipynb](../../examples/smoke_peptide_complex/project.ipynb) e [examples/protein_ligand_complex/project.ipynb](../../examples/protein_ligand_complex/project.ipynb). Cada pasta contém fisicamente o notebook, `project.toml` e `inputs/`; o notebook trabalha diretamente no exemplo, sem copiar arquivos em tempo de execução. A célula de execução exibe uma tabela com status, duração e caminho do log de cada etapa. Depois, `project.show_report()` exibe resumo, tabelas nativas do pandas e gráficos Matplotlib interativos gerados a partir dos dados da análise, com controles de navegação e salvamento; não são carregados os PNGs usados no relatório distribuível. O HTML compartilhável fica em `outputs/report.html`. O extra opcional `gmxflow[notebook]` instala IPython, ipympl e pandas quando o pacote é instalado com pip. Se instalou essas bibliotecas com o Jupyter aberto, reinicie o kernel antes de consultar o relatório. O exemplo `smoke` é apenas um teste de integração, não uma simulação cientificamente interpretável. A API usada pelos notebooks ainda é experimental. Projetos criados com `gmxflow startproject` também incluem `project.ipynb`.
+No notebook, selecione o kernel **Python (gmx_compile)**. O repositório mantém projetos prontos para abrir em [examples/smoke_peptide_complex/project.ipynb](../../examples/smoke_peptide_complex/project.ipynb), [examples/protein_ligand_complex/project.ipynb](../../examples/protein_ligand_complex/project.ipynb) e [examples/lysozyme_in_water/project.ipynb](../../examples/lysozyme_in_water/project.ipynb). Cada pasta contém fisicamente o notebook, `project.toml` e `inputs/`; o notebook trabalha diretamente no exemplo, sem copiar arquivos em tempo de execução. A célula de execução exibe uma tabela com status, duração e caminho do log de cada etapa. Depois, `project.show_report()` exibe resumo, tabelas nativas do pandas e gráficos Matplotlib interativos gerados a partir dos dados da análise, com controles de navegação e salvamento; não são carregados os PNGs usados no relatório distribuível. O HTML compartilhável fica em `outputs/report.html`. O extra opcional `gmxflow[notebook]` instala IPython, ipympl, MDAnalysis e pandas quando o pacote é instalado com pip. Para Conda/Micromamba, instale também `mdanalysis` no ambiente do kernel, como no comando acima. Se instalou essas bibliotecas com o Jupyter aberto, reinicie o kernel antes de consultar o relatório. O exemplo `smoke` é apenas um teste de integração, não uma simulação cientificamente interpretável. A API usada pelos notebooks ainda é experimental. Projetos criados com `gmxflow startproject` também incluem `project.ipynb`.
+
+Para iniciar um projeto novo diretamente no notebook, sem usar o comando `startproject`, crie-o a partir do diretório em que deseja guardar os projetos:
+
+```python
+from gmxflow.api import GmxFlowProject
+
+project = GmxFlowProject.create("meu_projeto")
+```
+
+Isso cria a pasta `meu_projeto/` no diretório atual, com `project.toml`, `project.ipynb`, README e as pastas de trabalho. O método retorna o projeto já aberto; coloque os arquivos de entrada em `meu_projeto/inputs/` e atualize a configuração antes de validar ou executar. Se já existir uma pasta com esse nome, a criação falha sem sobrescrever seu conteúdo. A API permanece experimental.
 
 Para limpar artefatos intermediários pelo próprio notebook, execute `project.clean()`. Por padrão, ele limpa `work/`, preservando os templates `.mdp`, os arquivos em `inputs/` e os resultados em `outputs/`. Use `project.clean(remove_templates=True)` para remover também os templates, ou `project.clean(all_work=True)` para descartar todo o conteúdo de `work/` e recriar suas pastas.
 

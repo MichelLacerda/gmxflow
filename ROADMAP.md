@@ -22,6 +22,7 @@ Implementado:
 - dry-run detalhado com `gmxflow run --dry-run`;
 - limpeza de artefatos regeneráveis com `gmxflow clean`;
 - preparação interna de complexo proteína + peptídeo com `gmxflow prepare-complex`;
+- pipeline proteína-sem-ligante com `ligand_kind = "none"`, análises de RMSD/RMSF/raio de giro e remoção opcional de resíduos via MDAnalysis;
 - execução real da pipeline GROMACS até pós-processamento e análise;
 - etapas condicionais `ligand-topology`, `protein-topology` e `assemble-complex` para `ligand_kind = "small_molecule"`;
 - logs por etapa em `work/logs/`;
@@ -160,14 +161,7 @@ Entregue:
 
 Pendente:
 
-- ampliar tipos formais de `ligand_kind` além dos fluxos atuais:
-
-```toml
-ligand_kind = "peptide"
-ligand_kind = "small_molecule"
-ligand_kind = "none"
-ligand_kind = "cofactor"
-```
+- adicionar suporte formal a `ligand_kind = "cofactor"`;
 
 - adicionar modos formais de preparação:
 

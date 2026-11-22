@@ -60,6 +60,20 @@ def test_create_analysis_figures_returns_matplotlib_objects_without_saving(
     assert not list(analysis.glob("*.png"))
 
 
+def test_protein_only_plots_exclude_ligand_figures(tmp_path: Path) -> None:
+    analysis = tmp_path / "work" / "analysis"
+    analysis.mkdir(parents=True)
+    for name in ("rmsd_backbone", "rmsf_residuos", "gyrate"):
+        _write_xvg(analysis / f"{name}.xvg")
+    config = default_config("protein_only_plots")
+    config.input.ligand_kind = "none"
+
+    results = generate_analysis_plots(config, project_root=tmp_path)
+
+    assert [result.name for result in results] == ["rmsd_bb", "rmsf", "rg"]
+    assert all(result.output_path.is_file() for result in results)
+
+
 def _write_xvg(path: Path) -> None:
     path.write_text(
         "# synthetic XVG\n"

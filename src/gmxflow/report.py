@@ -208,7 +208,11 @@ def generate_report(config: GmxFlowConfig, project_root: Path) -> ReportResult:
     figures = _publish_files(
         source_dir=analysis_dir,
         output_dir=output_dir / "figures",
-        names=PLOTS,
+        names=(
+            ["rmsd_bb.png", "rmsf.png", "rg.png"]
+            if config.input.ligand_kind == "none"
+            else PLOTS
+        ),
     )
     data_files = _publish_files(
         source_dir=analysis_dir,

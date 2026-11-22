@@ -1,0 +1,18 @@
+# Artefatos regeneráveis da pipeline
+work/
+outputs/
+
+# Caches Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Ambientes locais
+.venv/
+venv/
+
+# Arquivos temporários de sistema/editor
+.DS_Store
+Thumbs.db
+*.swp

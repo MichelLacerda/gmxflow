@@ -36,6 +36,39 @@ def test_open_defaults_to_project_toml_in_current_directory(
     assert project.config_path == config_path.resolve()
 
 
+def test_create_generates_and_opens_project(tmp_path: Path) -> None:
+    project = GmxFlowProject.create(
+        "notebook_project",
+        destination=tmp_path,
+        receptor="inputs/receptor.pdb",
+        ligand="inputs/ligand.pdb",
+        profile="smoke",
+        gpu="off",
+    )
+
+    assert project.root == (tmp_path / "notebook_project").resolve()
+    assert project.config_path == project.root / "project.toml"
+    assert project.config.project.name == "notebook_project"
+    assert project.config.input.receptor_pdb == "inputs/receptor.pdb"
+    assert project.config.input.ligand_pdb == "inputs/ligand.pdb"
+    assert project.config.simulation.profile == "smoke"
+    assert project.config.mdrun.gpu == "off"
+    assert (project.root / "project.ipynb").is_file()
+    assert (project.root / "README.md").is_file()
+
+
+def test_create_refuses_existing_project_without_force(tmp_path: Path) -> None:
+    project_dir = tmp_path / "existing_project"
+    project_dir.mkdir()
+    marker = project_dir / "keep.txt"
+    marker.write_text("user data", encoding="utf-8")
+
+    with pytest.raises(FileExistsError):
+        GmxFlowProject.create("existing_project", destination=tmp_path)
+
+    assert marker.read_text(encoding="utf-8") == "user data"
+
+
 def test_show_report_delegates_using_project_root(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -190,6 +223,39 @@ def test_validate_reports_missing_force_field(tmp_path: Path, monkeypatch) -> No
     project = GmxFlowProject.open(config_path)
 
     with pytest.raises(FileNotFoundError, match="Force field 'amber99sb-ildn'"):
+        project.validate()
+
+
+def test_validate_requires_mdanalysis_for_residue_filtering(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project_dir = tmp_path / "api_project"
+    config_path = _write_project_config(project_dir)
+    config_text = (
+        config_path.read_text(encoding="utf-8")
+        .replace('ligand_kind = "peptide"', 'ligand_kind = "none"')
+        .replace('remove_resnames = []', 'remove_resnames = ["HOH"]')
+    )
+    config_path.write_text(config_text, encoding="utf-8")
+    (project_dir / "inputs").mkdir()
+    (project_dir / "inputs" / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    force_field = project_dir / "amber99sb-ildn.ff"
+    force_field.mkdir()
+    (force_field / "forcefield.itp").write_text("; test\n", encoding="utf-8")
+    (force_field / "forcefield.doc").write_text("test\n", encoding="utf-8")
+    monkeypatch.setattr("gmxflow.forcefields._installed_roots", lambda: [])
+    monkeypatch.setenv("GMXFLOW_FORCEFIELD_DIR", str(tmp_path / "user-forcefields"))
+    monkeypatch.setattr(
+        "gmxflow.api.shutil.which", lambda command: "/opt/gromacs/bin/gmx"
+    )
+
+    def missing_dependency(name: str) -> None:
+        raise ImportError(name)
+
+    monkeypatch.setattr("gmxflow.preparation.structure.import_module", missing_dependency)
+    project = GmxFlowProject.open(config_path)
+
+    with pytest.raises(RuntimeError, match="Instale `mdanalysis`"):
         project.validate()
 
 

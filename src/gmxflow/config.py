@@ -2,8 +2,16 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from typing import Literal
 
-from pydantic import BaseModel, Field, PositiveFloat, PositiveInt
+from pydantic import (
+    BaseModel,
+    Field,
+    PositiveFloat,
+    PositiveInt,
+    field_validator,
+    model_validator,
+)
 
 
 class ProjectConfig(BaseModel):
@@ -14,11 +22,20 @@ class ProjectConfig(BaseModel):
 class InputConfig(BaseModel):
     receptor_pdb: str = "inputs/receptor.pdb"
     ligand_pdb: str = "inputs/ligante.pdb"
-    ligand_kind: str = "peptide"
+    ligand_kind: Literal["peptide", "small_molecule", "none"] = "peptide"
+    remove_resnames: list[str] = Field(default_factory=list)
     ligand_mol2: str = ""
     ligand_str: str = ""
     ligand_resname: str = "LIG"
     ph: float = Field(default=7.4, ge=0, le=14)
+
+    @field_validator("remove_resnames")
+    @classmethod
+    def normalize_remove_resnames(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip().upper() for value in values]
+        if any(not value or len(value) > 4 for value in normalized):
+            raise ValueError("input.remove_resnames deve conter nomes de resíduo válidos.")
+        return list(dict.fromkeys(normalized))
 
 
 class ForceFieldConfig(BaseModel):
@@ -111,6 +128,23 @@ class GmxFlowConfig(BaseModel):
     pdb2gmx: Pdb2gmxConfig = Field(default_factory=Pdb2gmxConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     plots: PlotsConfig = Field(default_factory=PlotsConfig)
+
+    @model_validator(mode="after")
+    def validate_ligand_dependent_analysis(self) -> GmxFlowConfig:
+        if self.input.ligand_kind == "none":
+            enabled = []
+            if self.analysis.interaction_energy:
+                enabled.append("analysis.interaction_energy")
+            if self.analysis.sasa:
+                enabled.append("analysis.sasa")
+            if self.analysis.catalytic_residues.strip():
+                enabled.append("analysis.catalytic_residues")
+            if enabled:
+                raise ValueError(
+                    "Análises receptor-ligante não estão disponíveis em um "
+                    "sistema sem ligante: " + ", ".join(enabled)
+                )
+        return self
 
 
 def load_config(path: Path) -> GmxFlowConfig:

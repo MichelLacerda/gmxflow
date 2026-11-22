@@ -117,6 +117,34 @@ def test_generate_report_ignores_missing_analysis_files(tmp_path: Path) -> None:
     assert list(payload["summaries"]) == ["rmsd_backbone"]
 
 
+def test_protein_only_report_publishes_protein_figures_and_metrics(
+    tmp_path: Path,
+) -> None:
+    analysis = tmp_path / "work" / "analysis"
+    analysis.mkdir(parents=True)
+    for name in ("rmsd_backbone", "rmsf_residuos", "gyrate"):
+        _write_xvg(analysis / f"{name}.xvg", [0.1, 0.2])
+    for name in ("painel_proteina.png", "rmsd_bb.png", "rmsf.png", "rg.png"):
+        (analysis / name).write_bytes(b"png")
+    config = default_config("protein_only_report")
+    config.input.ligand_kind = "none"
+
+    result = generate_report(config, project_root=tmp_path)
+
+    payload = json.loads(result.summary_json.read_text(encoding="utf-8"))
+    assert set(payload["summaries"]) == {
+        "rmsd_backbone",
+        "rmsf_residuos",
+        "gyrate",
+    }
+    assert payload["plots"] == [
+        "figures/rmsd_bb.png",
+        "figures/rmsf.png",
+        "figures/rg.png",
+    ]
+    assert not (tmp_path / "outputs" / "figures" / "painel_proteina.png").exists()
+
+
 def test_generate_report_includes_single_interaction_energy_series(tmp_path: Path) -> None:
     analysis = tmp_path / "work" / "analysis"
     analysis.mkdir(parents=True)

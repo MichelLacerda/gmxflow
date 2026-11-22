@@ -30,6 +30,9 @@ def run_analysis(
     analysis.mkdir(parents=True, exist_ok=True)
 
     gmx = _gmx_command(config)
+    if config.input.ligand_kind == "none":
+        return _run_protein_only_analysis(gmx, prod, analysis, config)
+
     index_path = analysis / "lig.ndx"
     catalytic_selection = _catalytic_residue_selection(config)
     results = [
@@ -195,6 +198,73 @@ def run_analysis(
             _run_analysis_command(name, command, stdin, output_path, analysis)
         )
     return results
+
+
+def _run_protein_only_analysis(
+    gmx: str,
+    prod: Path,
+    analysis: Path,
+    config: GmxFlowConfig,
+) -> list[AnalysisCommandResult]:
+    tpr_path = prod / "md.tpr"
+    trajectory_path = prod / "md_fit.xtc"
+    commands = [
+        (
+            "rmsd_backbone",
+            [
+                gmx,
+                "rms",
+                "-s",
+                str(tpr_path),
+                "-f",
+                str(trajectory_path),
+                "-o",
+                str(analysis / "rmsd_backbone.xvg"),
+                "-tu",
+                "ns",
+            ],
+            f"{config.analysis.fit_group}\n{config.analysis.fit_group}\n",
+            analysis / "rmsd_backbone.xvg",
+        ),
+        (
+            "rmsf_residuos",
+            [
+                gmx,
+                "rmsf",
+                "-s",
+                str(tpr_path),
+                "-f",
+                str(trajectory_path),
+                "-res",
+                "-fit",
+                "-o",
+                str(analysis / "rmsf_residuos.xvg"),
+            ],
+            f"{config.analysis.fit_group}\n",
+            analysis / "rmsf_residuos.xvg",
+        ),
+        (
+            "gyrate",
+            [
+                gmx,
+                "gyrate",
+                "-s",
+                str(tpr_path),
+                "-f",
+                str(trajectory_path),
+                "-o",
+                str(analysis / "gyrate.xvg"),
+                "-tu",
+                "ns",
+            ],
+            "Protein\n",
+            analysis / "gyrate.xvg",
+        ),
+    ]
+    return [
+        _run_analysis_command(name, command, stdin, output, analysis)
+        for name, command, stdin, output in commands
+    ]
 
 
 def run_interaction_energy(

@@ -123,6 +123,20 @@ def test_create_project_accepts_initial_pipeline_options(tmp_path: Path) -> None
     )
 
 
+def test_create_project_supports_protein_without_ligand(tmp_path: Path) -> None:
+    project_dir = create_project(
+        name="lysozyme",
+        destination=tmp_path,
+        receptor="inputs/1AKI_clean.pdb",
+        ligand_kind="none",
+    )
+
+    config_text = (project_dir / "project.toml").read_text(encoding="utf-8")
+    assert 'receptor_pdb = "inputs/1AKI_clean.pdb"' in config_text
+    assert 'ligand_pdb = ""' in config_text
+    assert 'ligand_kind = "none"' in config_text
+
+
 def test_create_project_rejects_invalid_initial_pipeline_options(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="ligand_kind inválido"):
         create_project(name="invalid", destination=tmp_path, ligand_kind="drug")
