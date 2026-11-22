@@ -334,11 +334,19 @@ def test_run_validates_then_uses_shared_executor(
     )
     solvate_result = StepResult(
         step_name="solvate",
-        command=["gmxflow", "solvate-system"],
+        command=runtime_command(project.plan(until="solvate")[3].command),
         workdir=project.root / "work" / "box",
         log_path=project.root / "work" / "logs" / "04_solvate.log",
         returncode=0,
         elapsed_seconds=0.5,
+    )
+    ions_grompp_result = StepResult(
+        step_name="ions-grompp",
+        command=runtime_command(project.plan(until="ions-grompp")[4].command),
+        workdir=project.root / "work" / "box",
+        log_path=project.root / "work" / "logs" / "05_ions-grompp.log",
+        returncode=0,
+        elapsed_seconds=0.6,
     )
 
     monkeypatch.setattr(
@@ -352,12 +360,13 @@ def test_run_validates_then_uses_shared_executor(
 
     def fake_run_workflow_graph(graph, **kwargs):
         events.append("workflow_graph")
-        assert graph.topological_order == ("prepare", "topology", "box")
+        assert graph.topological_order == ("prepare", "topology", "box", "solvate")
         assert kwargs["project_root"] == project.root
         step_results = {
             "prepare": step_result,
             "topology": topology_result,
             "box": box_result,
+            "solvate": solvate_result,
         }
         return WorkflowExecutionReport(
             results=tuple(
@@ -377,28 +386,35 @@ def test_run_validates_then_uses_shared_executor(
 
     def fake_run_steps(steps, **kwargs):
         events.append("run_steps")
-        assert [step.name for step in steps] == ["solvate"]
+        assert [step.name for step in steps] == ["ions-grompp"]
         assert kwargs["project_root"] == project.root
-        assert kwargs["start_index"] == 4
-        return [solvate_result]
+        assert kwargs["start_index"] == 5
+        return [ions_grompp_result]
 
     monkeypatch.setattr("gmxflow.api.run_steps", fake_run_steps)
 
-    report = project.run(until="solvate")
+    report = project.run(until="ions-grompp")
 
     assert events == ["validate", "workspace", "workflow_graph", "run_steps"]
     assert report.workspace is workspace
-    assert report.steps == (step_result, topology_result, box_result, solvate_result)
+    assert report.steps == (
+        step_result,
+        topology_result,
+        box_result,
+        solvate_result,
+        ions_grompp_result,
+    )
     assert report.results == (
         workspace,
         step_result,
         topology_result,
         box_result,
         solvate_result,
+        ions_grompp_result,
     )
 
 
-def test_graph_prepare_topology_and_box_match_legacy_commands_and_outputs(
+def test_graph_prepare_topology_box_and_solvate_match_legacy_commands_and_outputs(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -432,6 +448,16 @@ def test_graph_prepare_topology_and_box_match_legacy_commands_and_outputs(
             }
         elif "editconf" in command:
             output_content = {"box.gro": "BOX\n"}
+        elif "solvate-system" in command:
+            output_content = {"solv.gro": "SOLV\n"}
+            output_topology = Path(
+                command[command.index("--topology-output") + 1]
+            )
+            source_topology = output_topology.parent / "topol.top"
+            output_topology.write_text(
+                source_topology.read_text(encoding="utf-8") + "SOLVATED\n",
+                encoding="utf-8",
+            )
         else:
             output_content = {
                 "complexo.gro": "GRO\n",
@@ -461,7 +487,7 @@ def test_graph_prepare_topology_and_box_match_legacy_commands_and_outputs(
 
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run(
-        until="box",
+        until="solvate",
         on_step_start=lambda index, step: callback_events.append(
             ("start", index, step.name)
         ),
@@ -469,7 +495,7 @@ def test_graph_prepare_topology_and_box_match_legacy_commands_and_outputs(
             ("done", index, result.step_name)
         ),
     )
-    resumed_report = project.run(until="box")
+    resumed_report = project.run(until="solvate")
 
     topology_only_root = tmp_path / "topology_only_project"
     topology_only_project = GmxFlowProject.open(
@@ -498,14 +524,31 @@ def test_graph_prepare_topology_and_box_match_legacy_commands_and_outputs(
     (topology_dir / "complexo.gro").write_text("GRO\n", encoding="utf-8")
     box_only_report = box_only_project.run(from_step="box", until="box")
 
+    solvate_only_root = tmp_path / "solvate_only_project"
+    solvate_only_project = GmxFlowProject.open(_write_project_config(solvate_only_root))
+    solvate_only_inputs = solvate_only_root / "inputs"
+    solvate_only_inputs.mkdir()
+    (solvate_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (solvate_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
+    solvate_only_topology = solvate_only_root / "work" / "topo" / "topol.top"
+    solvate_only_topology.parent.mkdir(parents=True)
+    solvate_only_topology.write_text("TOP\n", encoding="utf-8")
+    solvate_only_box = solvate_only_root / "work" / "box" / "box.gro"
+    solvate_only_box.parent.mkdir(parents=True)
+    solvate_only_box.write_text("BOX\n", encoding="utf-8")
+    solvate_only_report = solvate_only_project.run(
+        from_step="solvate",
+        until="solvate",
+    )
+
     legacy_steps = build_pipeline(
         project.config,
         config_dir=legacy_root,
         config_path=legacy_config,
-    )[:3]
+    )[:4]
     legacy_results = run_steps(legacy_steps, project_root=legacy_root)
 
-    assert len(graph_report.steps) == len(legacy_results) == 3
+    assert len(graph_report.steps) == len(legacy_results) == 4
     for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
         graph_command = [
             argument.replace(str(project_root), "<project-root>")
@@ -522,7 +565,9 @@ def test_graph_prepare_topology_and_box_match_legacy_commands_and_outputs(
     assert topology_only_report.steps[0].returncode == 0
     assert box_only_report.steps[0].step_name == "box"
     assert box_only_report.steps[0].returncode == 0
-    assert len(subprocess_calls) == 8  # graph twice, isolated steps, legacy trio
+    assert solvate_only_report.steps[0].step_name == "solvate"
+    assert solvate_only_report.steps[0].returncode == 0
+    assert len(subprocess_calls) == 11  # graph twice, isolated steps, legacy prefix
     assert legacy_state.read_bytes() == legacy_state_before
     assert (project_root / "work" / "workflow_state.json").is_file()
     assert callback_events == [
@@ -532,8 +577,14 @@ def test_graph_prepare_topology_and_box_match_legacy_commands_and_outputs(
         ("done", 2, "topology"),
         ("start", 3, "box"),
         ("done", 3, "box"),
+        ("start", 4, "solvate"),
+        ("done", 4, "solvate"),
     ]
-    for relative_dir in (Path("work/prep"), Path("work/topo"), Path("work/box")):
+    for relative_dir in (
+        Path("work/prep"),
+        Path("work/topo"),
+        Path("work/box"),
+    ):
         graph_outputs = sorted((project_root / relative_dir).glob("*"))
         legacy_outputs = sorted((legacy_root / relative_dir).glob("*"))
         assert [path.name for path in graph_outputs] == [

@@ -1231,10 +1231,6 @@ def _gromacs_env(force_field_name: str, project_root: Path) -> dict[str, str]:
     return {"GMXLIB": str(location.gmxlib)}
 
 
-def _neutralize_args(config: GmxFlowConfig) -> list[str]:
-    return ["-neutral"] if config.solvent.neutralize else []
-
-
 def _terminal_selection_stdin(config: GmxFlowConfig, chains: int) -> str:
     if config.pdb2gmx.terminal_selections:
         return "\n".join(config.pdb2gmx.terminal_selections) + "\n"

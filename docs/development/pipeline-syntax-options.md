@@ -332,9 +332,10 @@ cada fatia. Definir e testar a compatibilidade de identificadores, opções de
 seleção de etapas e estado salvo para projetos existentes.
 
 **Fatia implementada:** nos fluxos `peptide` e `none`, o prefixo
-`prepare → topology → box` é executado pelo grafo quando o plano começa em
-`prepare`; também é possível começar em `topology` ou `box` se as entradas
-necessárias já existirem. As etapas posteriores continuam no executor legado.
+`prepare → topology → box → solvate` é executado pelo grafo quando o plano
+começa em `prepare`; também é possível começar em `topology`, `box` ou
+`solvate` se as entradas necessárias já existirem. As etapas posteriores
+continuam no executor legado.
 O fluxo
 `small_molecule` (`ligand-topology`, `protein-topology` e `assemble-complex`)
 não foi migrado.
