@@ -151,6 +151,8 @@ def run_workflow_graph(
     state_path: Path | None = None,
     dry_run: bool = False,
     global_inputs: Sequence[Path] = (),
+    on_step_start: Callable[[Step], None] | None = None,
+    on_step_done: Callable[[WorkflowStepResult], None] | None = None,
 ) -> WorkflowExecutionReport:
     """Execute a validated graph sequentially, or return its dry-run plan.
 
@@ -178,6 +180,12 @@ def run_workflow_graph(
 
     states: dict[str, WorkflowStepStatus] = {}
     results: list[WorkflowStepResult] = []
+
+    def record_result(result: WorkflowStepResult) -> None:
+        results.append(result)
+        if on_step_done is not None:
+            on_step_done(result)
+
     normalized_states = {
         step_id: _normalized_step_state(graph.steps[step_id])
         for step_id in ordered_ids
@@ -220,6 +228,8 @@ def run_workflow_graph(
     log_dir.mkdir(parents=True, exist_ok=True)
     for step_id in ordered_ids:
         step = graph.steps[step_id]
+        if on_step_start is not None:
+            on_step_start(step)
         step_log = log_paths[step_id]
         blocked_by = sorted(
             predecessor
@@ -258,7 +268,7 @@ def run_workflow_graph(
                 started=None,
             )
             states[step_id] = WorkflowStepStatus.BLOCKED
-            results.append(
+            record_result(
                 WorkflowStepResult(
                     step_id=step_id,
                     status=WorkflowStepStatus.BLOCKED,
@@ -298,7 +308,7 @@ def run_workflow_graph(
                 ],
             )
             states[step_id] = WorkflowStepStatus.FAILED
-            results.append(result)
+            record_result(result)
             continue
 
         input_fingerprints = _fingerprints(tracked_paths)
@@ -336,7 +346,7 @@ def run_workflow_graph(
                 started=None,
             )
             states[step_id] = WorkflowStepStatus.SKIPPED
-            results.append(
+            record_result(
                 WorkflowStepResult(
                     step_id=step_id,
                     status=WorkflowStepStatus.SKIPPED,
@@ -413,7 +423,7 @@ def run_workflow_graph(
             started=started,
         )
         states[step_id] = status
-        results.append(
+        record_result(
             WorkflowStepResult(
                 step_id=step_id,
                 status=status,

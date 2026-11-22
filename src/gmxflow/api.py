@@ -11,6 +11,7 @@ from gmxflow.config import GmxFlowConfig, load_config
 from gmxflow.executor import (
     StepResult,
     WorkflowExecutionError,
+    WorkflowStepResult,
     WorkflowStepStatus,
     run_steps,
     run_workflow_graph,
@@ -23,6 +24,8 @@ from gmxflow.pipeline import (
     REAL_EXECUTION_STEPS,
     PipelineCommandStep,
     PipelineStep,
+    Step,
+    Sequence as WorkflowSequence,
     WorkflowGraph,
     build_pipeline,
 )
@@ -247,18 +250,26 @@ class GmxFlowProject:
         results: list[StepResult] = []
         remaining_steps = steps
         start_index = 1
+        graph_step_count = 0
         if steps and steps[0].name == "prepare":
-            preparation = steps[0]
-            results.append(
-                _run_graph_preparation(
-                    preparation,
+            graph_step_count = (
+                2
+                if len(steps) > 1 and steps[1].name == "topology"
+                else 1
+            )
+        elif steps and steps[0].name == "topology":
+            graph_step_count = 1
+        if graph_step_count:
+            results.extend(
+                _run_graph_steps(
+                    steps[:graph_step_count],
                     project_root=self.root,
                     on_step_start=on_step_start,
                     on_step_done=on_step_done,
                 )
             )
-            remaining_steps = steps[1:]
-            start_index = 2
+            remaining_steps = steps[graph_step_count:]
+            start_index = graph_step_count + 1
         if remaining_steps:
             results.extend(
                 run_steps(
@@ -275,30 +286,81 @@ class GmxFlowProject:
         )
 
 
-def _run_graph_preparation(
-    step: PipelineStep,
+def _run_graph_steps(
+    steps: list[PipelineStep],
     *,
     project_root: Path,
     on_step_start: Callable[[int, PipelineStep], None] | None,
     on_step_done: Callable[[int, StepResult], None] | None,
-) -> StepResult:
-    """Run the existing preparation command through the workflow executor."""
-    if on_step_start is not None:
-        on_step_start(1, step)
-
-    adapted_step = PipelineCommandStep.from_pipeline_step(step)
-    adapted_step = replace(
-        adapted_step,
-        command=tuple(runtime_command(step.command)),
+) -> list[StepResult]:
+    """Run a selected prefix of legacy command steps through the graph."""
+    adapted_steps = [
+        replace(
+            PipelineCommandStep.from_pipeline_step(step),
+            command=tuple(runtime_command(step.command)),
+        )
+        for step in steps
+    ]
+    workflow = (
+        WorkflowSequence(*adapted_steps)
+        if len(adapted_steps) > 1
+        else adapted_steps[0]
     )
+    produced_keys = {
+        artifact.key for step in adapted_steps for artifact in step.outputs
+    }
+    project_inputs = {
+        artifact.key: artifact
+        for step in adapted_steps
+        for artifact in step.inputs
+        if artifact.key not in produced_keys
+    }
     graph = WorkflowGraph.from_workflow(
-        adapted_step,
-        project_inputs=adapted_step.inputs,
+        workflow,
+        project_inputs=project_inputs.values(),
     )
     artifact_paths = {
         artifact.key: Path(artifact.key)
-        for artifact in (*adapted_step.inputs, *adapted_step.outputs)
+        for step in adapted_steps
+        for artifact in (*step.inputs, *step.outputs)
     }
+    step_indexes = {step.name: index for index, step in enumerate(steps, start=1)}
+    legacy_steps = {step.name: step for step in steps}
+
+    def notify_start(adapted_step: Step) -> None:
+        if on_step_start is not None:
+            step = legacy_steps[adapted_step.id]
+            on_step_start(step_indexes[adapted_step.id], step)
+
+    def to_api_result(workflow_result: WorkflowStepResult) -> StepResult:
+        step = legacy_steps[workflow_result.step_id]
+        returncode = next(
+            (
+                command.returncode
+                for command in workflow_result.commands
+                if command.returncode != 0
+            ),
+            1
+            if workflow_result.status
+            in {WorkflowStepStatus.FAILED, WorkflowStepStatus.BLOCKED}
+            else 0,
+        )
+        return StepResult(
+            step_name=step.name,
+            command=list(runtime_command(step.command)),
+            workdir=step.workdir,
+            log_path=workflow_result.log_path,
+            returncode=returncode,
+            elapsed_seconds=workflow_result.elapsed_seconds,
+            skipped=workflow_result.status is WorkflowStepStatus.SKIPPED,
+        )
+
+    def notify_done(workflow_result: WorkflowStepResult) -> None:
+        if on_step_done is not None:
+            on_step_done(
+                step_indexes[workflow_result.step_id],
+                to_api_result(workflow_result),
+            )
 
     try:
         report = run_workflow_graph(
@@ -306,33 +368,25 @@ def _run_graph_preparation(
             project_root=project_root,
             artifact_paths=artifact_paths,
             state_path=project_root / "work" / "workflow_state.json",
+            on_step_start=notify_start,
+            on_step_done=notify_done,
         )
     except WorkflowExecutionError as error:
         report = error.report
 
-    workflow_result = report.results[0]
-    returncode = next(
+    graph_results = {result.step_id: result for result in report.results}
+    results = [to_api_result(graph_results[step.name]) for step in steps]
+    failed_result = next(
         (
-            command.returncode
-            for command in workflow_result.commands
-            if command.returncode != 0
+            result
+            for result in results
+            if graph_results[result.step_name].status is WorkflowStepStatus.FAILED
         ),
-        1 if workflow_result.status is WorkflowStepStatus.FAILED else 0,
+        None,
     )
-    result = StepResult(
-        step_name=step.name,
-        command=list(runtime_command(step.command)),
-        workdir=step.workdir,
-        log_path=workflow_result.log_path,
-        returncode=returncode,
-        elapsed_seconds=workflow_result.elapsed_seconds,
-        skipped=workflow_result.status is WorkflowStepStatus.SKIPPED,
-    )
-    if on_step_done is not None:
-        on_step_done(1, result)
-    if workflow_result.status is WorkflowStepStatus.FAILED:
+    if failed_result is not None:
         raise RuntimeError(
-            f"Etapa '{step.name}' falhou com codigo {result.returncode}. "
-            f"Log: {result.log_path}"
+            f"Etapa '{failed_result.step_name}' falhou com codigo "
+            f"{failed_result.returncode}. Log: {failed_result.log_path}"
         )
-    return result
+    return results

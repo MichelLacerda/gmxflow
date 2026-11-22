@@ -10,7 +10,7 @@ from gmxflow.executor import (
     WorkflowExecutionReport,
     WorkflowStepResult,
     WorkflowStepStatus,
-    run_step,
+    run_steps,
     runtime_command,
 )
 from gmxflow.pipeline import build_pipeline
@@ -318,11 +318,19 @@ def test_run_validates_then_uses_shared_executor(
     )
     topology_result = StepResult(
         step_name="topology",
-        command=["gmx", "pdb2gmx"],
+        command=project.plan(until="topology")[1].command,
         workdir=project.root / "work" / "topo",
         log_path=project.root / "work" / "logs" / "02_topology.log",
         returncode=0,
         elapsed_seconds=0.3,
+    )
+    box_result = StepResult(
+        step_name="box",
+        command=["gmx", "editconf"],
+        workdir=project.root / "work" / "box",
+        log_path=project.root / "work" / "logs" / "03_box.log",
+        returncode=0,
+        elapsed_seconds=0.4,
     )
 
     monkeypatch.setattr(
@@ -336,16 +344,25 @@ def test_run_validates_then_uses_shared_executor(
 
     def fake_run_workflow_graph(graph, **kwargs):
         events.append("workflow_graph")
-        assert graph.topological_order == ("prepare",)
+        assert graph.topological_order == ("prepare", "topology")
         assert kwargs["project_root"] == project.root
         return WorkflowExecutionReport(
-            results=(
+            results=tuple(
                 WorkflowStepResult(
-                    step_id="prepare",
+                    step_id=step_id,
                     status=WorkflowStepStatus.SUCCEEDED,
-                    log_path=step_result.log_path,
-                    elapsed_seconds=step_result.elapsed_seconds,
-                ),
+                    log_path=(
+                        step_result.log_path
+                        if step_id == "prepare"
+                        else topology_result.log_path
+                    ),
+                    elapsed_seconds=(
+                        step_result.elapsed_seconds
+                        if step_id == "prepare"
+                        else topology_result.elapsed_seconds
+                    ),
+                )
+                for step_id in graph.topological_order
             ),
             dependencies=graph.dependencies,
             artifact_paths=kwargs["artifact_paths"],
@@ -355,22 +372,22 @@ def test_run_validates_then_uses_shared_executor(
 
     def fake_run_steps(steps, **kwargs):
         events.append("run_steps")
-        assert [step.name for step in steps] == ["topology"]
+        assert [step.name for step in steps] == ["box"]
         assert kwargs["project_root"] == project.root
-        assert kwargs["start_index"] == 2
-        return [topology_result]
+        assert kwargs["start_index"] == 3
+        return [box_result]
 
     monkeypatch.setattr("gmxflow.api.run_steps", fake_run_steps)
 
-    report = project.run(until="topology")
+    report = project.run(until="box")
 
     assert events == ["validate", "workspace", "workflow_graph", "run_steps"]
     assert report.workspace is workspace
-    assert report.steps == (step_result, topology_result)
-    assert report.results == (workspace, step_result, topology_result)
+    assert report.steps == (step_result, topology_result, box_result)
+    assert report.results == (workspace, step_result, topology_result, box_result)
 
 
-def test_graph_preparation_matches_legacy_command_and_outputs(
+def test_graph_preparation_and_topology_match_legacy_commands_and_outputs(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -396,11 +413,21 @@ def test_graph_preparation_matches_legacy_command_and_outputs(
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         subprocess_calls.append(tuple(command))
-        output_content = {
-            "receptor_fixed.pdb": "RECEPTOR\n",
-            "ligante_fixed.pdb": "LIGAND\n",
-            "complexo.pdb": "COMPLEX\n",
-        }
+        if "prepare-complex" in command:
+            output_content = {
+                "receptor_fixed.pdb": "RECEPTOR\n",
+                "ligante_fixed.pdb": "LIGAND\n",
+                "complexo.pdb": "COMPLEX\n",
+            }
+        else:
+            output_content = {
+                "complexo.gro": "GRO\n",
+                "topol.top": "TOP\n",
+                "topol_Protein_chain_A.itp": "CHAIN_A\n",
+                "topol_Protein_chain_B.itp": "CHAIN_B\n",
+                "posre_Protein_chain_A.itp": "POSRE_A\n",
+                "posre_Protein_chain_B.itp": "POSRE_B\n",
+            }
         for filename, content in output_content.items():
             (Path(cwd) / filename).write_text(content, encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -421,7 +448,7 @@ def test_graph_preparation_matches_legacy_command_and_outputs(
 
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run(
-        until="prepare",
+        until="topology",
         on_step_start=lambda index, step: callback_events.append(
             ("start", index, step.name)
         ),
@@ -429,43 +456,64 @@ def test_graph_preparation_matches_legacy_command_and_outputs(
             ("done", index, result.step_name)
         ),
     )
-    resumed_report = project.run(until="prepare")
-    legacy_step = build_pipeline(
+    resumed_report = project.run(until="topology")
+
+    topology_only_root = tmp_path / "topology_only_project"
+    topology_only_project = GmxFlowProject.open(
+        _write_project_config(topology_only_root)
+    )
+    topology_only_inputs = topology_only_root / "inputs"
+    topology_only_inputs.mkdir()
+    (topology_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (topology_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
+    prepared_structure = topology_only_root / "work" / "prep" / "complexo.pdb"
+    prepared_structure.parent.mkdir(parents=True)
+    prepared_structure.write_text("COMPLEX\n", encoding="utf-8")
+    topology_only_report = topology_only_project.run(
+        from_step="topology",
+        until="topology",
+    )
+
+    legacy_steps = build_pipeline(
         project.config,
         config_dir=legacy_root,
         config_path=legacy_config,
-    )[0]
-    legacy_result = run_step(
-        legacy_step,
-        logs_dir=legacy_root / "work" / "logs",
-        index=1,
-    )
+    )[:2]
+    legacy_results = run_steps(legacy_steps, project_root=legacy_root)
 
-    graph_result = graph_report.steps[0]
-    graph_command = [
-        argument.replace(str(project_root), "<project-root>")
-        for argument in graph_result.command
-    ]
-    legacy_command = [
-        argument.replace(str(legacy_root), "<project-root>")
-        for argument in legacy_result.command
-    ]
-    assert graph_command == legacy_command
-    assert graph_result.returncode == legacy_result.returncode == 0
-    assert resumed_report.steps[0].skipped
-    assert len(subprocess_calls) == 2  # graph once, then the separate legacy reference
+    assert len(graph_report.steps) == len(legacy_results) == 2
+    for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
+        graph_command = [
+            argument.replace(str(project_root), "<project-root>")
+            for argument in graph_result.command
+        ]
+        legacy_command = [
+            argument.replace(str(legacy_root), "<project-root>")
+            for argument in legacy_result.command
+        ]
+        assert graph_command == legacy_command
+        assert graph_result.returncode == legacy_result.returncode == 0
+    assert all(result.skipped for result in resumed_report.steps)
+    assert topology_only_report.steps[0].step_name == "topology"
+    assert topology_only_report.steps[0].returncode == 0
+    assert len(subprocess_calls) == 5  # graph twice, isolated topology, legacy pair
     assert legacy_state.read_bytes() == legacy_state_before
     assert (project_root / "work" / "workflow_state.json").is_file()
     assert callback_events == [
         ("start", 1, "prepare"),
         ("done", 1, "prepare"),
+        ("start", 2, "topology"),
+        ("done", 2, "topology"),
     ]
-    graph_outputs = sorted((project_root / "work" / "prep").glob("*.pdb"))
-    legacy_outputs = sorted((legacy_root / "work" / "prep").glob("*.pdb"))
-    assert [path.name for path in graph_outputs] == [path.name for path in legacy_outputs]
-    assert [path.read_bytes() for path in graph_outputs] == [
-        path.read_bytes() for path in legacy_outputs
-    ]
+    for relative_dir in (Path("work/prep"), Path("work/topo")):
+        graph_outputs = sorted((project_root / relative_dir).glob("*"))
+        legacy_outputs = sorted((legacy_root / relative_dir).glob("*"))
+        assert [path.name for path in graph_outputs] == [
+            path.name for path in legacy_outputs
+        ]
+        assert [path.read_bytes() for path in graph_outputs] == [
+            path.read_bytes() for path in legacy_outputs
+        ]
 
 
 def test_run_rejects_unreleased_steps_before_workspace_setup(

@@ -308,9 +308,9 @@ Atendido em `tests/test_workflow_executor.py`.
 **Escopo realizado:** a etapa `prepare` do pipeline real agora é adaptada ao
 contrato `Step` e executada pelo grafo quando `GmxFlowProject.run()` recebe um
 plano iniciado nessa etapa. A preparação continua usando o mesmo comando,
-entradas, saídas e estado definidos por `build_pipeline()`. Se houver etapas
-posteriores no plano, elas continuam no executor legado; o CLI permanece
-inalterado. A implementação antiga é mantida para comparação.
+entradas, saídas e estado definidos por `build_pipeline()`. O CLI permanece
+inalterado e a implementação antiga é mantida para comparação. A etapa
+`topology` é a primeira fatia da etapa 5, descrita abaixo.
 
 **Fora de escopo:** migrar o CLI, as demais etapas, todo o exemplo ou todos os
 tutoriais; mudar force field, protonação, parâmetros de simulação e análise;
@@ -331,11 +331,24 @@ novamente. Atendido em `tests/test_api.py` e `tests/test_pipeline.py`.
 cada fatia. Definir e testar a compatibilidade de identificadores, opções de
 seleção de etapas e estado salvo para projetos existentes.
 
+**Fatia implementada:** nos fluxos `peptide` e `none`, `topology` agora é
+executada junto com `prepare` pelo grafo quando o plano começa em `prepare`;
+também pode ser selecionada isoladamente se `work/prep/complexo.pdb` já
+existir. As etapas posteriores continuam no executor legado. O fluxo
+`small_molecule` (`ligand-topology`, `protein-topology` e `assemble-complex`)
+não foi migrado.
+
 **Decisão de compatibilidade já aplicada:** o CLI mantém `work/state.json`; a
 execução pelo grafo na API usa `work/workflow_state.json`. Os formatos não são
 convertidos nem sobrescritos entre si, e a retomada de cada executor é
 independente. As próximas fatias devem preservar os IDs de etapas e verificar
-a retomada dentro de cada executor.
+a retomada dentro de cada executor. Os callbacks da API continuam intercalando
+início e conclusão por etapa, mesmo quando várias etapas são executadas no
+mesmo grafo.
+
+**Verificação:** `tests/test_api.py` compara os comandos e os arquivos
+produzidos pelos dois executores com um subprocesso simulado; não substitui uma
+execução real do GROMACS nem valida resultados científicos.
 
 **Fora de escopo:** remover a implementação antiga antes da paridade, introduzir
 um editor visual ou prometer suporte a todos os tutoriais de Lemkul.
