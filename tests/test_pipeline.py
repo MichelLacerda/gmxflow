@@ -5,7 +5,14 @@ import pytest
 
 from gmxflow.config import default_config
 from gmxflow.executor import select_steps
-from gmxflow.pipeline import Artifact, Parallel, Sequence, WorkflowGraph, build_pipeline
+from gmxflow.pipeline import (
+    Artifact,
+    Parallel,
+    PipelineCommandStep,
+    Sequence,
+    WorkflowGraph,
+    build_pipeline,
+)
 
 
 @dataclass(frozen=True)
@@ -33,6 +40,28 @@ def test_build_pipeline_returns_expected_order(tmp_path: Path) -> None:
         "ions-grompp",
     ]
     assert steps[-1].name == "report"
+
+
+def test_prepare_step_adapts_to_workflow_without_changing_its_command(
+    tmp_path: Path,
+) -> None:
+    legacy_step = build_pipeline(
+        default_config("prepare_adapter"),
+        config_dir=tmp_path,
+        config_path=tmp_path / "project.toml",
+    )[0]
+    workflow_step = PipelineCommandStep.from_pipeline_step(legacy_step)
+    graph = WorkflowGraph.from_workflow(
+        workflow_step,
+        project_inputs=workflow_step.inputs,
+    )
+
+    assert graph.topological_order == ("prepare",)
+    assert workflow_step.command == tuple(legacy_step.command)
+    assert workflow_step.workdir == legacy_step.workdir
+    assert [Path(item.key) for item in workflow_step.inputs] == legacy_step.inputs
+    assert [Path(item.key) for item in workflow_step.outputs] == legacy_step.outputs
+    assert workflow_step.state == legacy_step.state
 
 
 def test_workflow_graph_builds_sequence_dependencies_from_artifacts() -> None:

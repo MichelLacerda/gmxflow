@@ -57,6 +57,55 @@ class PipelineStep(BaseModel):
 
 
 @dataclass(frozen=True)
+class PipelineCommandStep:
+    """Workflow ``Step`` adapter that preserves a legacy command step."""
+
+    id: str
+    name: str
+    command: tuple[str, ...]
+    workdir: Path
+    inputs: tuple[Artifact, ...]
+    outputs: tuple[Artifact, ...]
+    stdin: str | None
+    env: Mapping[str, str]
+    state: Mapping[str, object]
+    parallel: bool = False
+    version: str = "1"
+
+    @classmethod
+    def from_pipeline_step(cls, step: PipelineStep) -> PipelineCommandStep:
+        """Adapt one existing pipeline step without changing its command."""
+        return cls(
+            id=step.name,
+            name=step.description,
+            command=tuple(step.command),
+            workdir=step.workdir,
+            inputs=tuple(_path_artifact(path) for path in step.inputs),
+            outputs=tuple(_path_artifact(path) for path in step.outputs),
+            stdin=step.stdin,
+            env=MappingProxyType(dict(step.env)),
+            state=MappingProxyType(dict(step.state)),
+        )
+
+    def run(self, context: RunContext) -> None:
+        for artifact in self.inputs:
+            context.input_path(artifact)
+        for artifact in self.outputs:
+            context.output_path(artifact)
+        context.run_command(
+            self.command,
+            cwd=self.workdir,
+            env=self.env,
+            stdin=self.stdin,
+        )
+
+
+def _path_artifact(path: Path) -> Artifact:
+    resolved_path = path.expanduser().resolve()
+    return Artifact(key=str(resolved_path), kind=resolved_path.suffix.lstrip(".") or "file")
+
+
+@dataclass(frozen=True)
 class Artifact:
     """Logical artifact declaration; physical paths are resolved elsewhere."""
 
