@@ -449,7 +449,7 @@ documentados e cobertos por testes de retomada. Atendido em
 software; não validam resultados científicos ou substituem um ensaio real com
 GROMACS.
 
-### 6. Consolidar a API após demonstrar paridade
+### 6. Consolidar a API após demonstrar paridade — concluída
 
 **Escopo:** tornar a nova composição a interface recomendada, atualizar a
 documentação e exemplos, e remover o caminho antigo somente quando não houver
@@ -461,7 +461,24 @@ com `project.run_workflow(workflow)`. A API define `project-workflow.json` como
 estado padrão para essa composição, sem misturá-lo ao estado do CLI ou ao estado
 mantido pelo método legado `project.run()`. `project.show_execution(...)` e a
 apresentação nativa no notebook aceitam os resultados de ambas as interfaces.
-`project.run()` continua disponível; esta fatia não o remove nem o depreca.
+`project.run()` continua disponível; esta etapa não o remove nem o depreca.
+Projetos existentes não convertem seus estados automaticamente: ao adotar
+`run_workflow()`, a retomada passa de `work/workflow_state.json` para
+`work/project-workflow.json`, podendo repetir etapas. A orientação para manter
+o método antigo ou fazer backup dos artefatos antes da troca está em
+[`install-gmxflow-without-uv.md`](../how-to/install-gmxflow-without-uv.md#projetos-existentes-e-a-api-de-workflow).
+
+**Compatibilidade mantida deliberadamente:** o comando `gmxflow run` ainda usa
+`GmxFlowProject.plan()`, a projeção `PipelineStep` e o executor legado para
+preservar as opções do CLI e o estado `work/state.json`. Essa dependência impede
+remover agora a projeção e o executor antigos. A migração do CLI, incluindo
+compatibilidade e eventual conversão do estado persistido, é trabalho separado
+e não é necessária para recomendar a composição Python nos notebooks.
+
+**Conclusão:** exemplos, template de novos projetos, documentação e guia para
+projetos existentes usam/distinguem a API composta. A suíte completa passou
+com 212 testes aprovados e 1 desmarcado. O caminho antigo permanece como
+compatibilidade; sua remoção não faz parte do resultado desta etapa.
 
 ```python
 workflow = project.workflow()

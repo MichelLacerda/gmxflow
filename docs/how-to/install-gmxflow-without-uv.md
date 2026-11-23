@@ -84,6 +84,32 @@ Isso cria a pasta `meu_projeto/` no diretório atual, com `project.toml`, `proje
 
 Para limpar artefatos intermediários pelo próprio notebook, execute `project.clean()`. Por padrão, ele limpa `work/`, preservando os templates `.mdp`, os arquivos em `inputs/` e os resultados em `outputs/`. Use `project.clean(remove_templates=True)` para remover também os templates, ou `project.clean(all_work=True)` para descartar todo o conteúdo de `work/` e recriar suas pastas.
 
+### Projetos existentes e a API de workflow
+
+Projetos e notebooks anteriores que usam `project.run()` continuam suportados;
+não é necessário alterar `project.toml`, as entradas ou o código para continuar
+usando esse caminho. Para adotar a composição mostrada nos notebooks novos,
+troque a chamada de execução por:
+
+```python
+workflow = project.workflow()
+execution_report = project.run_workflow(workflow)
+project.show_execution(execution_report)
+```
+
+Essa troca não migra o estado salvo. `project.run()` registra a retomada em
+`work/workflow_state.json`, enquanto `run_workflow()` usa
+`work/project-workflow.json` por padrão. Como os estados são independentes, a
+primeira execução pela nova chamada pode executar novamente etapas mesmo que
+existam saídas anteriores. Se precisar preservar os artefatos gerados, faça
+uma cópia de `work/` e `outputs/` antes de trocar; não apague esses diretórios
+como parte da migração. Não há conversão automática entre os estados.
+
+A composição e a API dos notebooks continuam experimentais. A execução de
+etapas pode substituir artefatos gerados no projeto; revise os parâmetros e
+entradas normalmente antes de executar. Esta mudança de interface não altera
+parâmetros científicos nem valida a interpretação dos resultados.
+
 Atualizar:
 
 ```sh
