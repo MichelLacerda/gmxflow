@@ -186,12 +186,12 @@ class GmxFlowProject:
         Creating it does not validate files, initialize workspaces, or execute
         any commands.
         """
-        selected_steps = self.plan(from_step=from_step, until=until)
         return build_workflow(
             self.config,
             self.root,
             config_path=self.config_path,
-            selected_steps=selected_steps,
+            from_step=from_step,
+            until=until,
         )
 
     def validate(self) -> ValidationReport:

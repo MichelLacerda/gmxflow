@@ -1640,15 +1640,31 @@ def build_workflow(
     *,
     config_path: Path | None = None,
     selected_steps: list[PipelineStep] | None = None,
+    from_step: str | None = None,
+    until: str | None = None,
 ) -> Sequence:
     """Compose an API workflow from concrete steps.
 
     The CLI projects these same concrete steps through ``build_pipeline()``.
-    ``selected_steps`` optionally preserves a previously validated CLI selection.
+    API selections use concrete Step IDs. ``selected_steps`` remains temporarily
+    for the legacy API runner, which still consumes ``PipelineStep`` objects.
     """
     root = config_dir.expanduser().resolve()
     resolved_config = (config_path or root / "project.toml").expanduser().resolve()
     concrete_steps = _build_concrete_steps(config, root, resolved_config)
+    if selected_steps is not None and (from_step is not None or until is not None):
+        raise ValueError("Use selected_steps ou IDs de etapa, não ambos.")
+
+    if from_step is not None or until is not None:
+        ids = [step.id for step in concrete_steps]
+        start = _concrete_step_index(ids, from_step) if from_step else 0
+        end = _concrete_step_index(ids, until) + 1 if until else len(ids)
+        if start >= end:
+            raise ValueError(
+                "--from-step deve apontar para uma etapa anterior ou igual a --until"
+            )
+        concrete_steps = concrete_steps[start:end]
+
     if selected_steps is None:
         return Sequence(*concrete_steps)
 
@@ -1668,6 +1684,16 @@ def build_workflow(
             )
         workflow_steps.append(concrete)
     return Sequence(*workflow_steps)
+
+
+def _concrete_step_index(step_ids: list[str], step_id: str) -> int:
+    try:
+        return step_ids.index(step_id)
+    except ValueError as error:
+        valid = ", ".join(step_ids)
+        raise ValueError(
+            f"Etapa desconhecida: {step_id}. Etapas válidas: {valid}"
+        ) from error
 
 
 def _resolve_from_config(value: str, config_dir: Path) -> Path:

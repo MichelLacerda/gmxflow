@@ -509,10 +509,12 @@ que preservem comportamento, retomada e segurança dos arquivos.
 
 **Auditoria atual:** `GmxFlowProject.workflow()` chama `plan()`, que produz
 `PipelineStep`; `build_workflow(..., selected_steps=...)` reconstrói os Steps
-concretos e os compara com essa projeção por `to_pipeline_step()`. Já
+concretos e os compara com essa projeção por `to_pipeline_step()`. (Atualização:
+`project.workflow()` agora seleciona diretamente pelos IDs dos Steps concretos;
+essa ponte foi removida desse método, mas ainda existe em `project.run()`.) Já
 `run_workflow()` executa os Steps pelo grafo. O CLI ainda consome `plan()`,
-`PipelineStep` e `run_steps()`, com estado em `work/state.json`. Há, portanto,
-uma ponte de montagem dentro da API e um segundo caminho de execução no CLI.
+`PipelineStep` e `run_steps()`, com estado em `work/state.json`. Permanecem a
+ponte de execução da API legada e um segundo caminho de execução no CLI.
 
 #### A. Fixar o contrato público e a experiência das receitas — decisão antes de refatorar
 
@@ -541,6 +543,12 @@ receita gerada usam as mesmas classes e o mesmo operador. Não há API pública
 `add/connect` nem wrapper de execução que decida a composição pelo usuário.
 
 #### B. Remover a projeção legada da construção da API
+
+**Progresso parcial:** `project.workflow(from_step=..., until=...)` constrói e
+seleciona os Steps canônicos diretamente por `id`; foram adicionados testes
+para seleção e ID desconhecido. `project.plan()`, `project.validate()` e
+`project.run()` ainda dependem de `PipelineStep`/`build_pipeline()`, portanto
+esta fase não está concluída.
 
 - Fazer `project.workflow()` construir diretamente a sequência canônica de
   Steps a partir da configuração e da seleção por ID.

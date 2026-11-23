@@ -126,6 +126,26 @@ def test_workflow_rejects_unmapped_legacy_step(tmp_path: Path) -> None:
         )
 
 
+def test_build_workflow_selects_concrete_steps_by_id(tmp_path: Path) -> None:
+    workflow = build_workflow(
+        default_config("selected_concrete_steps"),
+        config_dir=tmp_path,
+        from_step="box",
+        until="solvate",
+    )
+
+    assert [step.id for step in workflow.items] == ["box", "solvate"]
+
+
+def test_build_workflow_rejects_unknown_concrete_step_id(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="Etapa desconhecida: missing"):
+        build_workflow(
+            default_config("unknown_concrete_step"),
+            config_dir=tmp_path,
+            until="missing",
+        )
+
+
 def test_workflow_graph_builds_sequence_dependencies_from_artifacts() -> None:
     source = Artifact("structure", "pdb")
     prepared = Artifact("prepared-structure", "pdb")
