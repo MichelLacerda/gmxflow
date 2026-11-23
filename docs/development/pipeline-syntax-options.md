@@ -188,13 +188,10 @@ concorrente garantida. Depois do grupo, os outputs de todos os ramos ficam
 disponíveis; uma sequência subsequente só inicia após todos os ramos
 concluírem.
 
-O identificador `id` é a chave lógica para logs e retomada. Para os passos
-migrados, a primeira escolha será preservar os nomes atuais (por exemplo,
-`prepare`, `topology`, `production`) como IDs, evitando invalidar estado
-existente sem necessidade. A compatibilidade de formatos de estado, aliases e
-mudanças futuras de ID será definida e testada antes da migração do executor;
-esta decisão não autoriza reescrever ou descartar silenciosamente
-`work/state.json`.
+O identificador `id` é a chave lógica para logs e retomada. Os nomes atuais
+(por exemplo, `prepare`, `topology`, `production`) são usados como IDs. O
+executor de grafo mantém um estado único em `work/state.json`; formatos
+anteriores não são convertidos.
 
 Pydantic poderá validar modelos de parâmetros de passos concretos, mas não é
 requisito do `Protocol` nem substitui a validação central do grafo. Uma
@@ -220,9 +217,9 @@ chamador escolhe um nome de estado JSON customizado, salvo dentro de `work/`.
 Steps customizados continuam responsáveis pela operação científica que
 declaram e devem usar o `RunContext` para acessar artefatos e executar
 comandos.
-Os nomes `state.json` e `workflow_state.json` (sem distinção entre maiúsculas e
-minúsculas) são reservados para os estados dos executores padrão e não podem
-ser usados por workflows customizados.
+`state.json` é o arquivo padrão compartilhado pelo CLI e pelas APIs de execução.
+Workflows customizados podem escolher outro nome quando precisarem de estado
+independente.
 
 ```python
 report = project.run_workflow(
@@ -359,10 +356,8 @@ validar resultados científicos com GROMACS.
 artefatos declarados e comparam a chamada normalizada e os arquivos de saída
 com o executor legado usando um subprocesso simulado. Essa comparação valida a
 integração do software, não a preparação molecular nem a validade científica.
-O estado do grafo é gravado separadamente em `work/workflow_state.json`, sem
-sobrescrever `work/state.json` do CLI. Os caches são independentes, portanto a
-primeira execução por um executor sem estado próprio pode executar a etapa
-novamente. Atendido em `tests/test_api.py` e `tests/test_pipeline.py`.
+O estado do grafo e do CLI é gravado em `work/state.json`. Atendido em
+`tests/test_api.py` e `tests/test_pipeline.py`.
 
 ### 5. Migrar as demais etapas incrementalmente — concluída
 
@@ -400,10 +395,8 @@ concretas usada por `build_workflow()`. A API compõe essa lista diretamente ou
 valida a projeção ao receber uma seleção de etapas do CLI. A sequência atual
 não usa `Parallel`.
 
-**Compatibilidade do executor (antes da migração do CLI):** execuções pela API
-usavam `work/workflow_state.json`; o CLI ainda usava `work/state.json`. Esses
-formatos não são convertidos entre si. A migração atual do CLI está registrada
-na seção D/E abaixo.
+**Estado do executor:** CLI e API usam `work/state.json`. Estados antigos não
+são convertidos; a primeira execução no formato atual pode repetir etapas.
 
 No fluxo `small_molecule`, a topologia original da proteína é preservada em
 `work/topo/topol.top`; `AssembleComplexStep` cria
@@ -452,24 +445,15 @@ GROMACS.
 documentação e exemplos, e remover o caminho antigo somente quando não houver
 dependências restantes e a compatibilidade tiver sido tratada.
 
-**Fatia inicial concluída:** os notebooks mantidos em `examples/` e o template
-de `startproject` constroem o workflow com `project.workflow()` e o executam
-com `project.run_workflow(workflow)`. A API define `project-workflow.json` como
-estado padrão para essa composição, sem misturá-lo ao estado do CLI ou ao estado
-mantido pelo método legado `project.run()`. `project.show_execution(...)` e a
-apresentação nativa no notebook aceitam os resultados de ambas as interfaces.
-`project.run()` continua disponível; esta etapa não o remove nem o depreca.
-Projetos existentes não convertem seus estados automaticamente: ao adotar
-`run_workflow()`, a retomada passa de `work/workflow_state.json` para
-`work/project-workflow.json`, podendo repetir etapas. A orientação para manter
-o método antigo ou fazer backup dos artefatos antes da troca está em
-[`install-gmxflow-without-uv.md`](../how-to/install-gmxflow-without-uv.md#projetos-existentes-e-a-api-de-workflow).
+**Fatia inicial concluída:** notebooks e o template de `startproject` compõem
+Steps com `project.workflow()` e executam com `project.run_workflow(workflow)`.
+As APIs e o CLI usam `work/state.json` por padrão. O caminho antigo de execução
+está em remoção; estados antigos não são convertidos.
 
-**Compatibilidade mantida deliberadamente:** `PipelineStep`, `build_pipeline()`
-e o executor antigo continuam no código, mas já não são usados por
-`gmxflow run`. O estado legado `work/state.json` é preservado, não convertido;
-a retomada do CLI usa `work/cli-workflow.json`. A remoção dos adaptadores e do
-executor antigo depende da auditoria de consumidores e da cobertura na etapa F.
+`PipelineStep`, `build_pipeline()` e o executor linear antigo ainda possuem
+consumidores remanescentes e serão removidos após migrar os testes e módulos
+dependentes. Retrocompatibilidade não é requisito para esta versão ainda não
+publicada.
 
 **Concluído nesta etapa até aqui:** exemplos, template de novos projetos,
 documentação e guia para projetos existentes usam/distinguem a API composta.
@@ -489,9 +473,8 @@ project.show_execution(execution_report)
 ```
 
 O notebook demonstra a forma recomendada, mas a composição continua
-experimental e não altera parâmetros ou ordem científica. Projetos existentes
-mantêm configuração, entradas e estados; a nova chamada grava seu próprio
-estado em `work/project-workflow.json`.
+experimental e não altera parâmetros ou ordem científica. A execução usa
+`work/state.json`; estados de formatos antigos não são migrados.
 
 **Fora de escopo:** implementar plugins de terceiros ou editor visual como
 parte obrigatória desta migração.
@@ -596,20 +579,10 @@ comandos, parâmetros ou ordem científica.
 
 #### E. Decidir e testar a migração do estado persistido — política definida; implementação inicial concluída
 
-Os formatos atuais são: estado legado do CLI em `work/state.json`, estado da API
-legada em `work/workflow_state.json`, estado do CLI migrado em
-`work/cli-workflow.json`, e workflows customizados em `work/<state_name>`.
-
-**Decisão revisada pelo usuário:** usar `work/cli-workflow.json` para o CLI
-migrado e manter `work/state.json` intocado, sem conversão. Como os formatos e
-fingerprints são incompatíveis, a primeira execução no novo executor pode
-repetir etapas que só tinham estado legado; revise os parâmetros e outputs
-antes de executar.
-
-**Verificação inicial:** o teste do CLI confirma que um `work/state.json`
-preexistente permanece byte a byte inalterado e que o novo estado é criado em
-`work/cli-workflow.json`. Cobertura de estados inválidos e incompatíveis
-continua na suíte do executor; remover formatos antigos fica para F.
+CLI e APIs usam `work/state.json` como estado padrão único. Estados de formatos
+anteriores não são convertidos; a execução pode repetir etapas cujo estado não
+seja reconhecido. Arquivos de entrada e resultados científicos não são
+removidos por essa mudança.
 
 #### F. Excluir código e testes duplicados após a migração
 

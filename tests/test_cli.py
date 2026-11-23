@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -270,7 +271,7 @@ def test_cli_run_dry_run_prints_pipeline_without_executing(tmp_path: Path) -> No
     assert "gmx pdb2gmx" in result.output
     assert "gmx mdrun" in result.output
     assert "depende de: prepare" in result.output
-    assert not (config_path.parent / "work" / "cli-workflow.json").exists()
+    assert not (config_path.parent / "work" / "state.json").exists()
     assert not (config_path.parent / "work" / "logs" / "01_prepare.log").exists()
 
 
@@ -308,7 +309,7 @@ def test_cli_run_without_until_executes_full_pipeline(
 
     assert result.exit_code == 0
     assert calls["project_root"] == project
-    assert calls["state_name"] == "cli-workflow.json"
+    assert calls["state_name"] == "state.json"
     assert calls["step_ids"] == [
         "prepare",
         "topology",
@@ -413,10 +414,9 @@ def test_cli_run_until_prepare_sets_up_workspace_and_logs(tmp_path: Path) -> Non
         _atom(1, "N", "ALA", "B", 1, 1, 1, 1, "N") + "\n",
         encoding="utf-8",
     )
-    legacy_state = project / "work" / "state.json"
-    legacy_state.parent.mkdir(parents=True, exist_ok=True)
-    legacy_state.write_text('{"legacy": "preserve exactly"}\n', encoding="utf-8")
-    original_legacy_state = legacy_state.read_bytes()
+    state_path = project / "work" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text('{"old_state": true}\n', encoding="utf-8")
 
     result = runner.invoke(
         app, ["run", "--project", str(project / "project.toml"), "--until", "prepare"]
@@ -427,8 +427,8 @@ def test_cli_run_until_prepare_sets_up_workspace_and_logs(tmp_path: Path) -> Non
     assert "Etapa concluída: prepare" in result.output
     assert (project / "work" / "logs" / "00_workspace.log").is_file()
     assert (project / "work" / "logs" / "01_prepare.log").is_file()
-    assert (project / "work" / "cli-workflow.json").is_file()
-    assert legacy_state.read_bytes() == original_legacy_state
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["steps"]["prepare"]["workflow_step"] is True
     assert (project / "work" / "prep" / "complexo.pdb").is_file()
 
 

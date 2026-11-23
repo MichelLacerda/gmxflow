@@ -743,7 +743,6 @@ def run_workspace_setup(
     config: GmxFlowConfig,
     project_root: Path,
     index: int = 0,
-    state_path: Path | None = None,
 ) -> StepResult:
     logs_dir = project_root / "work" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -780,27 +779,6 @@ def run_workspace_setup(
         "",
     ]
     log_path.write_text("\n".join(content), encoding="utf-8")
-    _write_state_entry(
-        state_path=state_path or project_root / "work" / "state.json",
-        step=PipelineStep(
-            name="workspace",
-            description="Preparar diretórios de trabalho e arquivos .mdp ausentes.",
-            workdir=setup.work_root,
-            command=command,
-            outputs=[
-                *[item.output_path for item in setup.rendered_templates],
-                *setup.existing_templates,
-            ],
-        ),
-        command=command,
-        started=started,
-        finished=finished,
-        elapsed=elapsed,
-        returncode=0,
-        log_path=log_path,
-        skipped=False,
-    )
-
     return StepResult(
         step_name="workspace",
         command=command,

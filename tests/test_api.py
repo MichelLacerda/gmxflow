@@ -135,7 +135,7 @@ def test_project_runs_a_custom_protocol_step_and_resumes(tmp_path: Path) -> None
     assert not target_path.exists()
 
 
-def test_project_workflow_uses_separate_default_state_file(tmp_path: Path) -> None:
+def test_project_workflow_uses_shared_default_state_file(tmp_path: Path) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "default_state"))
     source_path = project.root / "inputs" / "source.txt"
     source_path.parent.mkdir()
@@ -154,7 +154,8 @@ def test_project_workflow_uses_separate_default_state_file(tmp_path: Path) -> No
     )
 
     assert report.succeeded
-    assert (project.root / "work" / "project-workflow.json").is_file()
+    assert (project.root / "work" / "state.json").is_file()
+    assert not (project.root / "work" / "project-workflow.json").exists()
     assert not (project.root / "work" / "workflow_state.json").exists()
 
 
@@ -310,10 +311,7 @@ def test_project_custom_workflow_executes_protocol_steps_and_resumes(
         "../state.json",
         "sub/state.json",
         "state.txt",
-        "state.json",
-        "workflow_state.json",
         "STATE.JSON",
-        "Workflow_State.json",
     ],
 )
 def test_custom_workflow_rejects_invalid_state_names(
@@ -1411,8 +1409,8 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
         )
         == 3
     )  # graph run, isolated graph step, and legacy reference
-    assert legacy_state.read_bytes() == legacy_state_before
-    assert (project_root / "work" / "workflow_state.json").is_file()
+    assert legacy_state.read_bytes() != legacy_state_before
+    assert (project_root / "work" / "state.json").is_file()
     assert callback_events == [
         ("start", 1, "prepare"),
         ("done", 1, "prepare"),

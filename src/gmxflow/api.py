@@ -238,7 +238,7 @@ class GmxFlowProject:
 
         Workspace setup preserves existing templates. The API executes the
         selected workflow through the graph executor and persists its state in
-        ``work/workflow_state.json``, independently from the CLI state file. A
+        ``work/state.json``. A
         failed step raises ``RuntimeError`` containing its ID and log path.
         ``on_step_start`` receives the concrete Step; use ``step.id`` as its
         stable identifier and ``step.name`` as its human-readable label.
@@ -258,7 +258,6 @@ class GmxFlowProject:
         workspace_result = run_workspace_setup(
             self.config,
             project_root=self.root,
-            state_path=self.root / "work" / "workflow_state.json",
         )
         results = _run_graph_steps(
             workflow=workflow,
@@ -277,7 +276,7 @@ class GmxFlowProject:
         *,
         project_inputs: Iterable[Artifact] | None = None,
         artifact_paths: Mapping[str, Path] | None = None,
-        state_name: str = "project-workflow.json",
+        state_name: str = "state.json",
         dry_run: bool = False,
         on_step_start: Callable[[Step], None] | None = None,
         on_step_done: Callable[[WorkflowStepResult], None] | None = None,
@@ -292,19 +291,16 @@ class GmxFlowProject:
         workspace. A dry run remains structural and creates no workspace.
         """
         filename = Path(state_name)
-        reserved_state_names = {"state.json", "workflow_state.json"}
         if (
             not state_name.strip()
             or filename.name != state_name
             or filename.stem in {"", ".", ".."}
             or filename.suffix != ".json"
-            or filename.name.casefold() in reserved_state_names
             or "/" in state_name
             or "\\" in state_name
         ):
             raise ValueError(
-                "state_name deve ser um nome simples de arquivo terminado em .json; "
-                "state.json e workflow_state.json são reservados"
+                "state_name deve ser um nome simples de arquivo terminado em .json"
             )
 
         runtime_workflow = _with_runtime_commands(workflow)
@@ -361,7 +357,6 @@ class GmxFlowProject:
             run_workspace_setup(
                 self.config,
                 project_root=self.root,
-                state_path=state_path,
             )
 
         return run_workflow_graph(
@@ -510,7 +505,7 @@ def _run_graph_steps(
             graph,
             project_root=project_root,
             artifact_paths=artifact_paths,
-            state_path=project_root / "work" / "workflow_state.json",
+            state_path=project_root / "work" / "state.json",
             on_step_start=notify_start,
             on_step_done=notify_done,
         )

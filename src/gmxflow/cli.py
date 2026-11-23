@@ -826,7 +826,7 @@ def run(
         try:
             report = project.run_workflow(
                 workflow,
-                state_name="cli-workflow.json",
+                state_name="state.json",
                 dry_run=True,
             )
         except (FileNotFoundError, RuntimeError, ValueError) as error:
@@ -859,7 +859,7 @@ def run(
         console.print(f"Preparando workspace do projeto: [bold]{project.root}[/bold]")
         project.run_workflow(
             workflow,
-            state_name="cli-workflow.json",
+            state_name="state.json",
             on_step_start=print_step_start,
             on_step_done=print_step_done,
         )

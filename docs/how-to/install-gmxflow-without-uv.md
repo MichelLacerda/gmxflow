@@ -97,18 +97,12 @@ execution_report = project.run_workflow(workflow)
 project.show_execution(execution_report)
 ```
 
-Essa troca não migra o estado salvo. `project.run()` registra a retomada em
-`work/workflow_state.json`, enquanto `run_workflow()` usa
-`work/project-workflow.json` por padrão. Como os estados são independentes, a
-primeira execução pela nova chamada pode executar novamente etapas mesmo que
-existam saídas anteriores. Se precisar preservar os artefatos gerados, faça
-uma cópia de `work/` e `outputs/` antes de trocar; não apague esses diretórios
-como parte da migração. Não há conversão automática entre os estados.
-
-O comando `gmxflow run` também usa o executor de grafo e salva a retomada em
-`work/cli-workflow.json`. O estado legado `work/state.json` é mantido intacto,
-mas não é importado; a primeira execução do CLI após essa mudança pode repetir
-etapas. Não remova `work/` antes de revisar as saídas que deseja preservar.
+As APIs e o comando `gmxflow run` usam `work/state.json` para a retomada. Estados
+gravados por versões anteriores não são convertidos; a primeira execução pode
+repetir etapas se o estado anterior não for reconhecido. Isso não remove os
+arquivos existentes em `work/` ou `outputs/`; ainda assim, faça uma cópia antes
+de executar se precisar preservar resultados importantes. A execução normal
+pode atualizar ou substituir artefatos gerados pelas etapas.
 
 A composição e a API dos notebooks continuam experimentais. A execução de
 etapas pode substituir artefatos gerados no projeto; revise os parâmetros e
