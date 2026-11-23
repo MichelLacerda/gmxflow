@@ -131,7 +131,9 @@ class GmxFlowProject:
 
         return edit_project_config(self)
 
-    def show_execution(self, report: ExecutionReport) -> None:
+    def show_execution(
+        self, report: ExecutionReport | WorkflowExecutionReport
+    ) -> None:
         """Display an execution summary with statuses, durations, and log paths."""
         from gmxflow.notebook import show_execution
 
@@ -299,7 +301,7 @@ class GmxFlowProject:
         *,
         project_inputs: Iterable[Artifact] | None = None,
         artifact_paths: Mapping[str, Path] | None = None,
-        state_name: str,
+        state_name: str = "project-workflow.json",
         dry_run: bool = False,
         on_step_start: Callable[[Step], None] | None = None,
         on_step_done: Callable[[WorkflowStepResult], None] | None = None,

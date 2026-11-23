@@ -7,12 +7,14 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
-from gmxflow.executor import StepResult
+from gmxflow.executor import StepResult, WorkflowStepResult, WorkflowStepStatus
 
 _DISPLAYED_FIGURES: list[Any] = []
 
 
-def show_execution(results: tuple[StepResult, ...]) -> None:
+def show_execution(
+    results: tuple[StepResult | WorkflowStepResult, ...],
+) -> None:
     """Display execution statuses, durations, and log paths in a notebook."""
     try:
         display_module = import_module("IPython.display")
@@ -29,15 +31,26 @@ def show_execution(results: tuple[StepResult, ...]) -> None:
 
     rows = []
     for result in results:
-        if result.skipped:
-            status = "reutilizada (sem alterações)"
-        elif result.succeeded:
-            status = "concluída"
+        if isinstance(result, WorkflowStepResult):
+            status = {
+                WorkflowStepStatus.PLANNED: "planejada",
+                WorkflowStepStatus.SUCCEEDED: "concluída",
+                WorkflowStepStatus.SKIPPED: "reutilizada (sem alterações)",
+                WorkflowStepStatus.FAILED: "falhou",
+                WorkflowStepStatus.BLOCKED: "bloqueada",
+            }[result.status]
+            name = result.step_id
         else:
-            status = "falhou"
+            if result.skipped:
+                status = "reutilizada (sem alterações)"
+            elif result.succeeded:
+                status = "concluída"
+            else:
+                status = "falhou"
+            name = result.step_name
         rows.append(
             {
-                "Etapa": result.step_name,
+                "Etapa": name,
                 "Status": status,
                 "Duração (s)": round(result.elapsed_seconds, 3),
                 "Log": str(result.log_path),

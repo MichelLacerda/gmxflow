@@ -9,7 +9,11 @@ from types import ModuleType
 from matplotlib.figure import Figure
 
 from gmxflow.config import default_config
-from gmxflow.executor import StepResult
+from gmxflow.executor import (
+    StepResult,
+    WorkflowStepResult,
+    WorkflowStepStatus,
+)
 from gmxflow.notebook import show_execution, show_report
 from gmxflow import plots
 
@@ -89,6 +93,64 @@ def test_show_execution_displays_native_step_summary(monkeypatch) -> None:
         },
     ]
     assert option_context_calls == [("display.max_colwidth", None)]
+
+
+def test_show_execution_displays_composed_workflow_results(monkeypatch) -> None:
+    displayed: list[object] = []
+
+    class FakeMarkdown:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+    class FakeDataFrame:
+        def __init__(self, rows, columns) -> None:
+            self.rows = rows
+            self.columns = columns
+
+    @contextmanager
+    def option_context(option: str, value: object):
+        yield
+
+    display_module = ModuleType("IPython.display")
+    display_module.Markdown = FakeMarkdown
+    display_module.display = displayed.append
+    pandas = ModuleType("pandas")
+    pandas.DataFrame = FakeDataFrame
+    pandas.option_context = option_context
+    monkeypatch.setitem(sys.modules, "IPython.display", display_module)
+    monkeypatch.setitem(sys.modules, "pandas", pandas)
+
+    show_execution(
+        (
+            WorkflowStepResult(
+                step_id="prepare-protein",
+                status=WorkflowStepStatus.SUCCEEDED,
+                log_path=Path("work/logs/prepare-protein.log"),
+                elapsed_seconds=1.23456,
+            ),
+            WorkflowStepResult(
+                step_id="build-topology",
+                status=WorkflowStepStatus.BLOCKED,
+                log_path=Path("work/logs/build-topology.log"),
+            ),
+        )
+    )
+
+    table = displayed[1]
+    assert table.rows == [
+        {
+            "Etapa": "prepare-protein",
+            "Status": "concluída",
+            "Duração (s)": 1.235,
+            "Log": "work/logs/prepare-protein.log",
+        },
+        {
+            "Etapa": "build-topology",
+            "Status": "bloqueada",
+            "Duração (s)": 0,
+            "Log": "work/logs/build-topology.log",
+        },
+    ]
 
 
 def test_show_report_displays_native_tables_and_graphs(

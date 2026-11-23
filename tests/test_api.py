@@ -112,6 +112,29 @@ def test_project_runs_a_custom_protocol_step_and_resumes(tmp_path: Path) -> None
     assert not target_path.exists()
 
 
+def test_project_workflow_uses_separate_default_state_file(tmp_path: Path) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "default_state"))
+    source_path = project.root / "inputs" / "source.txt"
+    source_path.parent.mkdir()
+    source_path.write_text("input", encoding="utf-8")
+    source = Artifact("source", "text")
+    target = Artifact("copy", "text")
+    step = _CopyArtifactStep("copy", "Copy input", (source,), (target,))
+
+    report = project.run_workflow(
+        step,
+        project_inputs=(source,),
+        artifact_paths={
+            "source": source_path,
+            "copy": project.root / "outputs" / "copy.txt",
+        },
+    )
+
+    assert report.succeeded
+    assert (project.root / "work" / "project-workflow.json").is_file()
+    assert not (project.root / "work" / "workflow_state.json").exists()
+
+
 def test_project_workflow_builds_concrete_steps_for_composition(
     tmp_path: Path,
 ) -> None:
@@ -346,7 +369,7 @@ def test_show_execution_delegates_execution_results(
         elapsed_seconds=0.25,
     )
     report = ExecutionReport(workspace=result, steps=(result,))
-    shown_results: list[tuple[StepResult, ...]] = []
+    shown_results: list[tuple[object, ...]] = []
     monkeypatch.setattr(
         "gmxflow.notebook.show_execution", shown_results.append
     )
@@ -354,6 +377,20 @@ def test_show_execution_delegates_execution_results(
     project.show_execution(report)
 
     assert shown_results == [(result, result)]
+
+    workflow_result = WorkflowStepResult(
+        step_id="custom-step",
+        status=WorkflowStepStatus.SUCCEEDED,
+        log_path=project.root / "work" / "logs" / "custom-step.log",
+    )
+    workflow_report = WorkflowExecutionReport(
+        results=(workflow_result,),
+        dependencies={},
+        artifact_paths={},
+    )
+    project.show_execution(workflow_report)
+
+    assert shown_results[-1] == (workflow_result,)
 
 
 def test_clean_removes_work_artifacts_and_preserves_project_data(tmp_path: Path) -> None:

@@ -455,6 +455,25 @@ GROMACS.
 documentação e exemplos, e remover o caminho antigo somente quando não houver
 dependências restantes e a compatibilidade tiver sido tratada.
 
+**Fatia inicial concluída:** o notebook smoke agora constrói o workflow com
+`project.workflow()` e o executa com `project.run_workflow(workflow)`. A API
+define `project-workflow.json` como estado padrão para essa composição, sem
+misturá-lo ao estado do CLI ou ao estado mantido pelo método legado
+`project.run()`. `project.show_execution(...)` e a apresentação nativa no
+notebook aceitam os resultados de ambas as interfaces. `project.run()` continua
+disponível; esta fatia não o remove nem o depreca.
+
+```python
+workflow = project.workflow()
+execution_report = project.run_workflow(workflow)
+project.show_execution(execution_report)
+```
+
+O notebook demonstra a forma recomendada, mas a composição continua
+experimental e não altera parâmetros ou ordem científica. Projetos existentes
+mantêm configuração, entradas e estados; a nova chamada grava seu próprio
+estado em `work/project-workflow.json`.
+
 **Fora de escopo:** implementar plugins de terceiros ou editor visual como
 parte obrigatória desta migração.
 
