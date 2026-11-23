@@ -449,7 +449,7 @@ documentados e cobertos por testes de retomada. Atendido em
 software; não validam resultados científicos ou substituem um ensaio real com
 GROMACS.
 
-### 6. Consolidar a API após demonstrar paridade — concluída
+### 6. Consolidar a API após demonstrar paridade — parcial; desacoplamento pendente
 
 **Escopo:** tornar a nova composição a interface recomendada, atualizar a
 documentação e exemplos, e remover o caminho antigo somente quando não houver
@@ -475,10 +475,16 @@ remover agora a projeção e o executor antigos. A migração do CLI, incluindo
 compatibilidade e eventual conversão do estado persistido, é trabalho separado
 e não é necessária para recomendar a composição Python nos notebooks.
 
-**Conclusão:** exemplos, template de novos projetos, documentação e guia para
-projetos existentes usam/distinguem a API composta. A suíte completa passou
-com 212 testes aprovados e 1 desmarcado. O caminho antigo permanece como
-compatibilidade; sua remoção não faz parte do resultado desta etapa.
+**Concluído nesta etapa até aqui:** exemplos, template de novos projetos,
+documentação e guia para projetos existentes usam/distinguem a API composta.
+A suíte completa passou com 212 testes aprovados e 1 desmarcado. Isso valida a
+experiência recomendada, mas não conclui a consolidação arquitetural: a fábrica
+do workflow ainda depende do formato legado.
+
+O uso atual de `project.workflow()` seguido de `project.run_workflow()` é uma
+ponte intermediária: a primeira chamada esconde a lista de etapas que deveria
+ser compreensível e editável pelo usuário. Não deve ser tratado como o desenho
+final da interface humana.
 
 ```python
 workflow = project.workflow()
@@ -493,6 +499,124 @@ estado em `work/project-workflow.json`.
 
 **Fora de escopo:** implementar plugins de terceiros ou editor visual como
 parte obrigatória desta migração.
+
+### Plano Para Uma Única Forma De Compor E Executar Pipelines
+
+**Objetivo:** manter uma só definição canônica de Steps, um só modelo de
+composição e um só executor. Não apagar código por contagem de linhas: cada
+remoção precisa decorrer de uma dependência eliminada e de testes substitutos
+que preservem comportamento, retomada e segurança dos arquivos.
+
+**Auditoria atual:** `GmxFlowProject.workflow()` chama `plan()`, que produz
+`PipelineStep`; `build_workflow(..., selected_steps=...)` reconstrói os Steps
+concretos e os compara com essa projeção por `to_pipeline_step()`. Já
+`run_workflow()` executa os Steps pelo grafo. O CLI ainda consome `plan()`,
+`PipelineStep` e `run_steps()`, com estado em `work/state.json`. Há, portanto,
+uma ponte de montagem dentro da API e um segundo caminho de execução no CLI.
+
+#### A. Fixar o contrato público e a experiência das receitas — decisão antes de refatorar
+
+- Adotar como sintaxe de composição linear o operador `|` e `Parallel(...)`
+  para ramificações; `Sequence` será a representação normalizada interna, não
+  uma segunda forma pública de montar a mesma sequência.
+- Expor as classes de Step necessárias para compor tanto as tarefas internas
+  quanto as extensões do usuário. O código do notebook deve mostrar a sequência
+  realmente executada; nenhuma chamada deve criar silenciosamente uma pipeline
+  completa que o usuário não consegue inspecionar.
+- Manter `run_workflow(workflow)` somente como executor do objeto que já foi
+  composto. A chamada de execução não substitui nem esconde a definição da
+  pipeline.
+- Fazer `gmxflow startproject` aceitar uma receita opcional para tarefas
+  comuns. A receita deve gerar uma composição explícita e editável em
+  `project.ipynb`, e não chamar um wrapper fechado em tempo de execução.
+- Resolver explicitamente como um Step que satisfaz o `Protocol` participa do
+  operador `|` — por mixin/base composável ou outra decisão única — antes de
+  declarar o contrato estável. Não manter duas sintaxes públicas equivalentes.
+
+**Aceite:** o notebook gerado deixa visíveis as classes/etapas, sua ordem,
+ramos de `Parallel` e artefatos; os parâmetros científicos ficam explícitos
+em `project.toml` e referenciados no notebook. Uma pessoa consegue editar ou
+remover um Step sem abrir o executor. Um workflow montado manualmente e uma
+receita gerada usam as mesmas classes e o mesmo operador. Não há API pública
+`add/connect` nem wrapper de execução que decida a composição pelo usuário.
+
+#### B. Remover a projeção legada da construção da API
+
+- Fazer `project.workflow()` construir diretamente a sequência canônica de
+  Steps a partir da configuração e da seleção por ID.
+- Reimplementar validação e seleção (`strict_inputs`, `from_step`, `until`)
+  sobre o modelo canônico, sem chamar `project.plan()` ou `build_pipeline()`.
+- Remover `GromacsCommandStep.to_pipeline_step()` e a comparação de igualdade
+  com `PipelineStep` somente depois de não haver consumidores.
+
+**Aceite:** testes verificam comandos, artefatos, IDs, ordem e seleção a partir
+dos Steps canônicos; a API pode construir e executar sem importar
+`PipelineStep`/`build_pipeline`.
+
+#### C. Gerar receitas visíveis para tarefas comuns
+
+- Começar com uma receita de integração `smoke` e uma receita científica
+  selecionada de um tutorial Lemkul, por exemplo Lysozyme in Water; cada receita
+  deve ter escopo e fonte de referência declarados.
+- Gerar as chamadas de Step no notebook como código normal editável, junto das
+  entradas esperadas e dos parâmetros que o projeto já suporta. A receita
+  determina somente a sequência de operações; não deve inventar defaults
+  científicos nem afirmar equivalência ao tutorial quando faltarem campos.
+- Auditar os campos de configuração requeridos por cada receita e registrar
+  lacunas como trabalho separado, sujeito a revisão científica humana.
+
+**Aceite:** testes de `startproject` verificam conteúdo e legibilidade do
+notebook por receita, a ausência de execução automática e a preservação de
+arquivos existentes. A receita smoke é identificada como teste de integração;
+nenhum resultado dela é apresentado como evidência científica.
+
+#### D. Unificar o caminho de execução, preservando a interface do CLI
+
+- Adaptar o CLI para inspecionar e executar o mesmo workflow/grafo, mantendo
+  `--project`, `--dry-run`, `--strict-inputs`, `--from-step` e `--until`, além
+  das mensagens de progresso, logs e códigos de saída.
+- Fazer o dry-run apresentar os Steps e dependências do grafo; não construir
+  outro plano paralelo só para imprimir comandos.
+- Substituir os adaptadores públicos duplicados (`project.run()`, callbacks e
+  `ExecutionReport` versus `WorkflowExecutionReport`) por uma única interface;
+  manter compatibilidade temporária apenas se a política de release exigir.
+
+**Aceite:** testes do CLI e da API exercitam o mesmo executor e demonstram
+paridade de argv, stdin, ambiente, logs, validação, falha, retomada e seleção.
+Nenhum comportamento científico é alterado nesta etapa.
+
+#### E. Decidir e testar a migração do estado persistido
+
+Antes de trocar o executor do CLI, revisar os formatos atuais: CLI em
+`work/state.json`, API legada em `work/workflow_state.json`, e workflows
+customizados em `work/<state_name>`. Escolher uma política explícita:
+
+1. conversão verificável de registros antigos para o formato único, apenas
+   quando comando, entradas, saídas e parâmetros puderem ser comparados; ou
+2. migração incompatível para 1.0, preservando os arquivos antigos e avisando
+   claramente que etapas poderão ser executadas de novo.
+
+**Aceite:** testes cobrem estado ausente, completo, inválido e incompatível;
+nenhum arquivo de estado anterior é sobrescrito ou apagado silenciosamente.
+Esta decisão requer revisão humana antes de implementar.
+
+#### F. Excluir código e testes duplicados após a migração
+
+- Só então remover `PipelineStep`, `build_pipeline()`, `run_steps()`/
+  `run_step()`, seleção antiga, projeções e formatador de dry-run que não
+  tenham mais consumidores.
+- Migrar os testes que atualmente afirmam a implementação antiga; preservar
+  cobertura de comandos, artefatos, segurança, retomada e mensagens sem manter
+  testes duplicados apenas para confirmar duas implementações.
+- Manter a execução de processos e a lógica de domínio que continuarem sendo
+  usadas pelo executor canônico; tamanho de arquivo, isoladamente, não torna
+  código descartável.
+
+**Aceite final:** busca de referências confirma que não há chamadas/imports do
+executor antigo; testes completos, lint, tipos e smoke de integração aprovados;
+documentação oferece uma única forma de composição e explica a política de
+estado para projetos anteriores. O smoke continua sendo validação de software,
+nunca evidência científica.
 
 **Critério de aceite:** suíte completa aprovada, documentação distingue
 funcionalidade disponível de planos futuros, e há orientação clara para
