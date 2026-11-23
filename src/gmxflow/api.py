@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -11,6 +12,7 @@ from gmxflow.config import GmxFlowConfig, load_config
 from gmxflow.executor import (
     StepResult,
     WorkflowExecutionError,
+    WorkflowExecutionReport,
     WorkflowStepResult,
     WorkflowStepStatus,
     run_workflow_graph,
@@ -20,12 +22,14 @@ from gmxflow.executor import (
 )
 from gmxflow.forcefields import resolve_forcefield
 from gmxflow.pipeline import (
+    Artifact,
     REAL_EXECUTION_STEPS,
     GromacsCommandStep,
     PipelineStep,
     Step,
     Sequence as WorkflowSequence,
     WorkflowGraph,
+    WorkflowItem,
     build_pipeline,
     build_workflow,
 )
@@ -264,6 +268,48 @@ class GmxFlowProject:
         return ExecutionReport(
             workspace=workspace_result,
             steps=tuple(results),
+        )
+
+    def run_workflow(
+        self,
+        workflow: WorkflowItem,
+        *,
+        project_inputs: Iterable[Artifact],
+        artifact_paths: Mapping[str, Path],
+        state_name: str,
+        dry_run: bool = False,
+    ) -> WorkflowExecutionReport:
+        """Run a custom Step workflow without invoking standard project setup.
+
+        Callers declare external artifacts, their physical paths, and a JSON
+        state filename stored inside ``work/``. Unlike ``run()``, this method
+        does not validate GROMACS prerequisites, apply project templates, or
+        modify the built-in workflow. Steps are responsible for their declared
+        scientific operations and must use the supplied ``RunContext``.
+        """
+        filename = Path(state_name)
+        if (
+            not state_name.strip()
+            or filename.name != state_name
+            or filename.stem in {"", ".", ".."}
+            or filename.suffix != ".json"
+            or "/" in state_name
+            or "\\" in state_name
+        ):
+            raise ValueError(
+                "state_name deve ser um nome simples de arquivo terminado em .json"
+            )
+
+        graph = WorkflowGraph.from_workflow(
+            workflow,
+            project_inputs=project_inputs,
+        )
+        return run_workflow_graph(
+            graph,
+            project_root=self.root,
+            artifact_paths=artifact_paths,
+            state_path=self.root / "work" / filename,
+            dry_run=dry_run,
         )
 
 

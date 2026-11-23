@@ -202,6 +202,26 @@ implementação customizada deve satisfazer o contrato e declarar seus artefatos
 `ComposableStep` é um mixin opcional para habilitar `|`; herança não é necessária
 para Steps compostos explicitamente com `Sequence` ou `Parallel`.
 
+Para executar uma implementação customizada que satisfaça o `Step` Protocol,
+`GmxFlowProject.run_workflow(...)` recebe o workflow, as entradas externas e o
+mapa de artefatos para caminhos físicos. O chamador escolhe um nome de estado
+JSON, salvo dentro de `work/`, e pode usar `dry_run=True` para validar a
+estrutura sem executar os passos. Esse método não chama a validação de
+pré-requisitos GROMACS nem o setup da pipeline padrão; a implementação custom
+é responsável pela operação científica declarada.
+
+```python
+report = project.run_workflow(
+    workflow,
+    project_inputs=(structure,),
+    artifact_paths={
+        "structure": project.root / "inputs" / "structure.pdb",
+        "clean_structure": project.root / "work" / "custom" / "structure.pdb",
+    },
+    state_name="custom-preparation.json",
+)
+```
+
 ### Fronteiras de validação
 
 1. **Validação estática do workflow:** IDs únicos; chaves de artefato e tipos

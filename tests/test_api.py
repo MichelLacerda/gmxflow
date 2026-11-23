@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,7 +15,7 @@ from gmxflow.executor import (
     run_steps,
     runtime_command,
 )
-from gmxflow.pipeline import build_pipeline
+from gmxflow.pipeline import Artifact, RunContext, Step, build_pipeline
 
 
 def _write_project_config(project_dir: Path) -> Path:
@@ -21,6 +23,22 @@ def _write_project_config(project_dir: Path) -> Path:
     config_path = project_dir / "project.toml"
     config_path.write_text(to_toml(default_config(project_dir.name)), encoding="utf-8")
     return config_path
+
+
+@dataclass
+class _CopyArtifactStep:
+    id: str
+    name: str
+    inputs: tuple[Artifact, ...]
+    outputs: tuple[Artifact, ...]
+    parallel: bool = False
+    version: str = "1"
+    state: Mapping[str, object] = field(default_factory=dict)
+
+    def run(self, context: RunContext) -> None:
+        context.output_path(self.outputs[0]).write_bytes(
+            context.input_path(self.inputs[0]).read_bytes()
+        )
 
 
 def test_open_loads_and_resolves_project_config(tmp_path: Path) -> None:
@@ -64,6 +82,79 @@ def test_create_generates_and_opens_project(tmp_path: Path) -> None:
     assert project.config.mdrun.gpu == "off"
     assert (project.root / "project.ipynb").is_file()
     assert (project.root / "README.md").is_file()
+
+
+def test_project_runs_a_custom_protocol_step_and_resumes(tmp_path: Path) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "custom_step"))
+    source_path = project.root / "inputs" / "source.txt"
+    source_path.parent.mkdir()
+    source_path.write_text("custom step input", encoding="utf-8")
+    target_path = project.root / "outputs" / "copy.txt"
+    source = Artifact("source", "text")
+    target = Artifact("copy", "text")
+    step: Step = _CopyArtifactStep("copy", "Copy input", (source,), (target,))
+
+    dry_run = project.run_workflow(
+        step,
+        project_inputs=(source,),
+        artifact_paths={"source": source_path, "copy": target_path},
+        state_name="custom-copy.json",
+        dry_run=True,
+    )
+
+    assert dry_run.dry_run
+    assert not target_path.exists()
+
+
+def test_project_custom_workflow_executes_protocol_steps_and_resumes(
+    tmp_path: Path,
+) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "custom_step"))
+    source_path = project.root / "inputs" / "source.txt"
+    source_path.parent.mkdir()
+    source_path.write_text("custom step input", encoding="utf-8")
+    target_path = project.root / "outputs" / "copy.txt"
+    source = Artifact("source", "text")
+    target = Artifact("copy", "text")
+    step: Step = _CopyArtifactStep("copy", "Copy input", (source,), (target,))
+
+    first = project.run_workflow(
+        step,
+        project_inputs=(source,),
+        artifact_paths={"source": source_path, "copy": target_path},
+        state_name="custom-copy.json",
+    )
+    second = project.run_workflow(
+        step,
+        project_inputs=(source,),
+        artifact_paths={"source": source_path, "copy": target_path},
+        state_name="custom-copy.json",
+    )
+
+    assert first.succeeded
+    assert first.results[0].status is WorkflowStepStatus.SUCCEEDED
+    assert target_path.read_text(encoding="utf-8") == "custom step input"
+    assert second.results[0].status is WorkflowStepStatus.SKIPPED
+    assert (project.root / "work" / "custom-copy.json").is_file()
+
+
+@pytest.mark.parametrize("state_name", ["../state.json", "sub/state.json", "state.txt"])
+def test_custom_workflow_rejects_state_names_outside_work(
+    tmp_path: Path, state_name: str
+) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "custom_step"))
+    source = Artifact("source", "text")
+    target = Artifact("copy", "text")
+    step: Step = _CopyArtifactStep("copy", "Copy input", (source,), (target,))
+
+    with pytest.raises(ValueError, match="state_name"):
+        project.run_workflow(
+            step,
+            project_inputs=(source,),
+            artifact_paths={"source": tmp_path / "source", "copy": tmp_path / "copy"},
+            state_name=state_name,
+            dry_run=True,
+        )
 
 
 def test_create_refuses_existing_project_without_force(tmp_path: Path) -> None:
@@ -465,10 +556,11 @@ def test_run_validates_then_uses_shared_executor(
         "gmxflow.api.GmxFlowProject.validate",
         lambda self: events.append("validate"),
     )
-    monkeypatch.setattr(
-        "gmxflow.api.run_workspace_setup",
-        lambda config, project_root: events.append("workspace") or workspace,
-    )
+    def fake_workspace_setup(config, project_root):
+        events.append("workspace")
+        return workspace
+
+    monkeypatch.setattr("gmxflow.api.run_workspace_setup", fake_workspace_setup)
 
     def fake_run_workflow_graph(graph, **kwargs):
         events.append("workflow_graph")
