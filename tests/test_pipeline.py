@@ -6,7 +6,6 @@ from typing import Literal
 import pytest
 
 from gmxflow.config import default_config
-from gmxflow.executor import select_steps
 from gmxflow.pipeline import (
     AddIonsStep,
     AnalyzeTrajectoryStep,
@@ -1241,26 +1240,3 @@ def test_pipeline_adds_sasa_plot_outputs_when_enabled(tmp_path: Path) -> None:
         tmp_path.resolve() / "work" / "analysis" / "sasa_ligante.png" in report.inputs
     )
     assert tmp_path.resolve() / "work" / "analysis" / "bsa.png" in report.inputs
-
-
-def test_select_steps_until_prepare(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("select_test"), config_dir=tmp_path)
-
-    selected = select_steps(steps, until="prepare")
-
-    assert [step.name for step in selected] == ["prepare"]
-
-
-def test_select_steps_from_until(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("select_range_test"), config_dir=tmp_path)
-
-    selected = select_steps(steps, from_step="box", until="ions")
-
-    assert [step.name for step in selected] == ["box", "solvate", "ions-grompp", "ions"]
-
-
-def test_select_steps_rejects_unknown_step(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("select_error_test"), config_dir=tmp_path)
-
-    with pytest.raises(ValueError, match="Etapa desconhecida"):
-        select_steps(steps, until="missing")

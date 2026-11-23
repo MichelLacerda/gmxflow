@@ -487,12 +487,12 @@ remoção precisa decorrer de uma dependência eliminada e de testes substitutos
 que preservem comportamento, retomada e segurança dos arquivos.
 
 **Auditoria atual:** `GmxFlowProject.workflow()`, `validate()` e `run()` usam
-Steps concretos. A API não importa `PipelineStep`, `build_pipeline()` ou
-`select_steps()`; a rota intermediária `build_workflow(...,
-selected_steps=...)`, o método redundante `project.plan()` e seus testes foram
+Steps concretos. A API não importa `PipelineStep` ou `build_pipeline()`; a rota
+intermediária `build_workflow(..., selected_steps=...)`, o método redundante
+`project.plan()` e os executores lineares `run_step()`/`run_steps()` foram
 removidos. O CLI seleciona Steps concretos e usa `run_workflow()` e o executor
-de grafo; a projeção `PipelineStep` e `run_steps()` permanecem para auditoria
-e remoção posterior.
+de grafo. A projeção `PipelineStep`/`build_pipeline()` permanece sem consumidor
+de produção e será removida após migrar os fixtures de teste restantes.
 
 #### A. Fixar o contrato público e a experiência das receitas — decisão antes de refatorar
 
@@ -584,17 +584,21 @@ anteriores não são convertidos; a execução pode repetir etapas cujo estado n
 seja reconhecido. Arquivos de entrada e resultados científicos não são
 removidos por essa mudança.
 
-#### F. Excluir código e testes duplicados após a migração
+#### F. Excluir código e testes duplicados após a migração — em andamento
 
-- Só então remover `PipelineStep`, `build_pipeline()`, `run_steps()`/
-  `run_step()`, seleção antiga, projeções e formatador de dry-run que não
-  tenham mais consumidores.
+- Remover `PipelineStep`, `build_pipeline()` e fixtures de teste legados que
+  ainda projetam o workflow para a lista linear.
 - Migrar os testes que atualmente afirmam a implementação antiga; preservar
   cobertura de comandos, artefatos, segurança, retomada e mensagens sem manter
   testes duplicados apenas para confirmar duas implementações.
 - Manter a execução de processos e a lógica de domínio que continuarem sendo
   usadas pelo executor canônico; tamanho de arquivo, isoladamente, não torna
   código descartável.
+
+**Concluído nesta fatia:** `run_step()`, `run_steps()`, `select_steps()` e os
+testes que exercitavam ou comparavam o executor linear foram removidos. A suíte
+integrada continua verificando execução do grafo, retomada, seleção de etapas,
+logs e resultados simulados.
 
 **Aceite final:** busca de referências confirma que não há chamadas/imports do
 executor antigo; testes completos, lint, tipos e smoke de integração aprovados;

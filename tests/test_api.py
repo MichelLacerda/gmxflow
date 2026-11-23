@@ -12,9 +12,7 @@ from gmxflow.executor import (
     WorkflowExecutionReport,
     WorkflowStepResult,
     WorkflowStepStatus,
-    run_steps,
     runtime_command,
-    select_steps,
 )
 from gmxflow.pipeline import (
     Artifact,
@@ -42,16 +40,18 @@ def _legacy_cli_steps(
     until: str | None = None,
 ) -> list[PipelineStep]:
     """Build legacy CLI steps for parity fixtures, outside the public API."""
-    return select_steps(
-        build_pipeline(
-            project.config,
-            config_dir=project.root,
-            config_path=project.config_path,
-            strict_inputs=strict_inputs,
-        ),
-        from_step=from_step,
-        until=until,
+    steps = build_pipeline(
+        project.config,
+        config_dir=project.root,
+        config_path=project.config_path,
+        strict_inputs=strict_inputs,
     )
+    names = [step.name for step in steps]
+    start = names.index(from_step) if from_step is not None else 0
+    end = names.index(until) + 1 if until is not None else len(steps)
+    if start >= end:
+        raise ValueError("Seleção inválida nos fixtures de compatibilidade.")
+    return steps[start:end]
 
 
 @dataclass
@@ -860,7 +860,7 @@ def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) ->
     )
 
 
-def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
+def test_graph_prefix_through_plots_executes_and_resumes(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -883,35 +883,6 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     graph_prod_mdp = project_root / "work" / "prod" / "md.mdp"
     graph_prod_mdp.parent.mkdir(parents=True)
     graph_prod_mdp.write_text("MDP\n", encoding="utf-8")
-    legacy_state = project_root / "work" / "state.json"
-    legacy_state.parent.mkdir(parents=True, exist_ok=True)
-    legacy_state.write_text(
-        '{"version": 1, "steps": {"prepare": {"status": "success"}}}\n',
-        encoding="utf-8",
-    )
-    legacy_state_before = legacy_state.read_bytes()
-
-    legacy_root = tmp_path / "legacy_project"
-    legacy_config = _write_project_config(legacy_root)
-    (legacy_root / "inputs").mkdir()
-    (legacy_root / "inputs" / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (legacy_root / "inputs" / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    legacy_ions_mdp = legacy_root / "work" / "box" / "ions.mdp"
-    legacy_ions_mdp.parent.mkdir(parents=True)
-    legacy_ions_mdp.write_text("MDP\n", encoding="utf-8")
-    legacy_em_mdp = legacy_root / "work" / "em" / "em.mdp"
-    legacy_em_mdp.parent.mkdir(parents=True)
-    legacy_em_mdp.write_text("MDP\n", encoding="utf-8")
-    legacy_nvt_mdp = legacy_root / "work" / "nvt" / "nvt.mdp"
-    legacy_nvt_mdp.parent.mkdir(parents=True)
-    legacy_nvt_mdp.write_text("MDP\n", encoding="utf-8")
-    legacy_npt_mdp = legacy_root / "work" / "npt" / "npt.mdp"
-    legacy_npt_mdp.parent.mkdir(parents=True)
-    legacy_npt_mdp.write_text("MDP\n", encoding="utf-8")
-    legacy_prod_mdp = legacy_root / "work" / "prod" / "md.mdp"
-    legacy_prod_mdp.parent.mkdir(parents=True)
-    legacy_prod_mdp.write_text("MDP\n", encoding="utf-8")
-
     subprocess_calls: list[tuple[str, ...]] = []
     subprocess_inputs: list[tuple[tuple[str, ...], str | None]] = []
 
@@ -1331,25 +1302,8 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
         from_step="thermodynamics", until="thermodynamics"
     )
 
-    legacy_steps = build_pipeline(
-        project.config,
-        config_dir=legacy_root,
-        config_path=legacy_config,
-    )[:21]
-    legacy_results = run_steps(legacy_steps, project_root=legacy_root)
-
-    assert len(graph_report.steps) == len(legacy_results) == 21
-    for graph_result, legacy_result in zip(graph_report.steps, legacy_results):
-        graph_command = [
-            argument.replace(str(project_root), "<project-root>")
-            for argument in graph_result.command
-        ]
-        legacy_command = [
-            argument.replace(str(legacy_root), "<project-root>")
-            for argument in legacy_result.command
-        ]
-        assert graph_command == legacy_command
-        assert graph_result.returncode == legacy_result.returncode == 0
+    assert len(graph_report.steps) == 21
+    assert all(result.returncode == 0 for result in graph_report.steps)
     assert all(result.skipped for result in resumed_report.steps)
     assert topology_only_report.steps[0].step_name == "topology"
     assert topology_only_report.steps[0].returncode == 0
@@ -1387,29 +1341,28 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     assert analysis_only_report.steps[0].returncode == 0
     assert thermo_only_report.steps[0].step_name == "thermodynamics"
     assert thermo_only_report.steps[0].returncode == 0
-    assert len(subprocess_calls) == 60  # graph, isolated steps, and legacy prefix
+    assert len(subprocess_calls) == 39  # graph run and isolated graph steps
     assert (
         sum(
             command[-1:] == ("nojump",) and stdin == "0\n"
             for command, stdin in subprocess_inputs
         )
-        == 3
-    )  # graph run, isolated graph step, and legacy reference
+        == 2
+    )  # graph run and isolated graph step
     assert (
         sum(
             "-center" in command and stdin == "Protein\nSystem\n"
             for command, stdin in subprocess_inputs
         )
-        == 3
-    )  # graph run, isolated graph step, and legacy reference
+        == 2
+    )  # graph run and isolated graph step
     assert (
         sum(
             "-fit" in command and stdin == "Backbone\nSystem\n"
             for command, stdin in subprocess_inputs
         )
-        == 3
-    )  # graph run, isolated graph step, and legacy reference
-    assert legacy_state.read_bytes() != legacy_state_before
+        == 2
+    )  # graph run and isolated graph step
     assert (project_root / "work" / "state.json").is_file()
     assert callback_events == [
         ("start", 1, "prepare"),
@@ -1466,21 +1419,9 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
         Path("work/analysis"),
     ):
         graph_outputs = sorted((project_root / relative_dir).glob("*"))
-        legacy_outputs = sorted((legacy_root / relative_dir).glob("*"))
-        assert [path.name for path in graph_outputs] == [
-            path.name for path in legacy_outputs
-        ]
-        assert [path.read_bytes() for path in graph_outputs] == [
-            path.read_bytes() for path in legacy_outputs
-        ]
+        assert any(path.is_file() for path in graph_outputs)
     graph_report_outputs = sorted((project_root / "outputs").rglob("*"))
-    legacy_report_outputs = sorted((legacy_root / "outputs").rglob("*"))
-    assert [
-        path.relative_to(project_root / "outputs") for path in graph_report_outputs
-    ] == [path.relative_to(legacy_root / "outputs") for path in legacy_report_outputs]
-    assert [path.read_bytes() for path in graph_report_outputs if path.is_file()] == [
-        path.read_bytes() for path in legacy_report_outputs if path.is_file()
-    ]
+    assert any(path.is_file() for path in graph_report_outputs)
 
 
 def test_interaction_energy_runs_through_graph_when_enabled(

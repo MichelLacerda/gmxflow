@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from gmxflow.config import default_config
+from gmxflow.executor import run_workspace_setup
 from gmxflow.workspace import clean_workspace, ensure_workspace, prepare_workspace, render_templates
 
 
@@ -69,6 +70,20 @@ def test_ensure_workspace_renders_only_missing_templates(tmp_path: Path) -> None
     assert first.existing_templates == []
     assert second.rendered_templates == []
     assert len(second.existing_templates) == 6
+
+
+def test_run_workspace_setup_writes_log_and_mdp_files(tmp_path: Path) -> None:
+    result = run_workspace_setup(default_config("workspace_log_test"), project_root=tmp_path)
+
+    assert result.succeeded
+    assert result.step_name == "workspace"
+    assert result.log_path == tmp_path / "work" / "logs" / "00_workspace.log"
+    assert (tmp_path / "work" / "prod" / "md.mdp").is_file()
+
+    log = result.log_path.read_text(encoding="utf-8")
+    assert "step: workspace" in log
+    assert "rendered_templates:" in log
+    assert "md.mdp.j2" in log
 
 
 def test_clean_workspace_preserves_templates_by_default(tmp_path: Path) -> None:
