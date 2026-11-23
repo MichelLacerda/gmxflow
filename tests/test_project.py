@@ -49,8 +49,9 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     assert "GmxFlowProject.open('project.toml')" in notebook_code
     assert "project.edit_config()" in notebook_code
     assert "project.validate()" in notebook_code
-    assert "project.run()" in notebook_code
-    assert "execution_report = project.run()" in notebook_code
+    assert "workflow = project.workflow()" in notebook_code
+    assert "execution_report = project.run_workflow(workflow)" in notebook_code
+    assert "execution_report = project.run()" not in notebook_code
     assert "project.show_execution(execution_report)" in notebook_code
     assert "project.show_report()" in notebook_code
     assert all(not cell.get("outputs") for cell in notebook["cells"])
@@ -79,6 +80,7 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     assert "## Como usar" in readme_text
     assert "## Configuração" in readme_text
     assert "project.show_report()" in readme_text
+    assert "project.run_workflow(workflow)" in readme_text
     assert "outputs/report.html" in readme_text
     assert "gmxflow prepare-complex --project project.toml" in readme_text
     assert "gmxflow run --project project.toml --until prepare" in readme_text
