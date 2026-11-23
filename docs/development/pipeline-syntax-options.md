@@ -361,7 +361,10 @@ proteína isolada e peptídeo. Assim, todas as etapas produzidas atualmente são
 classes concretas. O adaptador genérico `PipelineCommandStep` foi removido da
 API; se um plano incluir uma etapa sem implementação concreta correspondente,
 a composição falha explicitamente. O CLI continua usando `PipelineStep` por
-meio de `build_pipeline()`. A sequência atual não usa `Parallel`.
+meio de `build_pipeline()`, que projeta a mesma lista canônica de etapas
+concretas usada por `build_workflow()`. A API compõe essa lista diretamente ou
+valida a projeção ao receber uma seleção de etapas do CLI. A sequência atual
+não usa `Parallel`.
 
 **Compatibilidade do executor:** toda execução pela API usa agora
 `work/workflow_state.json`; o CLI segue usando `work/state.json`. Esses estados

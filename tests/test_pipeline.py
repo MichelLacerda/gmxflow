@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -53,7 +54,7 @@ class _GraphStep(ComposableStep):
     outputs: tuple[Artifact, ...] = ()
     parallel: bool = True
     version: str = "1"
-    state: dict[str, object] = field(default_factory=dict)
+    state: Mapping[str, object] = field(default_factory=dict)
 
     def run(self, context: object) -> None:
         del context
@@ -70,6 +71,28 @@ def test_build_pipeline_returns_expected_order(tmp_path: Path) -> None:
         "ions-grompp",
     ]
     assert steps[-1].name == "report"
+
+
+@pytest.mark.parametrize("ligand_kind", ["none", "peptide", "small_molecule"])
+def test_cli_plan_projects_canonical_concrete_steps(
+    tmp_path: Path, ligand_kind: Literal["none", "peptide", "small_molecule"]
+) -> None:
+    config = default_config("canonical_steps")
+    config.input.ligand_kind = ligand_kind
+    config.analysis.interaction_energy = True
+    config.analysis.sasa = True
+    if ligand_kind == "small_molecule":
+        config.input.ligand_mol2 = "inputs/ligand.mol2"
+        config.input.ligand_str = "inputs/ligand.str"
+
+    workflow = build_workflow(config, config_dir=tmp_path)
+    cli_plan = build_pipeline(config, config_dir=tmp_path)
+    concrete_steps = [
+        step for step in workflow.items if isinstance(step, GromacsCommandStep)
+    ]
+
+    assert len(concrete_steps) == len(workflow.items)
+    assert [step.to_pipeline_step() for step in concrete_steps] == cli_plan
 
 
 def test_prepare_step_projection_preserves_its_command_and_artifacts(

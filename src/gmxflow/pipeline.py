@@ -1574,72 +1574,61 @@ def build_pipeline(
             _require_file(ligand_mol2)
             _require_file(ligand_str)
 
-    prepare_step = PrepareComplexStep.from_config(config, project_root, config_path)
-    steps = [prepare_step.to_pipeline_step()]
+    return [
+        step.to_pipeline_step()
+        for step in _build_concrete_steps(config, project_root, config_path)
+    ]
 
+
+def _build_concrete_steps(
+    config: GmxFlowConfig, project_root: Path, config_path: Path
+) -> list[GromacsCommandStep]:
+    """Create the canonical ordered step instances shared by API and CLI."""
+    steps: list[GromacsCommandStep] = [
+        PrepareComplexStep.from_config(config, project_root, config_path)
+    ]
     if config.input.ligand_kind == "small_molecule":
-        typed_steps: tuple[GromacsCommandStep, ...] = (
-            LigandTopologyStep.from_config(config, project_root, config_path),
-            ProteinTopologyStep.from_config(config, project_root),
-            AssembleComplexStep.from_config(config, project_root, config_path),
+        steps.extend(
+            [
+                LigandTopologyStep.from_config(config, project_root, config_path),
+                ProteinTopologyStep.from_config(config, project_root),
+                AssembleComplexStep.from_config(config, project_root, config_path),
+            ]
         )
-        steps.extend(step.to_pipeline_step() for step in typed_steps)
     else:
-        steps.append(
-            BuildTopologyStep.from_config(config, project_root).to_pipeline_step()
-        )
+        steps.append(BuildTopologyStep.from_config(config, project_root))
 
     steps.extend(
         [
-            CreateBoxStep.from_config(config, project_root).to_pipeline_step(),
-            SolvateSystemStep.from_config(
-                config, project_root, config_path
-            ).to_pipeline_step(),
-            PrepareIonsStep.from_config(config, project_root).to_pipeline_step(),
-            AddIonsStep.from_config(
-                config, project_root, config_path
-            ).to_pipeline_step(),
-            PrepareEnergyMinimizationStep.from_config(
-                config, project_root
-            ).to_pipeline_step(),
-            EnergyMinimizationStep.from_config(config, project_root).to_pipeline_step(),
-            PrepareNvtStep.from_config(config, project_root).to_pipeline_step(),
-            NvtEquilibrationStep.from_config(config, project_root).to_pipeline_step(),
-            PrepareNptStep.from_config(config, project_root).to_pipeline_step(),
-            NptEquilibrationStep.from_config(config, project_root).to_pipeline_step(),
-            PrepareProductionStep.from_config(config, project_root).to_pipeline_step(),
-            ProductionStep.from_config(config, project_root).to_pipeline_step(),
-            RemovePeriodicJumpsStep.from_config(
-                config, project_root
-            ).to_pipeline_step(),
-            CenterTrajectoryStep.from_config(config, project_root).to_pipeline_step(),
-            FitTrajectoryStep.from_config(config, project_root).to_pipeline_step(),
-            AnalyzeTrajectoryStep.from_config(
-                config, project_root, config_path
-            ).to_pipeline_step(),
+            CreateBoxStep.from_config(config, project_root),
+            SolvateSystemStep.from_config(config, project_root, config_path),
+            PrepareIonsStep.from_config(config, project_root),
+            AddIonsStep.from_config(config, project_root, config_path),
+            PrepareEnergyMinimizationStep.from_config(config, project_root),
+            EnergyMinimizationStep.from_config(config, project_root),
+            PrepareNvtStep.from_config(config, project_root),
+            NvtEquilibrationStep.from_config(config, project_root),
+            PrepareNptStep.from_config(config, project_root),
+            NptEquilibrationStep.from_config(config, project_root),
+            PrepareProductionStep.from_config(config, project_root),
+            ProductionStep.from_config(config, project_root),
+            RemovePeriodicJumpsStep.from_config(config, project_root),
+            CenterTrajectoryStep.from_config(config, project_root),
+            FitTrajectoryStep.from_config(config, project_root),
+            AnalyzeTrajectoryStep.from_config(config, project_root, config_path),
+            ThermodynamicsStep.from_config(config, project_root, config_path),
         ]
     )
-    steps.append(
-        ThermodynamicsStep.from_config(
-            config, project_root, config_path
-        ).to_pipeline_step()
-    )
     if config.analysis.interaction_energy:
-        interaction_step = InteractionEnergyStep.from_config(
-            config, project_root, config_path
+        steps.append(
+            InteractionEnergyStep.from_config(config, project_root, config_path)
         )
-        steps.append(interaction_step.to_pipeline_step())
     if config.analysis.sasa:
-        sasa_step = SasaStep.from_config(config, project_root, config_path)
-        steps.append(sasa_step.to_pipeline_step())
+        steps.append(SasaStep.from_config(config, project_root, config_path))
     steps.extend(
         [
-            PlotAnalysisStep.from_config(
-                config, project_root, config_path
-            ).to_pipeline_step(),
-            ReportStep.from_config(
-                config, project_root, config_path
-            ).to_pipeline_step(),
+            PlotAnalysisStep.from_config(config, project_root, config_path),
+            ReportStep.from_config(config, project_root, config_path),
         ]
     )
     return steps
@@ -1654,62 +1643,18 @@ def build_workflow(
 ) -> Sequence:
     """Compose an API workflow from concrete steps.
 
-    The CLI continues to consume ``build_pipeline()``. The API reuses concrete
-    step implementations and checks them against the CLI plan.
+    The CLI projects these same concrete steps through ``build_pipeline()``.
+    ``selected_steps`` optionally preserves a previously validated CLI selection.
     """
     root = config_dir.expanduser().resolve()
     resolved_config = (config_path or root / "project.toml").expanduser().resolve()
-    plan = (
-        build_pipeline(config, root, config_path=resolved_config)
-        if selected_steps is None
-        else selected_steps
-    )
+    concrete_steps = _build_concrete_steps(config, root, resolved_config)
+    if selected_steps is None:
+        return Sequence(*concrete_steps)
 
-    concrete_steps: list[GromacsCommandStep] = [
-        PrepareComplexStep.from_config(config, root, resolved_config)
-    ]
-    if config.input.ligand_kind == "small_molecule":
-        concrete_steps.extend(
-            [
-                LigandTopologyStep.from_config(config, root, resolved_config),
-                ProteinTopologyStep.from_config(config, root),
-                AssembleComplexStep.from_config(config, root, resolved_config),
-            ]
-        )
-    else:
-        concrete_steps.append(BuildTopologyStep.from_config(config, root))
-    concrete_steps.extend(
-        [
-            CreateBoxStep.from_config(config, root),
-            SolvateSystemStep.from_config(config, root, resolved_config),
-            PrepareIonsStep.from_config(config, root),
-            AddIonsStep.from_config(config, root, resolved_config),
-            PrepareEnergyMinimizationStep.from_config(config, root),
-            EnergyMinimizationStep.from_config(config, root),
-            PrepareNvtStep.from_config(config, root),
-            NvtEquilibrationStep.from_config(config, root),
-            PrepareNptStep.from_config(config, root),
-            NptEquilibrationStep.from_config(config, root),
-            PrepareProductionStep.from_config(config, root),
-            ProductionStep.from_config(config, root),
-            RemovePeriodicJumpsStep.from_config(config, root),
-            CenterTrajectoryStep.from_config(config, root),
-            FitTrajectoryStep.from_config(config, root),
-            AnalyzeTrajectoryStep.from_config(config, root, resolved_config),
-            ThermodynamicsStep.from_config(config, root, resolved_config),
-            PlotAnalysisStep.from_config(config, root, resolved_config),
-            ReportStep.from_config(config, root, resolved_config),
-        ]
-    )
-    if config.analysis.interaction_energy:
-        concrete_steps.append(
-            InteractionEnergyStep.from_config(config, root, resolved_config)
-        )
-    if config.analysis.sasa:
-        concrete_steps.append(SasaStep.from_config(config, root, resolved_config))
     by_id = {step.id: step for step in concrete_steps}
     workflow_steps: list[Step] = []
-    for pipeline_step in plan:
+    for pipeline_step in selected_steps:
         concrete = by_id.get(pipeline_step.name)
         if concrete is None:
             raise ValueError(
