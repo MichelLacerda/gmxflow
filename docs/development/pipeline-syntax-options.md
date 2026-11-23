@@ -202,13 +202,24 @@ implementação customizada deve satisfazer o contrato e declarar seus artefatos
 `ComposableStep` é um mixin opcional para habilitar `|`; herança não é necessária
 para Steps compostos explicitamente com `Sequence` ou `Parallel`.
 
-Para executar uma implementação customizada que satisfaça o `Step` Protocol,
-`GmxFlowProject.run_workflow(...)` recebe o workflow, as entradas externas e o
-mapa de artefatos para caminhos físicos. O chamador escolhe um nome de estado
-JSON, salvo dentro de `work/`, e pode usar `dry_run=True` para validar a
-estrutura sem executar os passos. Esse método não chama a validação de
-pré-requisitos GROMACS nem o setup da pipeline padrão; a implementação custom
-é responsável pela operação científica declarada.
+`GmxFlowProject.workflow(...)` constrói os Steps concretos do projeto, sem
+validar entradas nem executar comandos. O resultado pode ser combinado com
+Steps customizados usando `|` ou `Sequence`. `run_workflow(...)` executa tanto
+workflows customizados quanto composições com Steps internos. Para os Steps
+GROMACS, o projeto infere os caminhos de artefatos; o chamador fornece somente
+os caminhos de artefatos customizados. Entradas externas são inferidas pelas
+chaves sem produtor, ou podem ser declaradas explicitamente por
+`project_inputs`.
+
+Em uma execução real que contenha `GromacsCommandStep`,
+`run_workflow(...)` valida os pré-requisitos do projeto e prepara o workspace
+antes de executar. Workflows
+somente customizados não acionam esse setup. `dry_run=True` valida a estrutura e
+os caminhos sem validar pré-requisitos GROMACS nem alterar o workspace. O
+chamador escolhe um nome de estado JSON customizado, salvo dentro de `work/`.
+Steps customizados continuam responsáveis pela operação científica que
+declaram e devem usar o `RunContext` para acessar artefatos e executar
+comandos.
 Os nomes `state.json` e `workflow_state.json` (sem distinção entre maiúsculas e
 minúsculas) são reservados para os estados dos executores padrão e não podem
 ser usados por workflows customizados.
@@ -353,13 +364,13 @@ sobrescrever `work/state.json` do CLI. Os caches são independentes, portanto a
 primeira execução por um executor sem estado próprio pode executar a etapa
 novamente. Atendido em `tests/test_api.py` e `tests/test_pipeline.py`.
 
-### 5. Migrar as demais etapas incrementalmente
+### 5. Migrar as demais etapas incrementalmente — concluída
 
 **Escopo:** portar etapas em fatias pequenas, atualizando testes e exemplos a
 cada fatia. Definir e testar a compatibilidade de identificadores, opções de
 seleção de etapas e estado salvo para projetos existentes.
 
-**Fatia implementada:** `GmxFlowProject.run()` compõe o plano selecionado em
+**Implementação concluída:** `GmxFlowProject.run()` compõe o plano selecionado em
 um único `Sequence` e o executa pelo executor do grafo; não há mais divisão da
 execução por uma allowlist de nomes de etapa. `PrepareComplexStep` é usado em
 todos os perfis e, para `small_molecule`, `LigandTopologyStep`,
@@ -406,13 +417,22 @@ da geração de topologia. Para `small_molecule`, `assemble-complex` cria
 simulação e a análise de interação consomem esta última. Isso permite
 inspecionar cada versão sem alterar os parâmetros ou a sequência científica.
 
-**Decisão de compatibilidade já aplicada:** o CLI mantém `work/state.json`; a
-execução pelo grafo na API usa `work/workflow_state.json`. Os formatos não são
-convertidos nem sobrescritos entre si, e a retomada de cada executor é
-independente. As próximas fatias devem preservar os IDs de etapas e verificar
-a retomada dentro de cada executor. Os callbacks da API continuam intercalando
-início e conclusão por etapa, mesmo quando várias etapas são executadas no
-mesmo grafo.
+**Composição com extensões:** `GmxFlowProject.workflow(...)` expõe os Steps
+concretos, com seleção compatível com `from_step` e `until`. Eles podem ser
+combinados a Steps customizados e executados por `run_workflow(...)`. O método
+infere entradas externas e caminhos dos Steps GROMACS; exige caminhos explícitos
+para artefatos lógicos customizados; valida o mapa antes do setup; e, em
+execução real, preserva a validação do projeto e a preparação do workspace. O
+dry-run não cria diretórios nem executa setup. Callbacks de início e conclusão
+recebem os Steps/resultados estruturados do executor.
+
+**Compatibilidade concluída:** os IDs legados são preservados; `from_step` e
+`until` continuam sendo aplicados pelo plano linear compatível usado pelo CLI
+e por `GmxFlowProject.workflow(...)`. O CLI mantém `work/state.json`; a execução
+por grafo usa `work/workflow_state.json`, sem conversão, sobrescrita ou
+retomada cruzada. Workflows customizados usam um nome de estado próprio e os
+dois nomes padrão são reservados. Retomada por etapa, versão, estado e
+fingerprints é coberta nos testes do executor e da API.
 
 **Verificação:** `tests/test_api.py` compara os comandos e os arquivos
 produzidos pelos dois executores com um subprocesso simulado; não substitui uma
@@ -421,9 +441,13 @@ execução real do GROMACS nem valida resultados científicos.
 **Fora de escopo:** remover a implementação antiga antes da paridade, introduzir
 um editor visual ou prometer suporte a todos os tutoriais de Lemkul.
 
-**Critério de aceite:** cada fatia tem revisão e evidência de regressão; a
-estratégia de compatibilidade ou migração do estado persistido está documentada
-antes de ser aplicada a projetos de usuário.
+**Critério de aceite:** etapas concretas e integração mista são verificadas
+com testes sem depender de GROMACS; IDs, seleção e estados separados estão
+documentados e cobertos por testes de retomada. Atendido em
+`tests/test_api.py`, `tests/test_pipeline.py` e
+`tests/test_workflow_executor.py`. Esses testes verificam integração do
+software; não validam resultados científicos ou substituem um ensaio real com
+GROMACS.
 
 ### 6. Consolidar a API após demonstrar paridade
 

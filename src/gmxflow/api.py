@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 from collections.abc import Iterable, Mapping
+from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -25,6 +26,7 @@ from gmxflow.pipeline import (
     Artifact,
     REAL_EXECUTION_STEPS,
     GromacsCommandStep,
+    Parallel,
     PipelineStep,
     Step,
     Sequence as WorkflowSequence,
@@ -169,6 +171,27 @@ class GmxFlowProject:
         )
         return select_steps(steps, from_step=from_step, until=until)
 
+    def workflow(
+        self,
+        *,
+        from_step: str | None = None,
+        until: str | None = None,
+    ) -> WorkflowSequence:
+        """Return concrete project Steps, ready to compose with custom Steps.
+
+        The returned workflow is newly built and can be split, reordered, or
+        combined with ``Sequence``, ``Parallel``, and the ``|`` operator.
+        Creating it does not validate files, initialize workspaces, or execute
+        any commands.
+        """
+        selected_steps = self.plan(from_step=from_step, until=until)
+        return build_workflow(
+            self.config,
+            self.root,
+            config_path=self.config_path,
+            selected_steps=selected_steps,
+        )
+
     def validate(self) -> ValidationReport:
         """Check required input files, force field, and GROMACS executable.
 
@@ -274,18 +297,21 @@ class GmxFlowProject:
         self,
         workflow: WorkflowItem,
         *,
-        project_inputs: Iterable[Artifact],
-        artifact_paths: Mapping[str, Path],
+        project_inputs: Iterable[Artifact] | None = None,
+        artifact_paths: Mapping[str, Path] | None = None,
         state_name: str,
         dry_run: bool = False,
+        on_step_start: Callable[[Step], None] | None = None,
+        on_step_done: Callable[[WorkflowStepResult], None] | None = None,
     ) -> WorkflowExecutionReport:
-        """Run a custom Step workflow without invoking standard project setup.
+        """Run a custom or project-composed Step workflow.
 
-        Callers declare external artifacts, their physical paths, and a JSON
-        state filename stored inside ``work/``. Unlike ``run()``, this method
-        does not validate GROMACS prerequisites, apply project templates, or
-        modify the built-in workflow. Steps are responsible for their declared
-        scientific operations and must use the supplied ``RunContext``.
+        Custom-only workflows still require external artifact paths but infer
+        project inputs from undeclared producers. Paths for built-in GROMACS
+        Steps are inferred; ``artifact_paths`` supplies paths for custom
+        logical artifacts. When the workflow contains a GromacsCommandStep,
+        a real run validates project prerequisites and initializes the normal
+        workspace. A dry run remains structural and creates no workspace.
         """
         filename = Path(state_name)
         reserved_state_names = {"state.json", "workflow_state.json"}
@@ -303,17 +329,103 @@ class GmxFlowProject:
                 "state.json e workflow_state.json são reservados"
             )
 
+        runtime_workflow = _with_runtime_commands(workflow)
+        workflow_steps = tuple(_iter_workflow_steps(runtime_workflow))
+        if project_inputs is None:
+            produced = {
+                artifact.key
+                for step in workflow_steps
+                for artifact in step.outputs
+            }
+            inferred_inputs: dict[str, Artifact] = {}
+            for step in workflow_steps:
+                for artifact in step.inputs:
+                    if artifact.key not in produced:
+                        inferred_inputs.setdefault(artifact.key, artifact)
+            project_inputs = inferred_inputs.values()
+
         graph = WorkflowGraph.from_workflow(
-            workflow,
+            runtime_workflow,
             project_inputs=project_inputs,
         )
+        resolved_paths: dict[str, Path] = {}
+        for step in workflow_steps:
+            if isinstance(step, GromacsCommandStep):
+                for artifact, path in zip(
+                    (*step.inputs, *step.outputs),
+                    (*step.input_paths, *step.output_paths),
+                    strict=True,
+                ):
+                    resolved_paths[artifact.key] = path
+        for key, path in (artifact_paths or {}).items():
+            if key in resolved_paths:
+                expected = _resolve_project_path(resolved_paths[key], self.root)
+                provided = _resolve_project_path(path, self.root)
+                if expected != provided:
+                    raise ValueError(
+                        f"O caminho do artefato interno {key!r} não pode ser "
+                        "substituído por um workflow customizado."
+                    )
+            else:
+                resolved_paths[key] = path
+
+        state_path = self.root / "work" / filename
+        preflight = run_workflow_graph(
+            graph,
+            project_root=self.root,
+            artifact_paths=resolved_paths,
+            state_path=state_path,
+            dry_run=True,
+        )
+        if dry_run:
+            return preflight
+
+        if any(isinstance(step, GromacsCommandStep) for step in workflow_steps):
+            self.validate()
+            run_workspace_setup(self.config, project_root=self.root)
+
         return run_workflow_graph(
             graph,
             project_root=self.root,
-            artifact_paths=artifact_paths,
-            state_path=self.root / "work" / filename,
-            dry_run=dry_run,
+            artifact_paths=preflight.artifact_paths,
+            state_path=state_path,
+            on_step_start=on_step_start,
+            on_step_done=on_step_done,
         )
+
+
+def _with_runtime_commands(workflow: WorkflowItem) -> WorkflowItem:
+    if isinstance(workflow, WorkflowSequence):
+        return WorkflowSequence(
+            *(_with_runtime_commands(item) for item in workflow.items)
+        )
+    if isinstance(workflow, Parallel):
+        return Parallel(
+            *(_with_runtime_commands(branch) for branch in workflow.branches)
+        )
+    if isinstance(workflow, GromacsCommandStep):
+        step = copy(workflow)
+        step.command = tuple(runtime_command(list(step.command)))
+        return step
+    return workflow
+
+
+def _iter_workflow_steps(workflow: WorkflowItem) -> Iterable[Step]:
+    if isinstance(workflow, WorkflowSequence):
+        for item in workflow.items:
+            yield from _iter_workflow_steps(item)
+    elif isinstance(workflow, Parallel):
+        for branch in workflow.branches:
+            yield from _iter_workflow_steps(branch)
+    else:
+        yield workflow
+
+
+def _resolve_project_path(path: Path, project_root: Path) -> Path:
+    resolved = path.expanduser()
+    if not resolved.is_absolute():
+        resolved = project_root / resolved
+    return resolved.resolve()
 
 
 def _run_graph_steps(

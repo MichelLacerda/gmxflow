@@ -15,7 +15,13 @@ from gmxflow.executor import (
     run_steps,
     runtime_command,
 )
-from gmxflow.pipeline import Artifact, RunContext, Step, build_pipeline
+from gmxflow.pipeline import (
+    Artifact,
+    GromacsCommandStep,
+    RunContext,
+    Step,
+    build_pipeline,
+)
 
 
 def _write_project_config(project_dir: Path) -> Path:
@@ -104,6 +110,122 @@ def test_project_runs_a_custom_protocol_step_and_resumes(tmp_path: Path) -> None
 
     assert dry_run.dry_run
     assert not target_path.exists()
+
+
+def test_project_workflow_builds_concrete_steps_for_composition(
+    tmp_path: Path,
+) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "workflow_api"))
+
+    workflow = project.workflow(until="topology")
+    steps = tuple(
+        step for step in workflow.items if isinstance(step, GromacsCommandStep)
+    )
+
+    assert len(steps) == len(workflow.items)
+    assert [step.id for step in steps] == ["prepare", "topology"]
+    assert not (project.root / "work").exists()
+
+
+def test_project_workflow_composes_and_runs_custom_protocol_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "mixed_workflow"))
+    base_workflow = project.workflow(from_step="solvate", until="solvate")
+    solvate_step = base_workflow.items[0]
+    assert isinstance(solvate_step, GromacsCommandStep)
+    source = next(
+        artifact
+        for artifact in solvate_step.outputs
+        if artifact.kind == "gro"
+    )
+    target = Artifact("custom:solvate-copy", "gro")
+    custom_step: Step = _CopyArtifactStep(
+        "custom-copy", "Copy solvated coordinates", (source,), (target,)
+    )
+    workflow = base_workflow | custom_step
+    for input_path in solvate_step.input_paths:
+        input_path.parent.mkdir(parents=True, exist_ok=True)
+        input_path.write_text("GROMACS INPUT\n", encoding="utf-8")
+    target_path = project.root / "outputs" / "solvate-copy.gro"
+    setup_events: list[str] = []
+    callback_events: list[str] = []
+
+    monkeypatch.setattr(
+        GmxFlowProject,
+        "validate",
+        lambda self: setup_events.append("validate"),
+    )
+    monkeypatch.setattr(
+        "gmxflow.api.run_workspace_setup",
+        lambda config, project_root: setup_events.append("workspace"),
+    )
+
+    def fake_subprocess_run(argv, *, cwd, env, input, text, capture_output, check):
+        assert tuple(argv[1:3]) == ("-c", "from gmxflow.cli import app; app()")
+        assert cwd == solvate_step.workdir
+        for path in solvate_step.output_paths:
+            path.write_text("GROMACS OUTPUT\n", encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
+
+    report = project.run_workflow(
+        workflow,
+        artifact_paths={target.key: target_path},
+        state_name="mixed-workflow.json",
+        on_step_start=lambda step: callback_events.append(f"start:{step.id}"),
+        on_step_done=lambda result: callback_events.append(f"done:{result.step_id}"),
+    )
+
+    assert report.succeeded
+    assert [result.step_id for result in report.results] == ["solvate", "custom-copy"]
+    assert setup_events == ["validate", "workspace"]
+    assert callback_events == [
+        "start:solvate",
+        "done:solvate",
+        "start:custom-copy",
+        "done:custom-copy",
+    ]
+    assert target_path.read_text(encoding="utf-8") == "GROMACS OUTPUT\n"
+
+
+def test_composed_project_workflow_dry_run_does_not_prepare_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "dry_workflow"))
+    base_workflow = project.workflow(from_step="topology", until="topology")
+    topology_step = base_workflow.items[0]
+    assert isinstance(topology_step, GromacsCommandStep)
+    target = Artifact("custom:dry-copy", "gro")
+    workflow = base_workflow | _CopyArtifactStep(
+        "custom-copy",
+        "Copy topology coordinates",
+        (next(item for item in topology_step.outputs if item.kind == "gro"),),
+        (target,),
+    )
+    setup_events: list[str] = []
+    monkeypatch.setattr(
+        GmxFlowProject,
+        "validate",
+        lambda self: setup_events.append("validate"),
+    )
+    monkeypatch.setattr(
+        "gmxflow.api.run_workspace_setup",
+        lambda config, project_root: setup_events.append("workspace"),
+    )
+
+    report = project.run_workflow(
+        workflow,
+        artifact_paths={target.key: project.root / "outputs" / "dry-copy.gro"},
+        state_name="dry-workflow.json",
+        dry_run=True,
+    )
+
+    assert report.dry_run
+    assert [result.step_id for result in report.results] == ["topology", "custom-copy"]
+    assert setup_events == []
+    assert not (project.root / "work").exists()
 
 
 def test_project_custom_workflow_executes_protocol_steps_and_resumes(
