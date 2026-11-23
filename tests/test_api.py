@@ -138,8 +138,17 @@ def test_project_custom_workflow_executes_protocol_steps_and_resumes(
     assert (project.root / "work" / "custom-copy.json").is_file()
 
 
-@pytest.mark.parametrize("state_name", ["../state.json", "sub/state.json", "state.txt"])
-def test_custom_workflow_rejects_state_names_outside_work(
+@pytest.mark.parametrize(
+    "state_name",
+    [
+        "../state.json",
+        "sub/state.json",
+        "state.txt",
+        "state.json",
+        "workflow_state.json",
+    ],
+)
+def test_custom_workflow_rejects_invalid_state_names(
     tmp_path: Path, state_name: str
 ) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "custom_step"))

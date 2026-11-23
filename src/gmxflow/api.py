@@ -288,16 +288,19 @@ class GmxFlowProject:
         scientific operations and must use the supplied ``RunContext``.
         """
         filename = Path(state_name)
+        reserved_state_names = {"state.json", "workflow_state.json"}
         if (
             not state_name.strip()
             or filename.name != state_name
             or filename.stem in {"", ".", ".."}
             or filename.suffix != ".json"
+            or filename.name in reserved_state_names
             or "/" in state_name
             or "\\" in state_name
         ):
             raise ValueError(
-                "state_name deve ser um nome simples de arquivo terminado em .json"
+                "state_name deve ser um nome simples de arquivo terminado em .json; "
+                "state.json e workflow_state.json são reservados"
             )
 
         graph = WorkflowGraph.from_workflow(

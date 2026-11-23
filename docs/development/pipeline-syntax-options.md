@@ -209,6 +209,8 @@ JSON, salvo dentro de `work/`, e pode usar `dry_run=True` para validar a
 estrutura sem executar os passos. Esse método não chama a validação de
 pré-requisitos GROMACS nem o setup da pipeline padrão; a implementação custom
 é responsável pela operação científica declarada.
+Os nomes `state.json` e `workflow_state.json` são reservados para os estados
+dos executores padrão e não podem ser usados por workflows customizados.
 
 ```python
 report = project.run_workflow(
