@@ -14,10 +14,12 @@ from gmxflow.executor import (
     WorkflowStepStatus,
     run_steps,
     runtime_command,
+    select_steps,
 )
 from gmxflow.pipeline import (
     Artifact,
     GromacsCommandStep,
+    PipelineStep,
     RunContext,
     Sequence as WorkflowSequence,
     Step,
@@ -30,6 +32,26 @@ def _write_project_config(project_dir: Path) -> Path:
     config_path = project_dir / "project.toml"
     config_path.write_text(to_toml(default_config(project_dir.name)), encoding="utf-8")
     return config_path
+
+
+def _legacy_cli_steps(
+    project: GmxFlowProject,
+    *,
+    strict_inputs: bool = False,
+    from_step: str | None = None,
+    until: str | None = None,
+) -> list[PipelineStep]:
+    """Build legacy CLI steps for parity fixtures, outside the public API."""
+    return select_steps(
+        build_pipeline(
+            project.config,
+            config_dir=project.root,
+            config_path=project.config_path,
+            strict_inputs=strict_inputs,
+        ),
+        from_step=from_step,
+        until=until,
+    )
 
 
 @dataclass
@@ -422,35 +444,6 @@ def test_clean_removes_work_artifacts_and_preserves_project_data(tmp_path: Path)
     assert project.config_path.is_file()
 
 
-def test_plan_returns_pipeline_steps_without_creating_project_outputs(
-    tmp_path: Path,
-) -> None:
-    project_dir = tmp_path / "api_project"
-    config_path = _write_project_config(project_dir)
-    project = GmxFlowProject.open(config_path)
-
-    steps = project.plan(until="prepare")
-
-    assert [step.name for step in steps] == ["prepare"]
-    assert steps[0].command[:2] == ["gmxflow", "prepare-complex"]
-    assert not (project_dir / "work").exists()
-    assert not (project_dir / "outputs").exists()
-
-
-def test_plan_can_require_input_files(tmp_path: Path) -> None:
-    project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
-
-    with pytest.raises(FileNotFoundError, match="receptor.pdb"):
-        project.plan(strict_inputs=True)
-
-
-def test_plan_rejects_unknown_step_with_valid_step_names(tmp_path: Path) -> None:
-    project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
-
-    with pytest.raises(ValueError, match="Etapa desconhecida: not-a-step"):
-        project.plan(from_step="not-a-step")
-
-
 def test_validate_reports_prerequisites_without_creating_project_outputs(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -580,7 +573,7 @@ def test_run_validates_then_uses_shared_executor(
     step_result = StepResult(
         step_name="prepare",
         command=runtime_command(
-            project.plan(until="prepare")[0].command
+            _legacy_cli_steps(project, until="prepare")[0].command
         ),
         workdir=project.root / "work" / "prep",
         log_path=project.root / "work" / "logs" / "01_prepare.log",
@@ -589,7 +582,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     topology_result = StepResult(
         step_name="topology",
-        command=project.plan(until="topology")[1].command,
+        command=_legacy_cli_steps(project, until="topology")[1].command,
         workdir=project.root / "work" / "topo",
         log_path=project.root / "work" / "logs" / "02_topology.log",
         returncode=0,
@@ -597,7 +590,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     box_result = StepResult(
         step_name="box",
-        command=runtime_command(project.plan(until="box")[2].command),
+        command=runtime_command(_legacy_cli_steps(project, until="box")[2].command),
         workdir=project.root / "work" / "box",
         log_path=project.root / "work" / "logs" / "03_box.log",
         returncode=0,
@@ -605,7 +598,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     solvate_result = StepResult(
         step_name="solvate",
-        command=runtime_command(project.plan(until="solvate")[3].command),
+        command=runtime_command(_legacy_cli_steps(project, until="solvate")[3].command),
         workdir=project.root / "work" / "box",
         log_path=project.root / "work" / "logs" / "04_solvate.log",
         returncode=0,
@@ -613,7 +606,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     ions_grompp_result = StepResult(
         step_name="ions-grompp",
-        command=runtime_command(project.plan(until="ions-grompp")[4].command),
+        command=runtime_command(_legacy_cli_steps(project, until="ions-grompp")[4].command),
         workdir=project.root / "work" / "box",
         log_path=project.root / "work" / "logs" / "05_ions-grompp.log",
         returncode=0,
@@ -621,7 +614,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     ions_result = StepResult(
         step_name="ions",
-        command=runtime_command(project.plan(until="ions")[5].command),
+        command=runtime_command(_legacy_cli_steps(project, until="ions")[5].command),
         workdir=project.root / "work" / "box",
         log_path=project.root / "work" / "logs" / "06_ions.log",
         returncode=0,
@@ -629,7 +622,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     em_grompp_result = StepResult(
         step_name="em-grompp",
-        command=runtime_command(project.plan(until="em-grompp")[6].command),
+        command=runtime_command(_legacy_cli_steps(project, until="em-grompp")[6].command),
         workdir=project.root / "work" / "em",
         log_path=project.root / "work" / "logs" / "07_em-grompp.log",
         returncode=0,
@@ -637,7 +630,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     em_result = StepResult(
         step_name="em",
-        command=runtime_command(project.plan(until="em")[7].command),
+        command=runtime_command(_legacy_cli_steps(project, until="em")[7].command),
         workdir=project.root / "work" / "em",
         log_path=project.root / "work" / "logs" / "08_em.log",
         returncode=0,
@@ -645,7 +638,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     nvt_grompp_result = StepResult(
         step_name="nvt-grompp",
-        command=runtime_command(project.plan(until="nvt-grompp")[8].command),
+        command=runtime_command(_legacy_cli_steps(project, until="nvt-grompp")[8].command),
         workdir=project.root / "work" / "nvt",
         log_path=project.root / "work" / "logs" / "09_nvt-grompp.log",
         returncode=0,
@@ -653,7 +646,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     nvt_result = StepResult(
         step_name="nvt",
-        command=runtime_command(project.plan(until="nvt")[9].command),
+        command=runtime_command(_legacy_cli_steps(project, until="nvt")[9].command),
         workdir=project.root / "work" / "nvt",
         log_path=project.root / "work" / "logs" / "10_nvt.log",
         returncode=0,
@@ -661,7 +654,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     npt_grompp_result = StepResult(
         step_name="npt-grompp",
-        command=runtime_command(project.plan(until="npt-grompp")[10].command),
+        command=runtime_command(_legacy_cli_steps(project, until="npt-grompp")[10].command),
         workdir=project.root / "work" / "npt",
         log_path=project.root / "work" / "logs" / "11_npt-grompp.log",
         returncode=0,
@@ -669,7 +662,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     npt_result = StepResult(
         step_name="npt",
-        command=runtime_command(project.plan(until="npt")[11].command),
+        command=runtime_command(_legacy_cli_steps(project, until="npt")[11].command),
         workdir=project.root / "work" / "npt",
         log_path=project.root / "work" / "logs" / "12_npt.log",
         returncode=0,
@@ -677,7 +670,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     production_grompp_result = StepResult(
         step_name="production-grompp",
-        command=runtime_command(project.plan(until="production-grompp")[12].command),
+        command=runtime_command(_legacy_cli_steps(project, until="production-grompp")[12].command),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "13_production-grompp.log",
         returncode=0,
@@ -685,7 +678,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     production_result = StepResult(
         step_name="production",
-        command=runtime_command(project.plan(until="production")[13].command),
+        command=runtime_command(_legacy_cli_steps(project, until="production")[13].command),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "14_production.log",
         returncode=0,
@@ -693,7 +686,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     pbc_nojump_result = StepResult(
         step_name="pbc-nojump",
-        command=runtime_command(project.plan(until="pbc-nojump")[14].command),
+        command=runtime_command(_legacy_cli_steps(project, until="pbc-nojump")[14].command),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "15_pbc-nojump.log",
         returncode=0,
@@ -701,7 +694,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     pbc_center_result = StepResult(
         step_name="pbc-center",
-        command=runtime_command(project.plan(until="pbc-center")[15].command),
+        command=runtime_command(_legacy_cli_steps(project, until="pbc-center")[15].command),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "16_pbc-center.log",
         returncode=0,
@@ -709,7 +702,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     fit_result = StepResult(
         step_name="fit",
-        command=runtime_command(project.plan(until="fit")[16].command),
+        command=runtime_command(_legacy_cli_steps(project, until="fit")[16].command),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "17_fit.log",
         returncode=0,
@@ -717,7 +710,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     analysis_result = StepResult(
         step_name="analysis",
-        command=runtime_command(project.plan(until="analysis")[17].command),
+        command=runtime_command(_legacy_cli_steps(project, until="analysis")[17].command),
         workdir=project.root / "work" / "analysis",
         log_path=project.root / "work" / "logs" / "18_analysis.log",
         returncode=0,
@@ -725,7 +718,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     thermodynamics_result = StepResult(
         step_name="thermodynamics",
-        command=runtime_command(project.plan(until="thermodynamics")[18].command),
+        command=runtime_command(_legacy_cli_steps(project, until="thermodynamics")[18].command),
         workdir=project.root / "work" / "analysis",
         log_path=project.root / "work" / "logs" / "19_thermodynamics.log",
         returncode=0,
@@ -949,20 +942,20 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
         elif "analyze" in command:
             output_content = {
                 Path(output).name: "ANALYSIS\n"
-                for output in project.plan(until="analysis")[-1].outputs
+                for output in _legacy_cli_steps(project, until="analysis")[-1].outputs
             }
         elif "thermodynamics" in command:
             output_content = {
                 Path(output).name: "THERMODYNAMICS\n"
-                for output in project.plan(until="thermodynamics")[-1].outputs
+                for output in _legacy_cli_steps(project, until="thermodynamics")[-1].outputs
             }
         elif "plot-analysis" in command:
             output_content = {
                 Path(output).name: "PLOT\n"
-                for output in project.plan(until="plots")[-1].outputs
+                for output in _legacy_cli_steps(project, until="plots")[-1].outputs
             }
         elif "report" in command:
-            report_step = project.plan(until="report")[-1]
+            report_step = _legacy_cli_steps(project, until="report")[-1]
             for output in report_step.outputs:
                 if not output.suffix:
                     (Path(cwd) / output.name).mkdir(exist_ok=True)
@@ -1544,7 +1537,7 @@ def test_interaction_energy_runs_through_graph_when_enabled(
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
-        for output in project.plan(until="interaction-energy")[-1].outputs:
+        for output in _legacy_cli_steps(project, until="interaction-energy")[-1].outputs:
             (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -1559,7 +1552,7 @@ def test_interaction_energy_runs_through_graph_when_enabled(
     assert report.steps[0].returncode == 0
     assert all(
         output.is_file()
-        for output in project.plan(until="interaction-energy")[-1].outputs
+        for output in _legacy_cli_steps(project, until="interaction-energy")[-1].outputs
     )
 
 
@@ -1597,7 +1590,7 @@ def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> No
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
-        for output in project.plan(until="sasa")[-1].outputs:
+        for output in _legacy_cli_steps(project, until="sasa")[-1].outputs:
             (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -1608,7 +1601,7 @@ def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> No
     assert len(calls) == 1
     assert report.steps[0].step_name == "sasa"
     assert report.steps[0].returncode == 0
-    assert all(output.is_file() for output in project.plan(until="sasa")[-1].outputs)
+    assert all(output.is_file() for output in _legacy_cli_steps(project, until="sasa")[-1].outputs)
 
 
 def test_plots_runs_through_graph_when_started_directly(
@@ -1621,7 +1614,7 @@ def test_plots_runs_through_graph_when_started_directly(
     (inputs_dir / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
     (inputs_dir / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
 
-    plots_step = project.plan(until="plots")[-1]
+    plots_step = _legacy_cli_steps(project, until="plots")[-1]
     for input_path in plots_step.inputs:
         input_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.write_text("PLOT_INPUT\n", encoding="utf-8")
@@ -1667,7 +1660,7 @@ def test_report_runs_through_graph_when_started_directly(
     (inputs_dir / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
     (inputs_dir / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
 
-    report_step = project.plan(until="report")[-1]
+    report_step = _legacy_cli_steps(project, until="report")[-1]
     for input_path in report_step.inputs:
         input_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.write_text("REPORT_INPUT\n", encoding="utf-8")
@@ -1746,13 +1739,13 @@ def test_small_molecule_assembly_prefix_runs_through_graph(
         calls.append(tuple(command))
         subprocess_inputs.append(kwargs.get("input"))
         if "prepare-complex" in command:
-            outputs = project.plan(until="prepare")[0].outputs
+            outputs = _legacy_cli_steps(project, until="prepare")[0].outputs
         elif "pdb2gmx" in command:
-            outputs = project.plan(until="protein-topology")[-1].outputs
+            outputs = _legacy_cli_steps(project, until="protein-topology")[-1].outputs
         elif "assemble-complex" in command:
-            outputs = project.plan(until="assemble-complex")[-1].outputs
+            outputs = _legacy_cli_steps(project, until="assemble-complex")[-1].outputs
         else:
-            outputs = project.plan(until="ligand-topology")[-1].outputs
+            outputs = _legacy_cli_steps(project, until="ligand-topology")[-1].outputs
         for output in outputs:
             (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -1774,7 +1767,7 @@ def test_small_molecule_assembly_prefix_runs_through_graph(
     assert subprocess_inputs[-2] == "0\n0\n"
     assert all(
         output.is_file()
-        for output in project.plan(until="assemble-complex")[-1].outputs
+        for output in _legacy_cli_steps(project, until="assemble-complex")[-1].outputs
     )
 
 
@@ -1795,7 +1788,7 @@ def test_small_molecule_analysis_steps_can_start_through_graph(
     config_path = project_root / "project.toml"
     config_path.write_text(to_toml(config), encoding="utf-8")
     project = GmxFlowProject.open(config_path)
-    selected_step = project.plan(from_step=step_name, until=step_name)[0]
+    selected_step = _legacy_cli_steps(project, from_step=step_name, until=step_name)[0]
 
     inputs_dir = project_root / "inputs"
     inputs_dir.mkdir()

@@ -17,9 +17,8 @@ from gmxflow.analysis import (
     run_sasa_analysis,
     run_thermodynamic_analysis,
 )
-from gmxflow.api import GmxFlowProject
 from gmxflow.config import load_config
-from gmxflow.executor import run_steps, run_workspace_setup
+from gmxflow.executor import run_steps, run_workspace_setup, select_steps
 from gmxflow.forcefields import (
     FORCEFIELD_ENV,
     install_forcefield,
@@ -29,7 +28,7 @@ from gmxflow.forcefields import (
     validate_forcefield_directory,
 )
 from gmxflow.ligand import prepare_ligand as prepare_ligand_files
-from gmxflow.pipeline import REAL_EXECUTION_STEPS, PipelineStep
+from gmxflow.pipeline import REAL_EXECUTION_STEPS, PipelineStep, build_pipeline
 from gmxflow.preparation import prepare_complex as prepare_complex_files
 from gmxflow.project import available_templates, create_project
 from gmxflow.report import generate_report
@@ -769,13 +768,17 @@ def run(
     ] = None,
 ) -> None:
     """Executa a pipeline ou mostra o plano detalhado em modo dry-run."""
-    project = GmxFlowProject.open(config)
-    loaded = project.config
-    config_path = project.config_path
+    config_path = config.expanduser().resolve()
+    loaded = load_config(config_path)
 
     try:
-        steps = project.plan(
-            strict_inputs=strict_inputs,
+        steps = select_steps(
+            build_pipeline(
+                loaded,
+                config_dir=config_path.parent,
+                config_path=config_path,
+                strict_inputs=strict_inputs,
+            ),
             from_step=from_step,
             until=until,
         )

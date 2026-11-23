@@ -11,9 +11,9 @@ torna a API atual estável.
 - A cópia de trabalho de [pyproject.toml](../../pyproject.toml) declara agora
   `1.0.0`; a alteração está fora do escopo desta avaliação e, por si só, não
   estabelece prontidão para release.
-- `GmxFlowProject.open()`, `plan()`, `validate()` e `run()` permitem abrir a
-  configuração, inspecionar o plano, validar pré-requisitos e executar etapas
-  liberadas usando o executor compartilhado. `run()` retorna resultados
+- `GmxFlowProject.open()`, `workflow()`, `validate()` e `run()` permitem abrir a
+  configuração, compor etapas concretas, validar pré-requisitos e executar
+  etapas liberadas usando o executor compartilhado. `run()` retorna resultados
   estruturados com caminhos de logs; a API permanece experimental. O smoke
   passou em uma execução de ponta a ponta com Python 3.12.16 e GROMACS 2026.3,
   mas a matriz de ambientes ainda precisa ser validada.

@@ -19,7 +19,6 @@ from gmxflow.executor import (
     run_workflow_graph,
     run_workspace_setup,
     runtime_command,
-    select_steps,
 )
 from gmxflow.forcefields import resolve_forcefield
 from gmxflow.pipeline import (
@@ -27,12 +26,10 @@ from gmxflow.pipeline import (
     REAL_EXECUTION_STEPS,
     GromacsCommandStep,
     Parallel,
-    PipelineStep,
     Step,
     Sequence as WorkflowSequence,
     WorkflowGraph,
     WorkflowItem,
-    build_pipeline,
     build_workflow,
 )
 from gmxflow.preparation.structure import require_mdanalysis
@@ -69,9 +66,9 @@ class ExecutionReport:
 class GmxFlowProject:
     """A project loaded from its configuration file.
 
-    This experimental API supports creating and loading projects, validating
-    prerequisites, planning, running, and displaying results. Its public
-    contract is not yet stable.
+    This experimental API supports creating and loading projects, composing
+    workflows, validating prerequisites, running them, and displaying results.
+    Its public contract is not yet stable.
     """
 
     config_path: Path
@@ -156,22 +153,6 @@ class GmxFlowProject:
             remove_templates=remove_templates,
             all_work=all_work,
         )
-
-    def plan(
-        self,
-        *,
-        strict_inputs: bool = False,
-        from_step: str | None = None,
-        until: str | None = None,
-    ) -> list[PipelineStep]:
-        """Build and optionally narrow the execution plan without running it."""
-        steps = build_pipeline(
-            self.config,
-            config_dir=self.root,
-            config_path=self.config_path,
-            strict_inputs=strict_inputs,
-        )
-        return select_steps(steps, from_step=from_step, until=until)
 
     def workflow(
         self,

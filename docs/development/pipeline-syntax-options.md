@@ -469,9 +469,9 @@ o método antigo ou fazer backup dos artefatos antes da troca está em
 [`install-gmxflow-without-uv.md`](../how-to/install-gmxflow-without-uv.md#projetos-existentes-e-a-api-de-workflow).
 
 **Compatibilidade mantida deliberadamente:** o comando `gmxflow run` ainda usa
-`GmxFlowProject.plan()`, a projeção `PipelineStep` e o executor legado para
-preservar as opções do CLI e o estado `work/state.json`. Essa dependência impede
-remover agora a projeção e o executor antigos. A migração do CLI, incluindo
+`build_pipeline()`, a projeção `PipelineStep` e o executor legado para preservar
+as opções do CLI e o estado `work/state.json`. Essa dependência impede remover
+agora a projeção e o executor antigos. A migração do CLI, incluindo
 compatibilidade e eventual conversão do estado persistido, é trabalho separado
 e não é necessária para recomendar a composição Python nos notebooks.
 
@@ -508,13 +508,13 @@ remoção precisa decorrer de uma dependência eliminada e de testes substitutos
 que preservem comportamento, retomada e segurança dos arquivos.
 
 **Auditoria atual:** `GmxFlowProject.workflow()`, `validate()` e `run()` usam
-Steps concretos. A seleção e a execução da API não passam mais por `plan()` ou
-`PipelineStep`; a conversão intermediária `build_workflow(...,
-selected_steps=...)` e seu teste foram removidos por não terem mais consumidores.
-`project.plan()` ainda expõe a projeção para compatibilidade, e o CLI consome
-`PipelineStep`/`run_steps()` com estado em `work/state.json`. O executor do
-workflow também é usado diretamente por `run_workflow()` e pela API `run()`;
-unificar/remover os wrappers públicos e o executor CLI continua pendente.
+Steps concretos. A API não importa `PipelineStep`, `build_pipeline()` ou
+`select_steps()`; a rota intermediária `build_workflow(...,
+selected_steps=...)`, o método redundante `project.plan()` e seus testes foram
+removidos. O CLI agora chama `build_pipeline()` e `select_steps()` diretamente,
+e ainda usa `PipelineStep`/`run_steps()` com estado em `work/state.json`. O
+executor de grafo é compartilhado por `run_workflow()` e pela execução interna
+de `run()`; a migração do executor CLI continua pendente.
 
 #### A. Fixar o contrato público e a experiência das receitas — decisão antes de refatorar
 
@@ -544,18 +544,19 @@ receita gerada usam as mesmas classes e o mesmo operador. Não há API pública
 
 #### B. Remover a projeção legada da construção da API
 
-**Progresso parcial:** `project.workflow()`, `validate()` e `run()` constroem e
+**Concluída:** `project.workflow()`, `validate()` e `run()` constroem e
 selecionam Steps canônicos diretamente por `id`; a validação verifica somente
 as entradas declaradas pelo usuário, sem confundi-las com templates internos
-gerados no workspace. Foram adicionados testes de seleção, ID desconhecido e
-entrada configurada ausente. A rota `build_workflow(..., selected_steps=...)`
-e seu teste de compatibilidade foram removidos. `project.plan()` ainda depende
-de `PipelineStep`/`build_pipeline()`, portanto esta fase não está concluída.
+gerados no workspace. A API não depende de `PipelineStep`/`build_pipeline()`.
+O CLI foi desacoplado do wrapper `project.plan()` e chama explicitamente a
+projeção legada; seus testes continuam cobrindo as opções e o comportamento do
+comando. Os testes exclusivos do wrapper removido foram eliminados.
 
 - Fazer `project.workflow()`, `validate()` e `run()` operar diretamente sobre a
-  sequência canônica de Steps e seleção por ID. (Parcialmente concluído.)
-- Decidir se `project.plan()` será removido, convertido para exibir o modelo
-  canônico, ou mantido como uma interface de planejamento independente.
+  sequência canônica de Steps e seleção por ID. (Concluído.)
+- Remover o wrapper público redundante `project.plan()` e encaminhar o CLI
+  diretamente à sua projeção enquanto a migração do executor estiver pendente.
+  (Concluído.)
 - Remover `GromacsCommandStep.to_pipeline_step()` e a comparação de igualdade
   com `PipelineStep` somente depois de não haver consumidores.
 
