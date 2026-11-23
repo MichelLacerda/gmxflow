@@ -146,6 +146,8 @@ def test_project_custom_workflow_executes_protocol_steps_and_resumes(
         "state.txt",
         "state.json",
         "workflow_state.json",
+        "STATE.JSON",
+        "Workflow_State.json",
     ],
 )
 def test_custom_workflow_rejects_invalid_state_names(

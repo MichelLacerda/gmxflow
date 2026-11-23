@@ -294,7 +294,7 @@ class GmxFlowProject:
             or filename.name != state_name
             or filename.stem in {"", ".", ".."}
             or filename.suffix != ".json"
-            or filename.name in reserved_state_names
+            or filename.name.casefold() in reserved_state_names
             or "/" in state_name
             or "\\" in state_name
         ):
