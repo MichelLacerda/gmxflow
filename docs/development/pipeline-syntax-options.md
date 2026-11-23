@@ -400,11 +400,10 @@ concretas usada por `build_workflow()`. A API compõe essa lista diretamente ou
 valida a projeção ao receber uma seleção de etapas do CLI. A sequência atual
 não usa `Parallel`.
 
-**Compatibilidade do executor:** toda execução pela API usa agora
-`work/workflow_state.json`; o CLI segue usando `work/state.json`. Esses estados
-não são convertidos entre si, portanto a primeira execução pela API pode
-reexecutar etapas que só tenham estado salvo pelo executor antigo. A mudança
-não altera comandos, parâmetros ou ordem científica das etapas.
+**Compatibilidade do executor (antes da migração do CLI):** execuções pela API
+usavam `work/workflow_state.json`; o CLI ainda usava `work/state.json`. Esses
+formatos não são convertidos entre si. A migração atual do CLI está registrada
+na seção D/E abaixo.
 
 No fluxo `small_molecule`, a topologia original da proteína é preservada em
 `work/topo/topol.top`; `AssembleComplexStep` cria
@@ -426,13 +425,11 @@ execução real, preserva a validação do projeto e a preparação do workspace
 dry-run não cria diretórios nem executa setup. Callbacks de início e conclusão
 recebem os Steps/resultados estruturados do executor.
 
-**Compatibilidade concluída:** os IDs legados são preservados; `from_step` e
-`until` continuam sendo aplicados pelo plano linear compatível usado pelo CLI
-e por `GmxFlowProject.workflow(...)`. O CLI mantém `work/state.json`; a execução
-por grafo usa `work/workflow_state.json`, sem conversão, sobrescrita ou
-retomada cruzada. Workflows customizados usam um nome de estado próprio e os
-dois nomes padrão são reservados. Retomada por etapa, versão, estado e
-fingerprints é coberta nos testes do executor e da API.
+**Compatibilidade concluída nesta etapa:** os IDs legados são preservados;
+`from_step` e `until` selecionam a sequência canônica por ID. Workflows
+customizados usam um nome de estado próprio e os estados padrão são reservados.
+Retomada por etapa, versão, estado e fingerprints é coberta nos testes do
+executor e da API.
 
 **Verificação:** `tests/test_api.py` compara os comandos e os arquivos
 produzidos pelos dois executores com um subprocesso simulado; não substitui uma
@@ -468,12 +465,11 @@ Projetos existentes não convertem seus estados automaticamente: ao adotar
 o método antigo ou fazer backup dos artefatos antes da troca está em
 [`install-gmxflow-without-uv.md`](../how-to/install-gmxflow-without-uv.md#projetos-existentes-e-a-api-de-workflow).
 
-**Compatibilidade mantida deliberadamente:** o comando `gmxflow run` ainda usa
-`build_pipeline()`, a projeção `PipelineStep` e o executor legado para preservar
-as opções do CLI e o estado `work/state.json`. Essa dependência impede remover
-agora a projeção e o executor antigos. A migração do CLI, incluindo
-compatibilidade e eventual conversão do estado persistido, é trabalho separado
-e não é necessária para recomendar a composição Python nos notebooks.
+**Compatibilidade mantida deliberadamente:** `PipelineStep`, `build_pipeline()`
+e o executor antigo continuam no código, mas já não são usados por
+`gmxflow run`. O estado legado `work/state.json` é preservado, não convertido;
+a retomada do CLI usa `work/cli-workflow.json`. A remoção dos adaptadores e do
+executor antigo depende da auditoria de consumidores e da cobertura na etapa F.
 
 **Concluído nesta etapa até aqui:** exemplos, template de novos projetos,
 documentação e guia para projetos existentes usam/distinguem a API composta.
@@ -511,10 +507,9 @@ que preservem comportamento, retomada e segurança dos arquivos.
 Steps concretos. A API não importa `PipelineStep`, `build_pipeline()` ou
 `select_steps()`; a rota intermediária `build_workflow(...,
 selected_steps=...)`, o método redundante `project.plan()` e seus testes foram
-removidos. O CLI agora chama `build_pipeline()` e `select_steps()` diretamente,
-e ainda usa `PipelineStep`/`run_steps()` com estado em `work/state.json`. O
-executor de grafo é compartilhado por `run_workflow()` e pela execução interna
-de `run()`; a migração do executor CLI continua pendente.
+removidos. O CLI seleciona Steps concretos e usa `run_workflow()` e o executor
+de grafo; a projeção `PipelineStep` e `run_steps()` permanecem para auditoria
+e remoção posterior.
 
 #### A. Fixar o contrato público e a experiência das receitas — decisão antes de refatorar
 
@@ -581,7 +576,7 @@ notebook por receita, a ausência de execução automática e a preservação de
 arquivos existentes. A receita smoke é identificada como teste de integração;
 nenhum resultado dela é apresentado como evidência científica.
 
-#### D. Unificar o caminho de execução, preservando a interface do CLI
+#### D. Unificar o caminho de execução, preservando a interface do CLI — migração inicial concluída
 
 - Adaptar o CLI para inspecionar e executar o mesmo workflow/grafo, mantendo
   `--project`, `--dry-run`, `--strict-inputs`, `--from-step` e `--until`, além
@@ -592,24 +587,29 @@ nenhum resultado dela é apresentado como evidência científica.
   `ExecutionReport` versus `WorkflowExecutionReport`) por uma única interface;
   manter compatibilidade temporária apenas se a política de release exigir.
 
-**Aceite:** testes do CLI e da API exercitam o mesmo executor e demonstram
-paridade de argv, stdin, ambiente, logs, validação, falha, retomada e seleção.
-Nenhum comportamento científico é alterado nesta etapa.
+**Implementado nesta fatia:** `gmxflow run` constrói a composição canônica por
+`project.workflow()` e executa/dry-run pelo grafo via `project.run_workflow()`.
+`--project`, `--dry-run`, `--strict-inputs`, `--from-step` e `--until` foram
+preservados; o dry-run agora mostra dependências dos Steps. A unificação dos
+relatórios públicos e callbacks continua pendente. A mudança não altera
+comandos, parâmetros ou ordem científica.
 
-#### E. Decidir e testar a migração do estado persistido
+#### E. Decidir e testar a migração do estado persistido — política definida; implementação inicial concluída
 
-Antes de trocar o executor do CLI, revisar os formatos atuais: CLI em
-`work/state.json`, API legada em `work/workflow_state.json`, e workflows
-customizados em `work/<state_name>`. Escolher uma política explícita:
+Os formatos atuais são: estado legado do CLI em `work/state.json`, estado da API
+legada em `work/workflow_state.json`, estado do CLI migrado em
+`work/cli-workflow.json`, e workflows customizados em `work/<state_name>`.
 
-1. conversão verificável de registros antigos para o formato único, apenas
-   quando comando, entradas, saídas e parâmetros puderem ser comparados; ou
-2. migração incompatível para 1.0, preservando os arquivos antigos e avisando
-   claramente que etapas poderão ser executadas de novo.
+**Decisão revisada pelo usuário:** usar `work/cli-workflow.json` para o CLI
+migrado e manter `work/state.json` intocado, sem conversão. Como os formatos e
+fingerprints são incompatíveis, a primeira execução no novo executor pode
+repetir etapas que só tinham estado legado; revise os parâmetros e outputs
+antes de executar.
 
-**Aceite:** testes cobrem estado ausente, completo, inválido e incompatível;
-nenhum arquivo de estado anterior é sobrescrito ou apagado silenciosamente.
-Esta decisão requer revisão humana antes de implementar.
+**Verificação inicial:** o teste do CLI confirma que um `work/state.json`
+preexistente permanece byte a byte inalterado e que o novo estado é criado em
+`work/cli-workflow.json`. Cobertura de estados inválidos e incompatíveis
+continua na suíte do executor; remover formatos antigos fica para F.
 
 #### F. Excluir código e testes duplicados após a migração
 

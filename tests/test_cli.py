@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 from gmxflow.cli import app
+from gmxflow.executor import WorkflowStepResult, WorkflowStepStatus
 
 
 def test_cli_startproject_creates_project(tmp_path: Path) -> None:
@@ -21,7 +22,9 @@ def test_cli_startproject_creates_project(tmp_path: Path) -> None:
     assert (tmp_path / "cli_project" / "project.ipynb").is_file()
 
 
-def test_solvate_system_preserves_original_topology(tmp_path: Path, monkeypatch) -> None:
+def test_solvate_system_preserves_original_topology(
+    tmp_path: Path, monkeypatch
+) -> None:
     runner = CliRunner()
     created = runner.invoke(
         app,
@@ -49,8 +52,13 @@ def test_solvate_system_preserves_original_topology(tmp_path: Path, monkeypatch)
     monkeypatch.setattr("gmxflow.cli.subprocess.run", fake_subprocess_run)
     result = runner.invoke(
         app,
-        ["solvate-system", "--project", str(project / "project.toml"),
-         "--topology-output", str(output_topology)],
+        [
+            "solvate-system",
+            "--project",
+            str(project / "project.toml"),
+            "--topology-output",
+            str(output_topology),
+        ],
     )
 
     assert result.exit_code == 0, result.output
@@ -125,13 +133,17 @@ def test_cli_startproject_accepts_initial_pipeline_options(tmp_path: Path) -> No
     )
 
     assert result.exit_code == 0
-    config_text = (tmp_path / "cli_project" / "project.toml").read_text(encoding="utf-8")
+    config_text = (tmp_path / "cli_project" / "project.toml").read_text(
+        encoding="utf-8"
+    )
     assert 'ligand_kind = "small_molecule"' in config_text
     assert 'gpu = "off"' in config_text
     assert 'profile = "smoke"' in config_text
 
 
-def test_cli_startproject_rejects_invalid_initial_pipeline_option(tmp_path: Path) -> None:
+def test_cli_startproject_rejects_invalid_initial_pipeline_option(
+    tmp_path: Path,
+) -> None:
     runner = CliRunner()
 
     result = runner.invoke(
@@ -257,9 +269,14 @@ def test_cli_run_dry_run_prints_pipeline_without_executing(tmp_path: Path) -> No
     assert "gmxflow prepare-complex" in result.output
     assert "gmx pdb2gmx" in result.output
     assert "gmx mdrun" in result.output
+    assert "depende de: prepare" in result.output
+    assert not (config_path.parent / "work" / "cli-workflow.json").exists()
+    assert not (config_path.parent / "work" / "logs" / "01_prepare.log").exists()
 
 
-def test_cli_run_without_until_executes_full_pipeline(tmp_path: Path, monkeypatch) -> None:
+def test_cli_run_without_until_executes_full_pipeline(
+    tmp_path: Path, monkeypatch
+) -> None:
     runner = CliRunner()
     project_result = runner.invoke(
         app,
@@ -270,43 +287,29 @@ def test_cli_run_without_until_executes_full_pipeline(tmp_path: Path, monkeypatc
     project = tmp_path / "cli_project"
     calls: dict[str, object] = {}
 
-    def fake_workspace_setup(loaded, project_root):
-        calls["workspace_project"] = project_root
-        return SimpleNamespace(
-            step_name="workspace",
-            elapsed_seconds=0.0,
-            log_path=project_root / "work" / "logs" / "00_workspace.log",
-            skipped=False,
-        )
-
-    def fake_run_steps(
-        steps, project_root, start_index, on_step_start=None, on_step_done=None, global_inputs=None
-    ):
-        calls["step_names"] = [step.name for step in steps]
-        calls["start_index"] = start_index
-        results = []
-        for index, step in enumerate(steps, start=start_index):
-            if on_step_start is not None:
-                on_step_start(index, step)
-            result = SimpleNamespace(
-                step_name=step.name,
-                elapsed_seconds=0.0,
-                log_path=project_root / "work" / "logs" / f"{index:02d}_{step.name}.log",
-                skipped=False,
+    def fake_run_workflow(self, workflow, **kwargs):
+        calls["project_root"] = self.root
+        calls["step_ids"] = [step.id for step in workflow.items]
+        calls["state_name"] = kwargs["state_name"]
+        for step in workflow.items:
+            kwargs["on_step_start"](step)
+            kwargs["on_step_done"](
+                WorkflowStepResult(
+                    step_id=step.id,
+                    status=WorkflowStepStatus.SUCCEEDED,
+                    log_path=self.root / "work" / "logs" / f"{step.id}.log",
+                )
             )
-            results.append(result)
-            if on_step_done is not None:
-                on_step_done(index, result)
-        return results
+        return SimpleNamespace()
 
-    monkeypatch.setattr("gmxflow.cli.run_workspace_setup", fake_workspace_setup)
-    monkeypatch.setattr("gmxflow.cli.run_steps", fake_run_steps)
+    monkeypatch.setattr("gmxflow.cli.GmxFlowProject.run_workflow", fake_run_workflow)
 
     result = runner.invoke(app, ["run", "--project", str(project / "project.toml")])
 
     assert result.exit_code == 0
-    assert calls["workspace_project"] == project
-    assert calls["step_names"] == [
+    assert calls["project_root"] == project
+    assert calls["state_name"] == "cli-workflow.json"
+    assert calls["step_ids"] == [
         "prepare",
         "topology",
         "box",
@@ -329,13 +332,10 @@ def test_cli_run_without_until_executes_full_pipeline(tmp_path: Path, monkeypatc
         "plots",
         "report",
     ]
-    assert calls["start_index"] == 1
     assert "Etapa concluída: report" in result.output
 
 
-def test_cli_run_until_analysis_is_allowed(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_cli_run_until_analysis_is_allowed(tmp_path: Path, monkeypatch) -> None:
     runner = CliRunner()
     project_result = runner.invoke(
         app,
@@ -346,37 +346,20 @@ def test_cli_run_until_analysis_is_allowed(
     project = tmp_path / "cli_project"
     calls: dict[str, object] = {}
 
-    def fake_workspace_setup(loaded, project_root):
-        calls["workspace_project"] = project_root
-        return SimpleNamespace(
-            step_name="workspace",
-            elapsed_seconds=0.0,
-            log_path=project_root / "work" / "logs" / "00_workspace.log",
-            skipped=False,
-        )
-
-    def fake_run_steps(
-        steps, project_root, start_index, on_step_start=None, on_step_done=None, global_inputs=None
-    ):
-        calls["step_names"] = [step.name for step in steps]
-        calls["start_index"] = start_index
-        results = []
-        for index, step in enumerate(steps, start=start_index):
-            if on_step_start is not None:
-                on_step_start(index, step)
-            result = SimpleNamespace(
-                step_name=step.name,
-                elapsed_seconds=0.0,
-                log_path=project_root / "work" / "logs" / f"{index:02d}_{step.name}.log",
-                skipped=False,
+    def fake_run_workflow(self, workflow, **kwargs):
+        calls["step_ids"] = [step.id for step in workflow.items]
+        for step in workflow.items:
+            kwargs["on_step_start"](step)
+            kwargs["on_step_done"](
+                WorkflowStepResult(
+                    step_id=step.id,
+                    status=WorkflowStepStatus.SUCCEEDED,
+                    log_path=self.root / "work" / "logs" / f"{step.id}.log",
+                )
             )
-            results.append(result)
-            if on_step_done is not None:
-                on_step_done(index, result)
-        return results
+        return SimpleNamespace()
 
-    monkeypatch.setattr("gmxflow.cli.run_workspace_setup", fake_workspace_setup)
-    monkeypatch.setattr("gmxflow.cli.run_steps", fake_run_steps)
+    monkeypatch.setattr("gmxflow.cli.GmxFlowProject.run_workflow", fake_run_workflow)
 
     result = runner.invoke(
         app,
@@ -390,8 +373,7 @@ def test_cli_run_until_analysis_is_allowed(
     )
 
     assert result.exit_code == 0
-    assert calls["workspace_project"] == project
-    assert calls["step_names"] == [
+    assert calls["step_ids"] == [
         "prepare",
         "topology",
         "box",
@@ -411,7 +393,6 @@ def test_cli_run_until_analysis_is_allowed(
         "fit",
         "analysis",
     ]
-    assert calls["start_index"] == 1
     assert "Etapa concluída: analysis" in result.output
 
 
@@ -432,14 +413,22 @@ def test_cli_run_until_prepare_sets_up_workspace_and_logs(tmp_path: Path) -> Non
         _atom(1, "N", "ALA", "B", 1, 1, 1, 1, "N") + "\n",
         encoding="utf-8",
     )
+    legacy_state = project / "work" / "state.json"
+    legacy_state.parent.mkdir(parents=True, exist_ok=True)
+    legacy_state.write_text('{"legacy": "preserve exactly"}\n', encoding="utf-8")
+    original_legacy_state = legacy_state.read_bytes()
 
-    result = runner.invoke(app, ["run", "--project", str(project / "project.toml"), "--until", "prepare"])
+    result = runner.invoke(
+        app, ["run", "--project", str(project / "project.toml"), "--until", "prepare"]
+    )
 
     assert result.exit_code == 0
-    assert "Etapa concluída: workspace" in result.output
+    assert "Preparando workspace do projeto:" in result.output
     assert "Etapa concluída: prepare" in result.output
     assert (project / "work" / "logs" / "00_workspace.log").is_file()
     assert (project / "work" / "logs" / "01_prepare.log").is_file()
+    assert (project / "work" / "cli-workflow.json").is_file()
+    assert legacy_state.read_bytes() == original_legacy_state
     assert (project / "work" / "prep" / "complexo.pdb").is_file()
 
 

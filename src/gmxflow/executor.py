@@ -161,9 +161,7 @@ def run_workflow_graph(
     executor deliberately does not schedule parallel branches concurrently.
     """
     root = project_root.expanduser().resolve()
-    resolved_artifact_paths = _resolve_artifact_paths(
-        graph, root, artifact_paths
-    )
+    resolved_artifact_paths = _resolve_artifact_paths(graph, root, artifact_paths)
     resolved_global_inputs = tuple(
         path.expanduser().resolve() for path in global_inputs
     )
@@ -187,8 +185,7 @@ def run_workflow_graph(
             on_step_done(result)
 
     normalized_states = {
-        step_id: _normalized_step_state(graph.steps[step_id])
-        for step_id in ordered_ids
+        step_id: _normalized_step_state(graph.steps[step_id]) for step_id in ordered_ids
     }
 
     external_inputs = {
@@ -247,9 +244,7 @@ def run_workflow_graph(
                 elapsed=0.0,
                 commands=(),
                 error=message,
-                input_paths=[
-                    resolved_artifact_paths[item.key] for item in step.inputs
-                ],
+                input_paths=[resolved_artifact_paths[item.key] for item in step.inputs],
                 output_paths=[
                     resolved_artifact_paths[item.key] for item in step.outputs
                 ],
@@ -278,12 +273,12 @@ def run_workflow_graph(
             )
             continue
 
-        input_paths = [
-            resolved_artifact_paths[item.key] for item in step.inputs
-        ]
+        input_paths = [resolved_artifact_paths[item.key] for item in step.inputs]
         tracked_paths = _unique_paths([*input_paths, *resolved_global_inputs])
         missing_inputs = [
-            path for path in input_paths if not path.exists() or not os.access(path, os.R_OK)
+            path
+            for path in input_paths
+            if not path.exists() or not os.access(path, os.R_OK)
         ]
         if missing_inputs:
             missing_input_error = "Inputs ausentes ou sem leitura: " + ", ".join(
@@ -312,9 +307,7 @@ def run_workflow_graph(
             continue
 
         input_fingerprints = _fingerprints(tracked_paths)
-        output_paths = [
-            resolved_artifact_paths[item.key] for item in step.outputs
-        ]
+        output_paths = [resolved_artifact_paths[item.key] for item in step.outputs]
         output_fingerprints = _fingerprints(output_paths)
         if _can_skip_workflow_step(
             step=step,
@@ -750,6 +743,7 @@ def run_workspace_setup(
     config: GmxFlowConfig,
     project_root: Path,
     index: int = 0,
+    state_path: Path | None = None,
 ) -> StepResult:
     logs_dir = project_root / "work" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -787,7 +781,7 @@ def run_workspace_setup(
     ]
     log_path.write_text("\n".join(content), encoding="utf-8")
     _write_state_entry(
-        state_path=project_root / "work" / "state.json",
+        state_path=state_path or project_root / "work" / "state.json",
         step=PipelineStep(
             name="workspace",
             description="Preparar diretórios de trabalho e arquivos .mdp ausentes.",

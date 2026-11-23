@@ -105,6 +105,11 @@ existam saídas anteriores. Se precisar preservar os artefatos gerados, faça
 uma cópia de `work/` e `outputs/` antes de trocar; não apague esses diretórios
 como parte da migração. Não há conversão automática entre os estados.
 
+O comando `gmxflow run` também usa o executor de grafo e salva a retomada em
+`work/cli-workflow.json`. O estado legado `work/state.json` é mantido intacto,
+mas não é importado; a primeira execução do CLI após essa mudança pode repetir
+etapas. Não remova `work/` antes de revisar as saídas que deseja preservar.
+
 A composição e a API dos notebooks continuam experimentais. A execução de
 etapas pode substituir artefatos gerados no projeto; revise os parâmetros e
 entradas normalmente antes de executar. Esta mudança de interface não altera

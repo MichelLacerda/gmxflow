@@ -181,9 +181,7 @@ def test_project_workflow_composes_and_runs_custom_protocol_step(
     solvate_step = base_workflow.items[0]
     assert isinstance(solvate_step, GromacsCommandStep)
     source = next(
-        artifact
-        for artifact in solvate_step.outputs
-        if artifact.kind == "gro"
+        artifact for artifact in solvate_step.outputs if artifact.kind == "gro"
     )
     target = Artifact("custom:solvate-copy", "gro")
     custom_step: Step = _CopyArtifactStep(
@@ -204,7 +202,7 @@ def test_project_workflow_composes_and_runs_custom_protocol_step(
     )
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root: setup_events.append("workspace"),
+        lambda config, project_root, **kwargs: setup_events.append("workspace"),
     )
 
     def fake_subprocess_run(argv, *, cwd, env, input, text, capture_output, check):
@@ -258,7 +256,7 @@ def test_composed_project_workflow_dry_run_does_not_prepare_project(
     )
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root: setup_events.append("workspace"),
+        lambda config, project_root, **kwargs: setup_events.append("workspace"),
     )
 
     report = project.run_workflow(
@@ -348,9 +346,7 @@ def test_create_refuses_existing_project_without_force(tmp_path: Path) -> None:
     assert marker.read_text(encoding="utf-8") == "user data"
 
 
-def test_show_report_delegates_using_project_root(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_show_report_delegates_using_project_root(tmp_path: Path, monkeypatch) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
     shown_projects: list[tuple[Path, object]] = []
 
@@ -364,9 +360,7 @@ def test_show_report_delegates_using_project_root(
     assert shown_projects == [(project.root, project.config)]
 
 
-def test_edit_config_delegates_to_notebook_form(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_edit_config_delegates_to_notebook_form(tmp_path: Path, monkeypatch) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
     shown_projects: list[GmxFlowProject] = []
     monkeypatch.setattr(
@@ -393,9 +387,7 @@ def test_show_execution_delegates_execution_results(
     )
     report = ExecutionReport(workspace=result, steps=(result,))
     shown_results: list[tuple[object, ...]] = []
-    monkeypatch.setattr(
-        "gmxflow.notebook.show_execution", shown_results.append
-    )
+    monkeypatch.setattr("gmxflow.notebook.show_execution", shown_results.append)
 
     project.show_execution(report)
 
@@ -416,7 +408,9 @@ def test_show_execution_delegates_execution_results(
     assert shown_results[-1] == (workflow_result,)
 
 
-def test_clean_removes_work_artifacts_and_preserves_project_data(tmp_path: Path) -> None:
+def test_clean_removes_work_artifacts_and_preserves_project_data(
+    tmp_path: Path,
+) -> None:
     project_dir = tmp_path / "api_project"
     project = GmxFlowProject.open(_write_project_config(project_dir))
     (project_dir / "inputs").mkdir()
@@ -460,7 +454,9 @@ def test_validate_reports_prerequisites_without_creating_project_outputs(
     (force_field / "forcefield.doc").write_text("test\n", encoding="utf-8")
     monkeypatch.setattr("gmxflow.forcefields._installed_roots", lambda: [])
     monkeypatch.setenv("GMXFLOW_FORCEFIELD_DIR", str(tmp_path / "user-forcefields"))
-    monkeypatch.setattr("gmxflow.api.shutil.which", lambda command: "/opt/gromacs/bin/gmx")
+    monkeypatch.setattr(
+        "gmxflow.api.shutil.which", lambda command: "/opt/gromacs/bin/gmx"
+    )
     project = GmxFlowProject.open(config_path)
 
     report = project.validate()
@@ -507,7 +503,9 @@ def test_validate_reports_missing_force_field(tmp_path: Path, monkeypatch) -> No
     (project_dir / "inputs" / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
     monkeypatch.setattr("gmxflow.forcefields._installed_roots", lambda: [])
     monkeypatch.setenv("GMXFLOW_FORCEFIELD_DIR", str(tmp_path / "user-forcefields"))
-    monkeypatch.setattr("gmxflow.api.shutil.which", lambda command: "/opt/gromacs/bin/gmx")
+    monkeypatch.setattr(
+        "gmxflow.api.shutil.which", lambda command: "/opt/gromacs/bin/gmx"
+    )
     project = GmxFlowProject.open(config_path)
 
     with pytest.raises(FileNotFoundError, match="Force field 'amber99sb-ildn'"):
@@ -522,7 +520,7 @@ def test_validate_requires_mdanalysis_for_residue_filtering(
     config_text = (
         config_path.read_text(encoding="utf-8")
         .replace('ligand_kind = "peptide"', 'ligand_kind = "none"')
-        .replace('remove_resnames = []', 'remove_resnames = ["HOH"]')
+        .replace("remove_resnames = []", 'remove_resnames = ["HOH"]')
     )
     config_path.write_text(config_text, encoding="utf-8")
     (project_dir / "inputs").mkdir()
@@ -540,16 +538,16 @@ def test_validate_requires_mdanalysis_for_residue_filtering(
     def missing_dependency(name: str) -> None:
         raise ImportError(name)
 
-    monkeypatch.setattr("gmxflow.preparation.structure.import_module", missing_dependency)
+    monkeypatch.setattr(
+        "gmxflow.preparation.structure.import_module", missing_dependency
+    )
     project = GmxFlowProject.open(config_path)
 
     with pytest.raises(RuntimeError, match="Instale `mdanalysis`"):
         project.validate()
 
 
-def test_run_validates_then_uses_shared_executor(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) -> None:
     project_dir = tmp_path / "api_project"
     config_path = _write_project_config(project_dir)
     inputs_dir = project_dir / "inputs"
@@ -572,9 +570,7 @@ def test_run_validates_then_uses_shared_executor(
     )
     step_result = StepResult(
         step_name="prepare",
-        command=runtime_command(
-            _legacy_cli_steps(project, until="prepare")[0].command
-        ),
+        command=runtime_command(_legacy_cli_steps(project, until="prepare")[0].command),
         workdir=project.root / "work" / "prep",
         log_path=project.root / "work" / "logs" / "01_prepare.log",
         returncode=0,
@@ -606,7 +602,9 @@ def test_run_validates_then_uses_shared_executor(
     )
     ions_grompp_result = StepResult(
         step_name="ions-grompp",
-        command=runtime_command(_legacy_cli_steps(project, until="ions-grompp")[4].command),
+        command=runtime_command(
+            _legacy_cli_steps(project, until="ions-grompp")[4].command
+        ),
         workdir=project.root / "work" / "box",
         log_path=project.root / "work" / "logs" / "05_ions-grompp.log",
         returncode=0,
@@ -622,7 +620,9 @@ def test_run_validates_then_uses_shared_executor(
     )
     em_grompp_result = StepResult(
         step_name="em-grompp",
-        command=runtime_command(_legacy_cli_steps(project, until="em-grompp")[6].command),
+        command=runtime_command(
+            _legacy_cli_steps(project, until="em-grompp")[6].command
+        ),
         workdir=project.root / "work" / "em",
         log_path=project.root / "work" / "logs" / "07_em-grompp.log",
         returncode=0,
@@ -638,7 +638,9 @@ def test_run_validates_then_uses_shared_executor(
     )
     nvt_grompp_result = StepResult(
         step_name="nvt-grompp",
-        command=runtime_command(_legacy_cli_steps(project, until="nvt-grompp")[8].command),
+        command=runtime_command(
+            _legacy_cli_steps(project, until="nvt-grompp")[8].command
+        ),
         workdir=project.root / "work" / "nvt",
         log_path=project.root / "work" / "logs" / "09_nvt-grompp.log",
         returncode=0,
@@ -654,7 +656,9 @@ def test_run_validates_then_uses_shared_executor(
     )
     npt_grompp_result = StepResult(
         step_name="npt-grompp",
-        command=runtime_command(_legacy_cli_steps(project, until="npt-grompp")[10].command),
+        command=runtime_command(
+            _legacy_cli_steps(project, until="npt-grompp")[10].command
+        ),
         workdir=project.root / "work" / "npt",
         log_path=project.root / "work" / "logs" / "11_npt-grompp.log",
         returncode=0,
@@ -670,7 +674,9 @@ def test_run_validates_then_uses_shared_executor(
     )
     production_grompp_result = StepResult(
         step_name="production-grompp",
-        command=runtime_command(_legacy_cli_steps(project, until="production-grompp")[12].command),
+        command=runtime_command(
+            _legacy_cli_steps(project, until="production-grompp")[12].command
+        ),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "13_production-grompp.log",
         returncode=0,
@@ -678,7 +684,9 @@ def test_run_validates_then_uses_shared_executor(
     )
     production_result = StepResult(
         step_name="production",
-        command=runtime_command(_legacy_cli_steps(project, until="production")[13].command),
+        command=runtime_command(
+            _legacy_cli_steps(project, until="production")[13].command
+        ),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "14_production.log",
         returncode=0,
@@ -686,7 +694,9 @@ def test_run_validates_then_uses_shared_executor(
     )
     pbc_nojump_result = StepResult(
         step_name="pbc-nojump",
-        command=runtime_command(_legacy_cli_steps(project, until="pbc-nojump")[14].command),
+        command=runtime_command(
+            _legacy_cli_steps(project, until="pbc-nojump")[14].command
+        ),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "15_pbc-nojump.log",
         returncode=0,
@@ -694,7 +704,9 @@ def test_run_validates_then_uses_shared_executor(
     )
     pbc_center_result = StepResult(
         step_name="pbc-center",
-        command=runtime_command(_legacy_cli_steps(project, until="pbc-center")[15].command),
+        command=runtime_command(
+            _legacy_cli_steps(project, until="pbc-center")[15].command
+        ),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "16_pbc-center.log",
         returncode=0,
@@ -710,7 +722,9 @@ def test_run_validates_then_uses_shared_executor(
     )
     analysis_result = StepResult(
         step_name="analysis",
-        command=runtime_command(_legacy_cli_steps(project, until="analysis")[17].command),
+        command=runtime_command(
+            _legacy_cli_steps(project, until="analysis")[17].command
+        ),
         workdir=project.root / "work" / "analysis",
         log_path=project.root / "work" / "logs" / "18_analysis.log",
         returncode=0,
@@ -718,7 +732,9 @@ def test_run_validates_then_uses_shared_executor(
     )
     thermodynamics_result = StepResult(
         step_name="thermodynamics",
-        command=runtime_command(_legacy_cli_steps(project, until="thermodynamics")[18].command),
+        command=runtime_command(
+            _legacy_cli_steps(project, until="thermodynamics")[18].command
+        ),
         workdir=project.root / "work" / "analysis",
         log_path=project.root / "work" / "logs" / "19_thermodynamics.log",
         returncode=0,
@@ -729,7 +745,8 @@ def test_run_validates_then_uses_shared_executor(
         "gmxflow.api.GmxFlowProject.validate",
         lambda self: events.append("validate"),
     )
-    def fake_workspace_setup(config, project_root):
+
+    def fake_workspace_setup(config, project_root, **kwargs):
         events.append("workspace")
         return workspace
 
@@ -913,9 +930,7 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
             output_content = {"box.gro": "BOX\n"}
         elif "solvate-system" in command:
             output_content = {"solv.gro": "SOLV\n"}
-            output_topology = Path(
-                command[command.index("--topology-output") + 1]
-            )
+            output_topology = Path(command[command.index("--topology-output") + 1])
             source_topology = output_topology.parent / "topol.top"
             output_topology.write_text(
                 source_topology.read_text(encoding="utf-8") + "SOLVATED\n",
@@ -923,12 +938,8 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
             )
         elif "genion-system" in command:
             output_content = {"ions.gro": "IONS\n"}
-            output_topology = Path(
-                command[command.index("--topology-output") + 1]
-            )
-            source_topology = Path(
-                command[command.index("--topology-input") + 1]
-            )
+            output_topology = Path(command[command.index("--topology-output") + 1])
+            source_topology = Path(command[command.index("--topology-input") + 1])
             output_topology.write_text(
                 source_topology.read_text(encoding="utf-8") + "IONS\n",
                 encoding="utf-8",
@@ -947,7 +958,9 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
         elif "thermodynamics" in command:
             output_content = {
                 Path(output).name: "THERMODYNAMICS\n"
-                for output in _legacy_cli_steps(project, until="thermodynamics")[-1].outputs
+                for output in _legacy_cli_steps(project, until="thermodynamics")[
+                    -1
+                ].outputs
             }
         elif "plot-analysis" in command:
             output_content = {
@@ -976,7 +989,9 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
                 f"{output_prefix}.trr": f"{output_prefix.upper()}_TRR\n",
             }
             if output_prefix in {"nvt", "npt"}:
-                output_content[f"{output_prefix}.cpt"] = f"{output_prefix.upper()}_CPT\n"
+                output_content[f"{output_prefix}.cpt"] = (
+                    f"{output_prefix.upper()}_CPT\n"
+                )
             if output_prefix == "md":
                 output_content = {
                     "md.xtc": "MD_XTC\n",
@@ -1002,7 +1017,7 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root: StepResult(
+        lambda config, project_root, **kwargs: StepResult(
             step_name="workspace",
             command=["<internal>", "ensure-workspace"],
             workdir=project_root / "work",
@@ -1074,12 +1089,8 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     )
     ions_grompp_only_inputs = ions_grompp_only_root / "inputs"
     ions_grompp_only_inputs.mkdir()
-    (ions_grompp_only_inputs / "receptor.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
-    (ions_grompp_only_inputs / "ligante.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
+    (ions_grompp_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (ions_grompp_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
     ions_grompp_only_topology = (
         ions_grompp_only_root / "work" / "topo" / "topol_solvated.top"
     )
@@ -1114,21 +1125,15 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     )
     em_grompp_only_inputs = em_grompp_only_root / "inputs"
     em_grompp_only_inputs.mkdir()
-    (em_grompp_only_inputs / "receptor.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
-    (em_grompp_only_inputs / "ligante.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
+    (em_grompp_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (em_grompp_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
     em_grompp_only_dir = em_grompp_only_root / "work" / "em"
     em_grompp_only_dir.mkdir(parents=True)
     (em_grompp_only_dir / "em.mdp").write_text("MDP\n", encoding="utf-8")
     em_grompp_only_box = em_grompp_only_root / "work" / "box"
     em_grompp_only_box.mkdir(parents=True)
     (em_grompp_only_box / "ions.gro").write_text("IONS\n", encoding="utf-8")
-    em_grompp_only_topology = (
-        em_grompp_only_root / "work" / "topo" / "topol_ions.top"
-    )
+    em_grompp_only_topology = em_grompp_only_root / "work" / "topo" / "topol_ions.top"
     em_grompp_only_topology.parent.mkdir(parents=True)
     em_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
     em_grompp_only_report = em_grompp_only_project.run(
@@ -1152,21 +1157,15 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     )
     nvt_grompp_only_inputs = nvt_grompp_only_root / "inputs"
     nvt_grompp_only_inputs.mkdir()
-    (nvt_grompp_only_inputs / "receptor.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
-    (nvt_grompp_only_inputs / "ligante.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
+    (nvt_grompp_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (nvt_grompp_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
     nvt_grompp_only_dir = nvt_grompp_only_root / "work" / "nvt"
     nvt_grompp_only_dir.mkdir(parents=True)
     (nvt_grompp_only_dir / "nvt.mdp").write_text("MDP\n", encoding="utf-8")
     nvt_grompp_only_em = nvt_grompp_only_root / "work" / "em"
     nvt_grompp_only_em.mkdir(parents=True)
     (nvt_grompp_only_em / "em.gro").write_text("EM_GRO\n", encoding="utf-8")
-    nvt_grompp_only_topology = (
-        nvt_grompp_only_root / "work" / "topo" / "topol_ions.top"
-    )
+    nvt_grompp_only_topology = nvt_grompp_only_root / "work" / "topo" / "topol_ions.top"
     nvt_grompp_only_topology.parent.mkdir(parents=True)
     nvt_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
     nvt_grompp_only_report = nvt_grompp_only_project.run(
@@ -1190,12 +1189,8 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     )
     npt_grompp_only_inputs = npt_grompp_only_root / "inputs"
     npt_grompp_only_inputs.mkdir()
-    (npt_grompp_only_inputs / "receptor.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
-    (npt_grompp_only_inputs / "ligante.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
+    (npt_grompp_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (npt_grompp_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
     npt_grompp_only_dir = npt_grompp_only_root / "work" / "npt"
     npt_grompp_only_dir.mkdir(parents=True)
     (npt_grompp_only_dir / "npt.mdp").write_text("MDP\n", encoding="utf-8")
@@ -1203,9 +1198,7 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     npt_grompp_only_nvt.mkdir(parents=True)
     (npt_grompp_only_nvt / "nvt.gro").write_text("NVT_GRO\n", encoding="utf-8")
     (npt_grompp_only_nvt / "nvt.cpt").write_text("NVT_CPT\n", encoding="utf-8")
-    npt_grompp_only_topology = (
-        npt_grompp_only_root / "work" / "topo" / "topol_ions.top"
-    )
+    npt_grompp_only_topology = npt_grompp_only_root / "work" / "topo" / "topol_ions.top"
     npt_grompp_only_topology.parent.mkdir(parents=True)
     npt_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
     npt_grompp_only_report = npt_grompp_only_project.run(
@@ -1257,12 +1250,8 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     )
     production_only_inputs = production_only_root / "inputs"
     production_only_inputs.mkdir()
-    (production_only_inputs / "receptor.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
-    (production_only_inputs / "ligante.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
+    (production_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (production_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
     production_only_dir = production_only_root / "work" / "prod"
     production_only_dir.mkdir(parents=True)
     (production_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
@@ -1276,12 +1265,8 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     )
     pbc_nojump_only_inputs = pbc_nojump_only_root / "inputs"
     pbc_nojump_only_inputs.mkdir()
-    (pbc_nojump_only_inputs / "receptor.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
-    (pbc_nojump_only_inputs / "ligante.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
+    (pbc_nojump_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (pbc_nojump_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
     pbc_nojump_only_dir = pbc_nojump_only_root / "work" / "prod"
     pbc_nojump_only_dir.mkdir(parents=True)
     (pbc_nojump_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
@@ -1296,18 +1281,12 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     )
     pbc_center_only_inputs = pbc_center_only_root / "inputs"
     pbc_center_only_inputs.mkdir()
-    (pbc_center_only_inputs / "receptor.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
-    (pbc_center_only_inputs / "ligante.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
+    (pbc_center_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (pbc_center_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
     pbc_center_only_dir = pbc_center_only_root / "work" / "prod"
     pbc_center_only_dir.mkdir(parents=True)
     (pbc_center_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
-    (pbc_center_only_dir / "md_nojump.xtc").write_text(
-        "NOJUMP_XTC\n", encoding="utf-8"
-    )
+    (pbc_center_only_dir / "md_nojump.xtc").write_text("NOJUMP_XTC\n", encoding="utf-8")
     pbc_center_only_report = pbc_center_only_project.run(
         from_step="pbc-center", until="pbc-center"
     )
@@ -1411,18 +1390,27 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     assert thermo_only_report.steps[0].step_name == "thermodynamics"
     assert thermo_only_report.steps[0].returncode == 0
     assert len(subprocess_calls) == 60  # graph, isolated steps, and legacy prefix
-    assert sum(
-        command[-1:] == ("nojump",) and stdin == "0\n"
-        for command, stdin in subprocess_inputs
-    ) == 3  # graph run, isolated graph step, and legacy reference
-    assert sum(
-        "-center" in command and stdin == "Protein\nSystem\n"
-        for command, stdin in subprocess_inputs
-    ) == 3  # graph run, isolated graph step, and legacy reference
-    assert sum(
-        "-fit" in command and stdin == "Backbone\nSystem\n"
-        for command, stdin in subprocess_inputs
-    ) == 3  # graph run, isolated graph step, and legacy reference
+    assert (
+        sum(
+            command[-1:] == ("nojump",) and stdin == "0\n"
+            for command, stdin in subprocess_inputs
+        )
+        == 3
+    )  # graph run, isolated graph step, and legacy reference
+    assert (
+        sum(
+            "-center" in command and stdin == "Protein\nSystem\n"
+            for command, stdin in subprocess_inputs
+        )
+        == 3
+    )  # graph run, isolated graph step, and legacy reference
+    assert (
+        sum(
+            "-fit" in command and stdin == "Backbone\nSystem\n"
+            for command, stdin in subprocess_inputs
+        )
+        == 3
+    )  # graph run, isolated graph step, and legacy reference
     assert legacy_state.read_bytes() == legacy_state_before
     assert (project_root / "work" / "workflow_state.json").is_file()
     assert callback_events == [
@@ -1489,12 +1477,12 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
         ]
     graph_report_outputs = sorted((project_root / "outputs").rglob("*"))
     legacy_report_outputs = sorted((legacy_root / "outputs").rglob("*"))
-    assert [path.relative_to(project_root / "outputs") for path in graph_report_outputs] == [
-        path.relative_to(legacy_root / "outputs") for path in legacy_report_outputs
-    ]
     assert [
-        path.read_bytes() for path in graph_report_outputs if path.is_file()
-    ] == [path.read_bytes() for path in legacy_report_outputs if path.is_file()]
+        path.relative_to(project_root / "outputs") for path in graph_report_outputs
+    ] == [path.relative_to(legacy_root / "outputs") for path in legacy_report_outputs]
+    assert [path.read_bytes() for path in graph_report_outputs if path.is_file()] == [
+        path.read_bytes() for path in legacy_report_outputs if path.is_file()
+    ]
 
 
 def test_interaction_energy_runs_through_graph_when_enabled(
@@ -1523,7 +1511,7 @@ def test_interaction_energy_runs_through_graph_when_enabled(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root: StepResult(
+        lambda config, project_root, **kwargs: StepResult(
             step_name="workspace",
             command=["<internal>", "ensure-workspace"],
             workdir=project_root / "work",
@@ -1537,15 +1525,15 @@ def test_interaction_energy_runs_through_graph_when_enabled(
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
-        for output in _legacy_cli_steps(project, until="interaction-energy")[-1].outputs:
+        for output in _legacy_cli_steps(project, until="interaction-energy")[
+            -1
+        ].outputs:
             (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run(
-        from_step="interaction-energy", until="interaction-energy"
-    )
+    report = project.run(from_step="interaction-energy", until="interaction-energy")
 
     assert len(calls) == 1
     assert report.steps[0].step_name == "interaction-energy"
@@ -1576,7 +1564,7 @@ def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root: StepResult(
+        lambda config, project_root, **kwargs: StepResult(
             step_name="workspace",
             command=["<internal>", "ensure-workspace"],
             workdir=project_root / "work",
@@ -1601,7 +1589,10 @@ def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> No
     assert len(calls) == 1
     assert report.steps[0].step_name == "sasa"
     assert report.steps[0].returncode == 0
-    assert all(output.is_file() for output in _legacy_cli_steps(project, until="sasa")[-1].outputs)
+    assert all(
+        output.is_file()
+        for output in _legacy_cli_steps(project, until="sasa")[-1].outputs
+    )
 
 
 def test_plots_runs_through_graph_when_started_directly(
@@ -1622,7 +1613,7 @@ def test_plots_runs_through_graph_when_started_directly(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root: StepResult(
+        lambda config, project_root, **kwargs: StepResult(
             step_name="workspace",
             command=["<internal>", "ensure-workspace"],
             workdir=project_root / "work",
@@ -1668,7 +1659,7 @@ def test_report_runs_through_graph_when_started_directly(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root: StepResult(
+        lambda config, project_root, **kwargs: StepResult(
             step_name="workspace",
             command=["<internal>", "ensure-workspace"],
             workdir=project_root / "work",
@@ -1722,7 +1713,7 @@ def test_small_molecule_assembly_prefix_runs_through_graph(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root: StepResult(
+        lambda config, project_root, **kwargs: StepResult(
             step_name="workspace",
             command=["<internal>", "ensure-workspace"],
             workdir=project_root / "work",
@@ -1801,7 +1792,7 @@ def test_small_molecule_analysis_steps_can_start_through_graph(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root: StepResult(
+        lambda config, project_root, **kwargs: StepResult(
             step_name="workspace",
             command=["<internal>", "ensure-workspace"],
             workdir=project_root / "work",

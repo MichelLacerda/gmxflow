@@ -128,9 +128,7 @@ class GmxFlowProject:
 
         return edit_project_config(self)
 
-    def show_execution(
-        self, report: ExecutionReport | WorkflowExecutionReport
-    ) -> None:
+    def show_execution(self, report: ExecutionReport | WorkflowExecutionReport) -> None:
         """Display an execution summary with statuses, durations, and log paths."""
         from gmxflow.notebook import show_execution
 
@@ -258,7 +256,9 @@ class GmxFlowProject:
             )
 
         workspace_result = run_workspace_setup(
-            self.config, project_root=self.root
+            self.config,
+            project_root=self.root,
+            state_path=self.root / "work" / "workflow_state.json",
         )
         results = _run_graph_steps(
             workflow=workflow,
@@ -311,9 +311,7 @@ class GmxFlowProject:
         workflow_steps = tuple(_iter_workflow_steps(runtime_workflow))
         if project_inputs is None:
             produced = {
-                artifact.key
-                for step in workflow_steps
-                for artifact in step.outputs
+                artifact.key for step in workflow_steps for artifact in step.outputs
             }
             inferred_inputs: dict[str, Artifact] = {}
             for step in workflow_steps:
@@ -360,7 +358,11 @@ class GmxFlowProject:
 
         if any(isinstance(step, GromacsCommandStep) for step in workflow_steps):
             self.validate()
-            run_workspace_setup(self.config, project_root=self.root)
+            run_workspace_setup(
+                self.config,
+                project_root=self.root,
+                state_path=state_path,
+            )
 
         return run_workflow_graph(
             graph,

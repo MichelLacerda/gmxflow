@@ -18,7 +18,11 @@ from gmxflow.analysis import (
     run_thermodynamic_analysis,
 )
 from gmxflow.config import load_config
-from gmxflow.executor import run_steps, run_workspace_setup, select_steps
+from gmxflow.executor import (
+    WorkflowExecutionReport,
+    WorkflowStepResult,
+    WorkflowStepStatus,
+)
 from gmxflow.forcefields import (
     FORCEFIELD_ENV,
     install_forcefield,
@@ -28,11 +32,11 @@ from gmxflow.forcefields import (
     validate_forcefield_directory,
 )
 from gmxflow.ligand import prepare_ligand as prepare_ligand_files
-from gmxflow.pipeline import REAL_EXECUTION_STEPS, PipelineStep, build_pipeline
+from gmxflow.pipeline import GromacsCommandStep, REAL_EXECUTION_STEPS
 from gmxflow.preparation import prepare_complex as prepare_complex_files
 from gmxflow.project import available_templates, create_project
 from gmxflow.report import generate_report
-from gmxflow.runner import print_dry_run
+from gmxflow.api import GmxFlowProject
 from gmxflow.small_molecule import assemble_small_molecule_complex
 from gmxflow.topology import reset_molecules_section
 from gmxflow.workspace import clean_workspace, ensure_workspace, render_templates
@@ -43,6 +47,8 @@ app = typer.Typer(
 forcefield_app = typer.Typer(help="Gerencia force fields externos do GROMACS.")
 app.add_typer(forcefield_app, name="forcefield")
 console = Console()
+
+
 @dataclass(frozen=True)
 class ResidueInfo:
     chain: str
@@ -76,10 +82,14 @@ def forcefield_list() -> None:
 
 @forcefield_app.command("locate")
 def forcefield_locate(
-    name: Annotated[str, typer.Argument(help="Nome configurado, com ou sem sufixo .ff.")],
+    name: Annotated[
+        str, typer.Argument(help="Nome configurado, com ou sem sufixo .ff.")
+    ],
     project_dir: Annotated[
         Path,
-        typer.Option("--project-dir", help="Projeto para considerar a cópia legada local."),
+        typer.Option(
+            "--project-dir", help="Projeto para considerar a cópia legada local."
+        ),
     ] = Path.cwd(),
 ) -> None:
     """Mostra qual cópia do force field será usada para um projeto."""
@@ -111,7 +121,9 @@ def forcefield_install(
     source: Annotated[Path, typer.Argument(help="Pasta .ff extraída para instalar.")],
     name: Annotated[
         str | None,
-        typer.Option("--name", help="Nome de destino opcional; por padrão usa o nome da pasta."),
+        typer.Option(
+            "--name", help="Nome de destino opcional; por padrão usa o nome da pasta."
+        ),
     ] = None,
 ) -> None:
     """Copia um force field para o diretório central sem sobrescrever destinos."""
@@ -520,7 +532,9 @@ def solvate_system(
     ] = Path("work/topo/topol_solvated.top"),
     topology_input: Annotated[
         Path,
-        typer.Option("--topology-input", help="Topologia usada como base para solvatação."),
+        typer.Option(
+            "--topology-input", help="Topologia usada como base para solvatação."
+        ),
     ] = Path("work/topo/topol.top"),
 ) -> None:
     """Normaliza a topologia e adiciona solvente."""
@@ -668,9 +682,7 @@ def thermodynamics(
     config_path = config.expanduser().resolve()
 
     try:
-        results = run_thermodynamic_analysis(
-            loaded, project_root=config_path.parent
-        )
+        results = run_thermodynamic_analysis(loaded, project_root=config_path.parent)
     except RuntimeError as error:
         raise typer.BadParameter(str(error)) from error
 
@@ -769,72 +781,110 @@ def run(
 ) -> None:
     """Executa a pipeline ou mostra o plano detalhado em modo dry-run."""
     config_path = config.expanduser().resolve()
-    loaded = load_config(config_path)
+    project = GmxFlowProject.open(config_path)
+    loaded = project.config
 
     try:
-        steps = select_steps(
-            build_pipeline(
-                loaded,
-                config_dir=config_path.parent,
-                config_path=config_path,
-                strict_inputs=strict_inputs,
-            ),
+        workflow = project.workflow(
             from_step=from_step,
             until=until,
         )
+        steps = tuple(workflow.items)
+        if any(not isinstance(step, GromacsCommandStep) for step in steps):
+            raise TypeError("O workflow padrão do CLI requer etapas GROMACS concretas.")
+        concrete_steps = tuple(
+            step for step in steps if isinstance(step, GromacsCommandStep)
+        )
+        if strict_inputs:
+            required_inputs = [loaded.input.receptor_pdb]
+            if loaded.input.ligand_kind != "none":
+                required_inputs.append(loaded.input.ligand_pdb)
+            if loaded.input.ligand_kind == "small_molecule":
+                required_inputs.extend(
+                    [loaded.input.ligand_mol2, loaded.input.ligand_str]
+                )
+            for value in required_inputs:
+                path = Path(value).expanduser()
+                if not path.is_absolute():
+                    path = config_path.parent / path
+                if not path.is_file():
+                    raise FileNotFoundError(
+                        f"Arquivo de entrada não encontrado: {path}"
+                    )
     except (FileNotFoundError, ValueError) as error:
         raise typer.BadParameter(str(error)) from error
 
-    if not dry_run and any(step.name not in REAL_EXECUTION_STEPS for step in steps):
+    if not dry_run and any(
+        step.id not in REAL_EXECUTION_STEPS for step in concrete_steps
+    ):
         console.print(
             "Há etapas ainda não liberadas para execução real. Use --dry-run para inspecionar o plano."
         )
         raise typer.Exit(code=2)
 
-    if not dry_run:
-        total_steps = len(steps) + 1
-
-        def print_step_start(index: int, step: PipelineStep) -> None:
-            console.print(
-                f"[{index + 1}/{total_steps} {(index / total_steps) * 100:5.1f}%] "
-                f"Iniciando: [bold]{step.name}[/bold]"
-            )
-
-        def print_step_done(index: int, result) -> None:
-            status = "ignorada" if result.skipped else "concluída"
-            console.print(
-                f"[{index + 1}/{total_steps} {((index + 1) / total_steps) * 100:5.1f}%] "
-                f"Etapa {status}: [bold]{result.step_name}[/bold] "
-                f"({result.elapsed_seconds:.2f}s) log={result.log_path}"
-            )
-
+    if dry_run:
         try:
-            console.print(
-                f"[1/{total_steps} {0.0:5.1f}%] Iniciando: [bold]workspace[/bold]"
+            report = project.run_workflow(
+                workflow,
+                state_name="cli-workflow.json",
+                dry_run=True,
             )
-            workspace_result = run_workspace_setup(
-                loaded, project_root=config_path.parent
-            )
-            console.print(
-                f"[1/{total_steps} {(1 / total_steps) * 100:5.1f}%] "
-                f"Etapa concluída: [bold]{workspace_result.step_name}[/bold] "
-                f"({workspace_result.elapsed_seconds:.2f}s) log={workspace_result.log_path}"
-            )
-            results = [workspace_result]
-            results.extend(
-                run_steps(
-                    steps,
-                    project_root=config_path.parent,
-                    start_index=1,
-                    on_step_start=print_step_start,
-                    on_step_done=print_step_done,
-                )
-            )
-        except RuntimeError as error:
+        except (FileNotFoundError, RuntimeError, ValueError) as error:
             raise typer.BadParameter(str(error)) from error
+        _print_workflow_dry_run(report, concrete_steps)
         return
 
-    print_dry_run(steps, console)
+    total_steps = len(concrete_steps) + 1
+    indexes = {step.id: index for index, step in enumerate(concrete_steps, start=1)}
+
+    def print_step_start(step: GromacsCommandStep) -> None:
+        index = indexes[step.id]
+        console.print(
+            f"[{index + 1}/{total_steps} {(index / total_steps) * 100:5.1f}%] "
+            f"Iniciando: [bold]{step.id}[/bold]"
+        )
+
+    def print_step_done(result: WorkflowStepResult) -> None:
+        index = indexes[result.step_id]
+        status = (
+            "ignorada" if result.status is WorkflowStepStatus.SKIPPED else "concluída"
+        )
+        console.print(
+            f"[{index + 1}/{total_steps} {((index + 1) / total_steps) * 100:5.1f}%] "
+            f"Etapa {status}: [bold]{result.step_id}[/bold] "
+            f"({result.elapsed_seconds:.2f}s) log={result.log_path}"
+        )
+
+    try:
+        console.print(f"Preparando workspace do projeto: [bold]{project.root}[/bold]")
+        project.run_workflow(
+            workflow,
+            state_name="cli-workflow.json",
+            on_step_start=print_step_start,
+            on_step_done=print_step_done,
+        )
+    except (FileNotFoundError, RuntimeError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from error
+
+
+def _print_workflow_dry_run(
+    report: WorkflowExecutionReport,
+    steps: tuple[GromacsCommandStep, ...],
+) -> None:
+    console.print("[bold]DRY-RUN: nenhum comando externo será executado[/bold]")
+    by_id = {step.id: step for step in steps}
+    for index, result in enumerate(report.results, start=1):
+        step_id = result.step_id
+        step = by_id[step_id]
+        dependencies = ", ".join(sorted(report.dependencies[step_id])) or "-"
+        console.print(f"{index}. [bold]{step_id}[/bold] | depende de: {dependencies}")
+        console.print(f"   Descrição: {step.name}")
+        console.print(f"   Workdir: {step.workdir}")
+        console.print(f"   Comando: {' '.join(step.command)}")
+        if step.stdin is not None:
+            console.print(f"   stdin: {step.stdin!r}")
+        console.print("   Entradas: " + (", ".join(map(str, step.input_paths)) or "-"))
+        console.print("   Saídas: " + (", ".join(map(str, step.output_paths)) or "-"))
 
 
 def _resolve_project_path(value: str, project_root: Path) -> Path:
