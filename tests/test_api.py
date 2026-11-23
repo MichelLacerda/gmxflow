@@ -19,6 +19,7 @@ from gmxflow.pipeline import (
     Artifact,
     GromacsCommandStep,
     RunContext,
+    Sequence as WorkflowSequence,
     Step,
     build_pipeline,
 )
@@ -479,6 +480,15 @@ def test_validate_reports_prerequisites_without_creating_project_outputs(
     assert report.planned_steps
     assert not (project_dir / "work").exists()
     assert not (project_dir / "outputs").exists()
+
+
+def test_validate_reports_missing_configured_input_before_other_prerequisites(
+    tmp_path: Path,
+) -> None:
+    project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
+
+    with pytest.raises(FileNotFoundError, match="receptor.pdb"):
+        project.validate()
 
 
 def test_validate_reports_missing_gromacs_executable(
@@ -1013,7 +1023,7 @@ def test_graph_prefix_through_plots_matches_legacy_commands_and_outputs(
     graph_report = project.run(
         until="report",
         on_step_start=lambda index, step: callback_events.append(
-            ("start", index, step.name)
+            ("start", index, step.id)
         ),
         on_step_done=lambda index, result: callback_events.append(
             ("done", index, result.step_name)
@@ -1829,12 +1839,14 @@ def test_run_rejects_unreleased_steps_before_workspace_setup(
     tmp_path: Path, monkeypatch
 ) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
-    unreleased = project.plan(until="prepare")[0].model_copy(
-        update={"name": "experimental-step"}
-    )
+    workflow = project.workflow(until="prepare")
+    step = workflow.items[0]
+    assert isinstance(step, GromacsCommandStep)
+    step.id = "experimental-step"
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
-        "gmxflow.api.GmxFlowProject.plan", lambda self, **kwargs: [unreleased]
+        "gmxflow.api.GmxFlowProject.workflow",
+        lambda self, **kwargs: WorkflowSequence(step),
     )
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",

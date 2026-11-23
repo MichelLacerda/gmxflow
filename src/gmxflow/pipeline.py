@@ -1639,22 +1639,17 @@ def build_workflow(
     config_dir: Path,
     *,
     config_path: Path | None = None,
-    selected_steps: list[PipelineStep] | None = None,
     from_step: str | None = None,
     until: str | None = None,
 ) -> Sequence:
     """Compose an API workflow from concrete steps.
 
     The CLI projects these same concrete steps through ``build_pipeline()``.
-    API selections use concrete Step IDs. ``selected_steps`` remains temporarily
-    for the legacy API runner, which still consumes ``PipelineStep`` objects.
+    API selections use concrete Step IDs.
     """
     root = config_dir.expanduser().resolve()
     resolved_config = (config_path or root / "project.toml").expanduser().resolve()
     concrete_steps = _build_concrete_steps(config, root, resolved_config)
-    if selected_steps is not None and (from_step is not None or until is not None):
-        raise ValueError("Use selected_steps ou IDs de etapa, não ambos.")
-
     if from_step is not None or until is not None:
         ids = [step.id for step in concrete_steps]
         start = _concrete_step_index(ids, from_step) if from_step else 0
@@ -1665,25 +1660,7 @@ def build_workflow(
             )
         concrete_steps = concrete_steps[start:end]
 
-    if selected_steps is None:
-        return Sequence(*concrete_steps)
-
-    by_id = {step.id: step for step in concrete_steps}
-    workflow_steps: list[Step] = []
-    for pipeline_step in selected_steps:
-        concrete = by_id.get(pipeline_step.name)
-        if concrete is None:
-            raise ValueError(
-                f"Não há implementação concreta para a etapa "
-                f"{pipeline_step.name!r} no workflow da API."
-            )
-        if concrete.to_pipeline_step() != pipeline_step:
-            raise ValueError(
-                f"A definição tipada da etapa {pipeline_step.name!r} "
-                "diverge do plano legado."
-            )
-        workflow_steps.append(concrete)
-    return Sequence(*workflow_steps)
+    return Sequence(*concrete_steps)
 
 
 def _concrete_step_index(step_ids: list[str], step_id: str) -> int:

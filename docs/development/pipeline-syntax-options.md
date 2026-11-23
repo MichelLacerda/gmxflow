@@ -507,14 +507,14 @@ composição e um só executor. Não apagar código por contagem de linhas: cada
 remoção precisa decorrer de uma dependência eliminada e de testes substitutos
 que preservem comportamento, retomada e segurança dos arquivos.
 
-**Auditoria atual:** `GmxFlowProject.workflow()` chama `plan()`, que produz
-`PipelineStep`; `build_workflow(..., selected_steps=...)` reconstrói os Steps
-concretos e os compara com essa projeção por `to_pipeline_step()`. (Atualização:
-`project.workflow()` agora seleciona diretamente pelos IDs dos Steps concretos;
-essa ponte foi removida desse método, mas ainda existe em `project.run()`.) Já
-`run_workflow()` executa os Steps pelo grafo. O CLI ainda consome `plan()`,
-`PipelineStep` e `run_steps()`, com estado em `work/state.json`. Permanecem a
-ponte de execução da API legada e um segundo caminho de execução no CLI.
+**Auditoria atual:** `GmxFlowProject.workflow()`, `validate()` e `run()` usam
+Steps concretos. A seleção e a execução da API não passam mais por `plan()` ou
+`PipelineStep`; a conversão intermediária `build_workflow(...,
+selected_steps=...)` e seu teste foram removidos por não terem mais consumidores.
+`project.plan()` ainda expõe a projeção para compatibilidade, e o CLI consome
+`PipelineStep`/`run_steps()` com estado em `work/state.json`. O executor do
+workflow também é usado diretamente por `run_workflow()` e pela API `run()`;
+unificar/remover os wrappers públicos e o executor CLI continua pendente.
 
 #### A. Fixar o contrato público e a experiência das receitas — decisão antes de refatorar
 
@@ -544,16 +544,18 @@ receita gerada usam as mesmas classes e o mesmo operador. Não há API pública
 
 #### B. Remover a projeção legada da construção da API
 
-**Progresso parcial:** `project.workflow(from_step=..., until=...)` constrói e
-seleciona os Steps canônicos diretamente por `id`; foram adicionados testes
-para seleção e ID desconhecido. `project.plan()`, `project.validate()` e
-`project.run()` ainda dependem de `PipelineStep`/`build_pipeline()`, portanto
-esta fase não está concluída.
+**Progresso parcial:** `project.workflow()`, `validate()` e `run()` constroem e
+selecionam Steps canônicos diretamente por `id`; a validação verifica somente
+as entradas declaradas pelo usuário, sem confundi-las com templates internos
+gerados no workspace. Foram adicionados testes de seleção, ID desconhecido e
+entrada configurada ausente. A rota `build_workflow(..., selected_steps=...)`
+e seu teste de compatibilidade foram removidos. `project.plan()` ainda depende
+de `PipelineStep`/`build_pipeline()`, portanto esta fase não está concluída.
 
-- Fazer `project.workflow()` construir diretamente a sequência canônica de
-  Steps a partir da configuração e da seleção por ID.
-- Reimplementar validação e seleção (`strict_inputs`, `from_step`, `until`)
-  sobre o modelo canônico, sem chamar `project.plan()` ou `build_pipeline()`.
+- Fazer `project.workflow()`, `validate()` e `run()` operar diretamente sobre a
+  sequência canônica de Steps e seleção por ID. (Parcialmente concluído.)
+- Decidir se `project.plan()` será removido, convertido para exibir o modelo
+  canônico, ou mantido como uma interface de planejamento independente.
 - Remover `GromacsCommandStep.to_pipeline_step()` e a comparação de igualdade
   com `PipelineStep` somente depois de não haver consumidores.
 

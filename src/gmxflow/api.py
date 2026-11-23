@@ -201,7 +201,13 @@ class GmxFlowProject:
         It raises ``FileNotFoundError`` with the missing prerequisite when a
         required input, force field, or executable cannot be found.
         """
-        steps = self.plan(strict_inputs=True)
+        workflow = self.workflow()
+        graph, _ = _project_workflow_graph(workflow)
+        input_paths = _configured_input_paths(self.config, self.root)
+        for path in input_paths:
+            if not path.is_file():
+                raise FileNotFoundError(f"Arquivo de entrada não encontrado: {path}")
+
         if self.config.input.remove_resnames:
             try:
                 require_mdanalysis()
@@ -232,20 +238,13 @@ class GmxFlowProject:
                 "'gmxflow forcefield locate'."
             )
 
-        input_files = list(steps[0].inputs)
-        ligand_topology = next(
-            (step for step in steps if step.name == "ligand-topology"), None
-        )
-        if ligand_topology is not None:
-            input_files.extend(ligand_topology.inputs)
-
         return ValidationReport(
             config_path=self.config_path,
             project_root=self.root,
-            input_files=tuple(input_files),
+            input_files=input_paths,
             force_field_path=force_field.path,
             gromacs_executable=Path(executable).resolve(),
-            planned_steps=tuple(step.name for step in steps),
+            planned_steps=graph.topological_order,
         )
 
     def run(
@@ -253,7 +252,7 @@ class GmxFlowProject:
         *,
         from_step: str | None = None,
         until: str | None = None,
-        on_step_start: Callable[[int, PipelineStep], None] | None = None,
+        on_step_start: Callable[[int, GromacsCommandStep], None] | None = None,
         on_step_done: Callable[[int, StepResult], None] | None = None,
     ) -> ExecutionReport:
         """Validate prerequisites and execute the selected project steps.
@@ -261,12 +260,15 @@ class GmxFlowProject:
         Workspace setup preserves existing templates. The API executes the
         selected workflow through the graph executor and persists its state in
         ``work/workflow_state.json``, independently from the CLI state file. A
-        failed step raises ``RuntimeError`` containing its name and log path.
+        failed step raises ``RuntimeError`` containing its ID and log path.
+        ``on_step_start`` receives the concrete Step; use ``step.id`` as its
+        stable identifier and ``step.name`` as its human-readable label.
         """
         self.validate()
-        steps = self.plan(strict_inputs=True, from_step=from_step, until=until)
+        workflow = self.workflow(from_step=from_step, until=until)
+        steps = tuple(_iter_workflow_steps(workflow))
         blocked_steps = [
-            step.name for step in steps if step.name not in REAL_EXECUTION_STEPS
+            step.id for step in steps if step.id not in REAL_EXECUTION_STEPS
         ]
         if blocked_steps:
             raise ValueError(
@@ -277,14 +279,7 @@ class GmxFlowProject:
         workspace_result = run_workspace_setup(
             self.config, project_root=self.root
         )
-        workflow = build_workflow(
-            self.config,
-            self.root,
-            config_path=self.config_path,
-            selected_steps=steps,
-        )
         results = _run_graph_steps(
-            steps,
             workflow=workflow,
             project_root=self.root,
             on_step_start=on_step_start,
@@ -430,53 +425,75 @@ def _resolve_project_path(path: Path, project_root: Path) -> Path:
     return resolved.resolve()
 
 
+def _project_workflow_graph(
+    workflow: WorkflowItem,
+) -> tuple[WorkflowGraph, dict[str, Path]]:
+    """Resolve project paths and external inputs for built-in GROMACS Steps."""
+    steps = tuple(_iter_workflow_steps(workflow))
+    concrete_steps = tuple(
+        step for step in steps if isinstance(step, GromacsCommandStep)
+    )
+    if len(concrete_steps) != len(steps):
+        raise TypeError("A validação de projeto requer GromacsCommandStep.")
+
+    produced_keys = {
+        artifact.key for step in concrete_steps for artifact in step.outputs
+    }
+    input_artifacts: dict[str, Artifact] = {}
+    artifact_paths: dict[str, Path] = {}
+    for step in concrete_steps:
+        for artifact, path in zip(
+            (*step.inputs, *step.outputs),
+            (*step.input_paths, *step.output_paths),
+            strict=True,
+        ):
+            existing_path = artifact_paths.get(artifact.key)
+            if existing_path is not None and existing_path != path:
+                raise ValueError(
+                    f"Artefato {artifact.key!r} aponta para caminhos distintos: "
+                    f"{existing_path} e {path}."
+                )
+            artifact_paths[artifact.key] = path
+        for artifact in step.inputs:
+            if artifact.key not in produced_keys:
+                input_artifacts.setdefault(artifact.key, artifact)
+
+    graph = WorkflowGraph.from_workflow(
+        workflow,
+        project_inputs=input_artifacts.values(),
+    )
+    return graph, artifact_paths
+
+
 def _run_graph_steps(
-    steps: list[PipelineStep],
     *,
     workflow: WorkflowSequence,
     project_root: Path,
-    on_step_start: Callable[[int, PipelineStep], None] | None,
+    on_step_start: Callable[[int, GromacsCommandStep], None] | None,
     on_step_done: Callable[[int, StepResult], None] | None,
 ) -> list[StepResult]:
     """Execute a composed workflow of concrete GROMACS command steps."""
-    adapted_steps: list[Step] = []
-    for step in workflow.items:
-        if isinstance(step, GromacsCommandStep):
-            step.command = tuple(runtime_command(list(step.command)))
-            adapted_steps.append(step)
-        else:
-            raise TypeError(
-                "build_workflow deve compor apenas GromacsCommandStep em Sequence."
-            )
-    workflow = WorkflowSequence(*adapted_steps)
-    produced_keys = {
-        artifact.key for step in adapted_steps for artifact in step.outputs
-    }
-    project_inputs = {
-        artifact.key: artifact
-        for step in adapted_steps
-        for artifact in step.inputs
-        if artifact.key not in produced_keys
-    }
-    graph = WorkflowGraph.from_workflow(
-        workflow,
-        project_inputs=project_inputs.values(),
+    runtime_workflow = _with_runtime_commands(workflow)
+    if not isinstance(runtime_workflow, WorkflowSequence):
+        raise TypeError("A execução do projeto requer uma Sequence de Steps.")
+    graph, artifact_paths = _project_workflow_graph(runtime_workflow)
+    steps = tuple(_iter_workflow_steps(runtime_workflow))
+    concrete_steps = tuple(
+        step for step in steps if isinstance(step, GromacsCommandStep)
     )
-    artifact_paths = {
-        artifact.key: Path(artifact.key)
-        for step in adapted_steps
-        for artifact in (*step.inputs, *step.outputs)
+    if len(concrete_steps) != len(steps):
+        raise TypeError("A execução do projeto requer GromacsCommandStep.")
+    steps_by_id = {step.id: step for step in concrete_steps}
+    step_indexes = {
+        step.id: index for index, step in enumerate(concrete_steps, start=1)
     }
-    step_indexes = {step.name: index for index, step in enumerate(steps, start=1)}
-    legacy_steps = {step.name: step for step in steps}
 
-    def notify_start(adapted_step: Step) -> None:
+    def notify_start(step: Step) -> None:
         if on_step_start is not None:
-            step = legacy_steps[adapted_step.id]
-            on_step_start(step_indexes[adapted_step.id], step)
+            on_step_start(step_indexes[step.id], steps_by_id[step.id])
 
     def to_api_result(workflow_result: WorkflowStepResult) -> StepResult:
-        step = legacy_steps[workflow_result.step_id]
+        step = steps_by_id[workflow_result.step_id]
         returncode = next(
             (
                 command.returncode
@@ -489,8 +506,8 @@ def _run_graph_steps(
             else 0,
         )
         return StepResult(
-            step_name=step.name,
-            command=list(runtime_command(step.command)),
+            step_name=step.id,
+            command=runtime_command(list(step.command)),
             workdir=step.workdir,
             log_path=workflow_result.log_path,
             returncode=returncode,
@@ -518,12 +535,12 @@ def _run_graph_steps(
         report = error.report
 
     graph_results = {result.step_id: result for result in report.results}
-    results = [to_api_result(graph_results[step.name]) for step in steps]
+    results = [to_api_result(graph_results[step.id]) for step in concrete_steps]
     failed_result = next(
         (
-            result
-            for result in results
-            if graph_results[result.step_name].status is WorkflowStepStatus.FAILED
+            to_api_result(graph_results[step.id])
+            for step in concrete_steps
+            if graph_results[step.id].status is WorkflowStepStatus.FAILED
         ),
         None,
     )
@@ -533,3 +550,22 @@ def _run_graph_steps(
             f"{failed_result.returncode}. Log: {failed_result.log_path}"
         )
     return results
+
+
+def _configured_input_paths(
+    config: GmxFlowConfig, project_root: Path
+) -> tuple[Path, ...]:
+    """Resolve only user-supplied input paths, excluding generated work files."""
+    values = [config.input.receptor_pdb]
+    if config.input.ligand_kind != "none":
+        values.append(config.input.ligand_pdb)
+    if config.input.ligand_kind == "small_molecule":
+        values.extend((config.input.ligand_mol2, config.input.ligand_str))
+
+    paths: list[Path] = []
+    for value in values:
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = project_root / path
+        paths.append(path.resolve())
+    return tuple(paths)

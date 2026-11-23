@@ -23,7 +23,6 @@ from gmxflow.pipeline import (
     LigandTopologyStep,
     NptEquilibrationStep,
     Parallel,
-    PipelineStep,
     PlotAnalysisStep,
     PrepareIonsStep,
     PrepareEnergyMinimizationStep,
@@ -108,22 +107,6 @@ def test_prepare_step_projection_preserves_its_command_and_artifacts(
     concrete_step = PrepareComplexStep.from_config(config, tmp_path, config_path)
 
     assert concrete_step.to_pipeline_step() == legacy_step
-
-
-def test_workflow_rejects_unmapped_legacy_step(tmp_path: Path) -> None:
-    unmapped = PipelineStep(
-        name="unmapped",
-        description="Unmapped legacy step",
-        workdir=tmp_path,
-        command=["gmx", "unknown"],
-    )
-
-    with pytest.raises(ValueError, match="implementação concreta"):
-        build_workflow(
-            default_config("unmapped_workflow"),
-            config_dir=tmp_path,
-            selected_steps=[unmapped],
-        )
 
 
 def test_build_workflow_selects_concrete_steps_by_id(tmp_path: Path) -> None:
