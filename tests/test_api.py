@@ -1486,11 +1486,13 @@ def test_interaction_energy_runs_through_graph_when_enabled(
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run(from_step="interaction-energy", until="interaction-energy")
+    report = project.run_workflow(
+        project.workflow(from_step="interaction-energy", until="interaction-energy")
+    )
 
     assert len(calls) == 1
-    assert report.steps[0].step_name == "interaction-energy"
-    assert report.steps[0].returncode == 0
+    assert report.results[0].step_id == "interaction-energy"
+    assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
     assert all(
         output.is_file()
         for output in _step_views(project, until="interaction-energy")[-1].outputs
@@ -1537,11 +1539,11 @@ def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> No
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run(from_step="sasa", until="sasa")
+    report = project.run_workflow(project.workflow(from_step="sasa", until="sasa"))
 
     assert len(calls) == 1
-    assert report.steps[0].step_name == "sasa"
-    assert report.steps[0].returncode == 0
+    assert report.results[0].step_id == "sasa"
+    assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
     assert all(
         output.is_file()
         for output in _step_views(project, until="sasa")[-1].outputs
@@ -1586,11 +1588,11 @@ def test_plots_runs_through_graph_when_started_directly(
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run(from_step="plots", until="plots")
+    report = project.run_workflow(project.workflow(from_step="plots", until="plots"))
 
     assert len(calls) == 1
-    assert report.steps[0].step_name == "plots"
-    assert report.steps[0].returncode == 0
+    assert report.results[0].step_id == "plots"
+    assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
     assert all(output.is_file() for output in plots_step.outputs)
 
 
@@ -1636,11 +1638,11 @@ def test_report_runs_through_graph_when_started_directly(
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run(from_step="report", until="report")
+    report = project.run_workflow(project.workflow(from_step="report", until="report"))
 
     assert len(calls) == 1
-    assert report.steps[0].step_name == "report"
-    assert report.steps[0].returncode == 0
+    assert report.results[0].step_id == "report"
+    assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
     assert all(output.exists() for output in report_step.outputs)
 
 
@@ -1696,16 +1698,18 @@ def test_small_molecule_assembly_prefix_runs_through_graph(
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run(until="assemble-complex")
+    report = project.run_workflow(project.workflow(until="assemble-complex"))
 
     assert len(calls) == 4
-    assert [result.step_name for result in report.steps] == [
+    assert [result.step_id for result in report.results] == [
         "prepare",
         "ligand-topology",
         "protein-topology",
         "assemble-complex",
     ]
-    assert all(result.returncode == 0 for result in report.steps)
+    assert all(
+        result.status is WorkflowStepStatus.SUCCEEDED for result in report.results
+    )
     assert "pdb2gmx" in calls[-2]
     assert "assemble-complex" in calls[-1]
     assert subprocess_inputs[-2] == "0\n0\n"
@@ -1764,11 +1768,14 @@ def test_small_molecule_analysis_steps_can_start_through_graph(
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run(from_step=step_name, until=step_name)
+    report = project.run_workflow(
+        project.workflow(from_step=step_name, until=step_name)
+    )
 
     assert len(calls) == 1
     assert command_name in calls[0]
-    assert [result.step_name for result in report.steps] == [step_name]
+    assert [result.step_id for result in report.results] == [step_name]
+    assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
     assert all(output.is_file() for output in selected_step.outputs)
 
 
