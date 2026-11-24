@@ -4,7 +4,9 @@ from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
+from gmxflow.api import GmxFlowProject
 from gmxflow.cli import app
+from gmxflow.config import to_toml
 from gmxflow.executor import WorkflowStepResult, WorkflowStepStatus
 
 
@@ -448,6 +450,36 @@ def test_cli_run_dry_run_strict_inputs_rejects_missing_files(tmp_path: Path) -> 
 
     assert result.exit_code != 0
     assert "Arquivo de entrada" in result.output
+
+
+def test_cli_run_strict_inputs_requires_small_molecule_parameters(
+    tmp_path: Path,
+) -> None:
+    runner = CliRunner()
+    created = runner.invoke(
+        app,
+        ["startproject", "ligand_project", "--destination", str(tmp_path)],
+    )
+    assert created.exit_code == 0
+
+    project_dir = tmp_path / "ligand_project"
+    config_path = project_dir / "project.toml"
+    project = GmxFlowProject.open(config_path)
+    project.config.input.ligand_kind = "small_molecule"
+    project.config.input.ligand_mol2 = "inputs/ligand.mol2"
+    project.config.input.ligand_str = "inputs/ligand.str"
+    (project_dir / "inputs" / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
+    (project_dir / "inputs" / "ligante.pdb").write_text("HETATM\n", encoding="utf-8")
+    (project_dir / "inputs" / "ligand.str").write_text("RESI LIG\n", encoding="utf-8")
+    config_path.write_text(to_toml(project.config), encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["run", "--project", str(config_path), "--dry-run", "--strict-inputs"],
+    )
+
+    assert result.exit_code != 0
+    assert "ligand.mol2" in result.output
 
 
 def test_cli_render_templates_writes_mdp_files(tmp_path: Path) -> None:

@@ -341,12 +341,12 @@ Atendido em `tests/test_workflow_executor.py`.
 
 ### 4. Migrar uma fatia vertical representativa — concluída (API experimental)
 
-**Escopo realizado:** a etapa `prepare` do pipeline real agora é adaptada ao
-contrato `Step` e executada pelo grafo quando `GmxFlowProject.run()` recebe um
-plano iniciado nessa etapa. A preparação continua usando o mesmo comando,
-entradas, saídas e estado definidos por `build_pipeline()`. O CLI permanece
-inalterado e a implementação antiga é mantida para comparação. A etapa
-`topology` é a primeira fatia da etapa 5, descrita abaixo.
+**Escopo realizado:** a etapa `prepare` do pipeline real foi adaptada ao
+contrato `Step` e executada pelo grafo quando `GmxFlowProject.run()` recebia um
+plano iniciado nessa etapa. Naquele ponto, a preparação mantinha os mesmos
+comando, entradas, saídas e estado da projeção `build_pipeline()`, e a
+implementação antiga era mantida para comparação. A etapa `topology` foi a
+primeira fatia da etapa 5, descrita abaixo.
 
 **Fora de escopo:** migrar o CLI, as demais etapas, todo o exemplo ou todos os
 tutoriais; mudar force field, protonação, parâmetros de simulação e análise;
@@ -372,8 +372,7 @@ todos os perfis e, para `small_molecule`, `LigandTopologyStep`,
 `ProteinTopologyStep` e `AssembleComplexStep` também são implementações
 concretas do contrato `Step`. As etapas `box`, `solvate`, `ions-grompp` e
 `ions` também são classes concretas (`CreateBoxStep`, `SolvateSystemStep`,
-`PrepareIonsStep` e `AddIonsStep`) em todos os perfis. `build_pipeline()` projeta
-essas mesmas definições como `PipelineStep` para manter o CLI legado. As etapas
+`PrepareIonsStep` e `AddIonsStep`) em todos os perfis. As etapas
 `em-grompp` e `em` também são classes concretas (`PrepareEnergyMinimizationStep`
 e `EnergyMinimizationStep`); `nvt-grompp` e `nvt` também (`PrepareNvtStep` e
 `NvtEquilibrationStep`); `npt-grompp` e `npt` também (`PrepareNptStep` e
@@ -389,11 +388,10 @@ e `ReportStep`. Para projetos sem molécula pequena, a topologia agora é
 proteína isolada e peptídeo. Assim, todas as etapas produzidas atualmente são
 classes concretas. O adaptador genérico `PipelineCommandStep` foi removido da
 API; se um plano incluir uma etapa sem implementação concreta correspondente,
-a composição falha explicitamente. O CLI continua usando `PipelineStep` por
-meio de `build_pipeline()`, que projeta a mesma lista canônica de etapas
-concretas usada por `build_workflow()`. A API compõe essa lista diretamente ou
-valida a projeção ao receber uma seleção de etapas do CLI. A sequência atual
-não usa `Parallel`.
+a composição falha explicitamente. CLI e API constroem a sequência canônica
+diretamente com `build_workflow()`. A projeção intermediária
+`PipelineStep`/`build_pipeline()` foi removida. A sequência atual não usa
+`Parallel`.
 
 **Estado do executor:** CLI e API usam `work/state.json`. Estados antigos não
 são convertidos; a primeira execução no formato atual pode repetir etapas.
@@ -450,16 +448,14 @@ Steps com `project.workflow()` e executam com `project.run_workflow(workflow)`.
 As APIs e o CLI usam `work/state.json` por padrão. O caminho antigo de execução
 está em remoção; estados antigos não são convertidos.
 
-`PipelineStep`, `build_pipeline()` e o executor linear antigo ainda possuem
-consumidores remanescentes e serão removidos após migrar os testes e módulos
-dependentes. Retrocompatibilidade não é requisito para esta versão ainda não
-publicada.
+O executor linear e a projeção `PipelineStep`/`build_pipeline()` foram
+removidos; o código de produção constrói e executa Steps pelo grafo.
+Retrocompatibilidade com a projeção antiga não é requisito para esta versão
+ainda não publicada.
 
-**Concluído nesta etapa até aqui:** exemplos, template de novos projetos,
-documentação e guia para projetos existentes usam/distinguem a API composta.
-A suíte completa passou com 212 testes aprovados e 1 desmarcado. Isso valida a
-experiência recomendada, mas não conclui a consolidação arquitetural: a fábrica
-do workflow ainda depende do formato legado.
+**Estado atual:** exemplos e template de novos projetos usam a API composta.
+Os passos F e G continuam em andamento até a remoção dos adaptadores públicos
+redundantes e a atualização final da documentação e dos exemplos.
 
 O uso atual de `project.workflow()` seguido de `project.run_workflow()` é uma
 ponte intermediária: a primeira chamada esconde a lista de etapas que deveria
@@ -487,12 +483,11 @@ remoção precisa decorrer de uma dependência eliminada e de testes substitutos
 que preservem comportamento, retomada e segurança dos arquivos.
 
 **Auditoria atual:** `GmxFlowProject.workflow()`, `validate()` e `run()` usam
-Steps concretos. A API não importa `PipelineStep` ou `build_pipeline()`; a rota
-intermediária `build_workflow(..., selected_steps=...)`, o método redundante
-`project.plan()` e os executores lineares `run_step()`/`run_steps()` foram
-removidos. O CLI seleciona Steps concretos e usa `run_workflow()` e o executor
-de grafo. A projeção `PipelineStep`/`build_pipeline()` permanece sem consumidor
-de produção e será removida após migrar os fixtures de teste restantes.
+Steps concretos. A API e o CLI constroem e executam pelo grafo; o método
+intermediário `build_workflow(..., selected_steps=...)`, o método redundante
+`project.plan()`, os executores lineares e a projeção `PipelineStep`/
+`build_pipeline()` foram removidos. Os testes de comandos agora inspecionam
+diretamente os Steps concretos.
 
 #### A. Fixar o contrato público e a experiência das receitas — decisão antes de refatorar
 
@@ -525,18 +520,15 @@ receita gerada usam as mesmas classes e o mesmo operador. Não há API pública
 **Concluída:** `project.workflow()`, `validate()` e `run()` constroem e
 selecionam Steps canônicos diretamente por `id`; a validação verifica somente
 as entradas declaradas pelo usuário, sem confundi-las com templates internos
-gerados no workspace. A API não depende de `PipelineStep`/`build_pipeline()`.
-O CLI foi desacoplado do wrapper `project.plan()` e chama explicitamente a
-projeção legada; seus testes continuam cobrindo as opções e o comportamento do
-comando. Os testes exclusivos do wrapper removido foram eliminados.
+gerados no workspace. API e CLI não dependem de `PipelineStep` ou
+`build_pipeline()`; ambos executam o workflow pelo grafo. Os testes do CLI
+continuam cobrindo as opções e o comportamento do comando.
 
 - Fazer `project.workflow()`, `validate()` e `run()` operar diretamente sobre a
   sequência canônica de Steps e seleção por ID. (Concluído.)
 - Remover o wrapper público redundante `project.plan()` e encaminhar o CLI
-  diretamente à sua projeção enquanto a migração do executor estiver pendente.
-  (Concluído.)
-- Remover `GromacsCommandStep.to_pipeline_step()` e a comparação de igualdade
-  com `PipelineStep` somente depois de não haver consumidores.
+  diretamente ao executor de grafo. (Concluído.)
+- Removidos `GromacsCommandStep.to_pipeline_step()` e a projeção `PipelineStep`.
 
 **Aceite:** testes verificam comandos, artefatos, IDs, ordem e seleção a partir
 dos Steps canônicos; a API pode construir e executar sem importar
@@ -586,19 +578,19 @@ removidos por essa mudança.
 
 #### F. Excluir código e testes duplicados após a migração — em andamento
 
-- Remover `PipelineStep`, `build_pipeline()` e fixtures de teste legados que
-  ainda projetam o workflow para a lista linear.
-- Migrar os testes que atualmente afirmam a implementação antiga; preservar
-  cobertura de comandos, artefatos, segurança, retomada e mensagens sem manter
-  testes duplicados apenas para confirmar duas implementações.
+- Removidos `PipelineStep`, `build_pipeline()`, `to_pipeline_step()` e os
+  fixtures que comparavam essa projeção com os Steps concretos.
+- Preservar cobertura de comandos, artefatos, segurança, retomada e mensagens,
+  sem manter testes duplicados apenas para confirmar duas implementações.
 - Manter a execução de processos e a lógica de domínio que continuarem sendo
   usadas pelo executor canônico; tamanho de arquivo, isoladamente, não torna
   código descartável.
 
-**Concluído nesta fatia:** `run_step()`, `run_steps()`, `select_steps()` e os
-testes que exercitavam ou comparavam o executor linear foram removidos. A suíte
-integrada continua verificando execução do grafo, retomada, seleção de etapas,
-logs e resultados simulados.
+**Concluído nesta fatia:** `run_step()`, `run_steps()`, `select_steps()`,
+`PipelineStep`, `build_pipeline()` e `to_pipeline_step()` foram removidos, junto
+dos testes exclusivos ou comparativos da implementação linear. A suíte mantém
+verificações de comandos, artefatos, execução pelo grafo, retomada, seleção e
+logs com subprocessos simulados.
 
 **Aceite final:** busca de referências confirma que não há chamadas/imports do
 executor antigo; testes completos, lint, tipos e smoke de integração aprovados;

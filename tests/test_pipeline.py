@@ -5,7 +5,7 @@ from typing import Literal
 
 import pytest
 
-from gmxflow.config import default_config
+from gmxflow.config import GmxFlowConfig, default_config
 from gmxflow.pipeline import (
     AddIonsStep,
     AnalyzeTrajectoryStep,
@@ -40,7 +40,6 @@ from gmxflow.pipeline import (
     NvtEquilibrationStep,
     WorkflowGraph,
     build_workflow,
-    build_pipeline,
 )
 
 
@@ -58,21 +57,60 @@ class _GraphStep(ComposableStep):
         del context
 
 
-def test_build_pipeline_returns_expected_order(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("order_test"), config_dir=tmp_path)
+@dataclass(frozen=True)
+class _CommandStepView:
+    """Expose concrete Step command details for focused command assertions."""
 
-    assert [step.name for step in steps[:5]] == [
+    name: str
+    description: str
+    workdir: Path
+    command: list[str]
+    inputs: list[Path]
+    outputs: list[Path]
+    stdin: str | None
+    env: dict[str, str]
+    state: dict[str, object]
+
+
+def _step_views(
+    config: GmxFlowConfig,
+    *,
+    config_dir: Path,
+    config_path: Path | None = None,
+) -> list[_CommandStepView]:
+    workflow = build_workflow(config, config_dir, config_path=config_path)
+    return [
+        _CommandStepView(
+            name=step.id,
+            description=step.name,
+            workdir=step.workdir,
+            command=list(step.command),
+            inputs=list(step.input_paths),
+            outputs=list(step.output_paths),
+            stdin=step.stdin,
+            env=dict(step.env),
+            state=dict(step.state),
+        )
+        for step in workflow.items
+        if isinstance(step, GromacsCommandStep)
+    ]
+
+
+def test_project_workflow_contains_ordered_concrete_steps(tmp_path: Path) -> None:
+    workflow = build_workflow(default_config("order_test"), config_dir=tmp_path)
+
+    assert [step.id for step in workflow.items[:5]] == [
         "prepare",
         "topology",
         "box",
         "solvate",
         "ions-grompp",
     ]
-    assert steps[-1].name == "report"
+    assert workflow.items[-1].id == "report"
 
 
 @pytest.mark.parametrize("ligand_kind", ["none", "peptide", "small_molecule"])
-def test_cli_plan_projects_canonical_concrete_steps(
+def test_project_workflow_contains_concrete_steps_for_each_ligand_kind(
     tmp_path: Path, ligand_kind: Literal["none", "peptide", "small_molecule"]
 ) -> None:
     config = default_config("canonical_steps")
@@ -84,28 +122,13 @@ def test_cli_plan_projects_canonical_concrete_steps(
         config.input.ligand_str = "inputs/ligand.str"
 
     workflow = build_workflow(config, config_dir=tmp_path)
-    cli_plan = build_pipeline(config, config_dir=tmp_path)
     concrete_steps = [
         step for step in workflow.items if isinstance(step, GromacsCommandStep)
     ]
 
     assert len(concrete_steps) == len(workflow.items)
-    assert [step.to_pipeline_step() for step in concrete_steps] == cli_plan
-
-
-def test_prepare_step_projection_preserves_its_command_and_artifacts(
-    tmp_path: Path,
-) -> None:
-    config = default_config("prepare_projection")
-    config_path = tmp_path / "project.toml"
-    legacy_step = build_pipeline(
-        config,
-        config_dir=tmp_path,
-        config_path=config_path,
-    )[0]
-    concrete_step = PrepareComplexStep.from_config(config, tmp_path, config_path)
-
-    assert concrete_step.to_pipeline_step() == legacy_step
+    assert concrete_steps[0].id == "prepare"
+    assert concrete_steps[-1].id == "report"
 
 
 def test_build_workflow_selects_concrete_steps_by_id(tmp_path: Path) -> None:
@@ -253,7 +276,7 @@ def test_topology_command_uses_force_field_and_water(tmp_path: Path) -> None:
     config.force_field.name = "amber99sb-ildn"
     config.force_field.water = "tip3p"
 
-    steps = build_pipeline(config, config_dir=tmp_path)
+    steps = _step_views(config, config_dir=tmp_path)
     topology = next(step for step in steps if step.name == "topology")
 
     assert topology.command[:2] == ["gmx", "pdb2gmx"]
@@ -279,14 +302,7 @@ def test_protein_topology_workflow_uses_concrete_step(
     topology = next(
         step for step in workflow.items if isinstance(step, BuildTopologyStep)
     )
-    legacy = next(
-        step
-        for step in build_pipeline(config, config_dir=tmp_path)
-        if step.name == "topology"
-    )
-
     assert isinstance(topology, BuildTopologyStep)
-    assert topology.to_pipeline_step() == legacy
     expected_chains = ("A",) if ligand_kind == "none" else ("A", "B")
     assert [path.name for path in topology.output_paths[2:]] == [
         *(f"topol_Protein_chain_{chain}.itp" for chain in expected_chains),
@@ -302,7 +318,7 @@ def test_protein_only_pipeline_omits_ligand_steps_and_metrics(tmp_path: Path) ->
     config.input.ligand_kind = "none"
     config.input.ligand_pdb = ""
     config.input.remove_resnames = ["HOH"]
-    steps = build_pipeline(config, config_dir=tmp_path, strict_inputs=True)
+    steps = _step_views(config, config_dir=tmp_path)
 
     prepare, topology, analysis, plots = (
         next(step for step in steps if step.name == name)
@@ -342,7 +358,7 @@ def test_protein_only_pipeline_omits_ligand_steps_and_metrics(tmp_path: Path) ->
 
 
 def test_pipeline_adds_thermodynamic_extraction_step(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("thermo_pipeline_test"), config_dir=tmp_path)
+    steps = _step_views(default_config("thermo_pipeline_test"), config_dir=tmp_path)
     thermodynamics = next(step for step in steps if step.name == "thermodynamics")
 
     assert thermodynamics.command == [
@@ -376,7 +392,7 @@ def test_gromacs_steps_use_gmxlib_for_project_force_field(
     (forcefield / "forcefield.itp").write_text("; test\n", encoding="utf-8")
     (forcefield / "forcefield.doc").write_text("test\n", encoding="utf-8")
 
-    steps = build_pipeline(config, config_dir=tmp_path)
+    steps = _step_views(config, config_dir=tmp_path)
     topology = next(step for step in steps if step.name == "topology")
     em_grompp = next(step for step in steps if step.name == "em-grompp")
 
@@ -397,7 +413,7 @@ def test_gromacs_steps_use_central_forcefield_directory(
 
     config = default_config("central_force_field_test")
     config.force_field.name = "charmm36-central-test"
-    steps = build_pipeline(config, config_dir=tmp_path / "project")
+    steps = _step_views(config, config_dir=tmp_path / "project")
     topology = next(step for step in steps if step.name == "topology")
 
     assert topology.env == {"GMXLIB": str(central_root.resolve())}
@@ -409,7 +425,7 @@ def test_gromacs_steps_do_not_set_gmxlib_for_installed_force_field(
     config = default_config("installed_force_field_test")
     config.force_field.name = "amber99sb-ildn"
 
-    steps = build_pipeline(config, config_dir=tmp_path)
+    steps = _step_views(config, config_dir=tmp_path)
     topology = next(step for step in steps if step.name == "topology")
 
     assert topology.env == {}
@@ -418,7 +434,7 @@ def test_gromacs_steps_do_not_set_gmxlib_for_installed_force_field(
 def test_prepare_step_uses_internal_cli_command(tmp_path: Path) -> None:
     config_path = tmp_path / "project.toml"
 
-    steps = build_pipeline(
+    steps = _step_views(
         default_config("prepare_test"), config_dir=tmp_path, config_path=config_path
     )
     prepare = steps[0]
@@ -440,7 +456,7 @@ def test_small_molecule_pipeline_adds_ligand_topology_step(tmp_path: Path) -> No
     config.input.ligand_str = "inputs/jz4.str"
     config.input.ligand_resname = "JZ4"
 
-    steps = build_pipeline(config, config_dir=tmp_path, config_path=config_path)
+    steps = _step_views(config, config_dir=tmp_path, config_path=config_path)
 
     project_root = tmp_path.resolve()
     assert [step.name for step in steps[:7]] == [
@@ -618,7 +634,7 @@ def test_charmm_small_molecule_protein_topology_selects_standard_termini(
     config.input.ligand_str = "inputs/jz4.str"
     config.force_field.name = "charmm36-feb2026_cgenff-5.0"
 
-    steps = build_pipeline(config, config_dir=tmp_path)
+    steps = _step_views(config, config_dir=tmp_path)
     protein_topology = next(step for step in steps if step.name == "protein-topology")
 
     assert protein_topology.stdin == "1\n0\n"
@@ -630,7 +646,7 @@ def test_charmm_peptide_topology_selects_standard_termini_for_two_chains(
     config = default_config("charmm_peptide_termini_test")
     config.force_field.name = "charmm36-feb2026_cgenff-5.0"
 
-    steps = build_pipeline(config, config_dir=tmp_path)
+    steps = _step_views(config, config_dir=tmp_path)
     topology = next(step for step in steps if step.name == "topology")
 
     assert topology.stdin == "1\n0\n1\n0\n"
@@ -641,30 +657,14 @@ def test_pdb2gmx_terminal_selections_override_auto_policy(tmp_path: Path) -> Non
     config.force_field.name = "charmm36-feb2026_cgenff-5.0"
     config.pdb2gmx.terminal_selections = ["8", "7"]
 
-    steps = build_pipeline(config, config_dir=tmp_path)
+    steps = _step_views(config, config_dir=tmp_path)
     topology = next(step for step in steps if step.name == "topology")
 
     assert topology.stdin == "8\n7\n"
 
 
-def test_small_molecule_strict_inputs_requires_mol2_and_stream(
-    tmp_path: Path,
-) -> None:
-    inputs = tmp_path / "inputs"
-    inputs.mkdir()
-    (inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (inputs / "ligante.pdb").write_text("HETATM\n", encoding="utf-8")
-    config = default_config("small_molecule_strict_test")
-    config.input.ligand_kind = "small_molecule"
-    config.input.ligand_mol2 = "inputs/jz4.mol2"
-    config.input.ligand_str = "inputs/jz4.str"
-
-    with pytest.raises(FileNotFoundError, match="jz4.mol2"):
-        build_pipeline(config, config_dir=tmp_path, strict_inputs=True)
-
-
 def test_em_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("em_grompp_test"), config_dir=tmp_path)
+    steps = _step_views(default_config("em_grompp_test"), config_dir=tmp_path)
     em_grompp = next(step for step in steps if step.name == "em-grompp")
 
     project_root = tmp_path.resolve()
@@ -680,7 +680,7 @@ def test_em_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
 
 def test_solvate_uses_internal_topology_reset_command(tmp_path: Path) -> None:
     config_path = tmp_path / "project.toml"
-    steps = build_pipeline(
+    steps = _step_views(
         default_config("solvate_test"), config_dir=tmp_path, config_path=config_path
     )
     solvate = next(step for step in steps if step.name == "solvate")
@@ -707,7 +707,7 @@ def test_solvate_uses_internal_topology_reset_command(tmp_path: Path) -> None:
 
 def test_ions_create_a_new_topology_version(tmp_path: Path) -> None:
     config_path = tmp_path / "project.toml"
-    steps = build_pipeline(
+    steps = _step_views(
         default_config("ions_test"), config_dir=tmp_path, config_path=config_path
     )
     ions_grompp = next(step for step in steps if step.name == "ions-grompp")
@@ -735,7 +735,7 @@ def test_ions_create_a_new_topology_version(tmp_path: Path) -> None:
 
 
 def test_nvt_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("nvt_grompp_test"), config_dir=tmp_path)
+    steps = _step_views(default_config("nvt_grompp_test"), config_dir=tmp_path)
     nvt_grompp = next(step for step in steps if step.name == "nvt-grompp")
 
     project_root = tmp_path.resolve()
@@ -750,7 +750,7 @@ def test_nvt_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
 
 
 def test_nvt_mdrun_outputs_restartable_artifacts(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("nvt_test"), config_dir=tmp_path)
+    steps = _step_views(default_config("nvt_test"), config_dir=tmp_path)
     nvt = next(step for step in steps if step.name == "nvt")
 
     project_root = tmp_path.resolve()
@@ -767,7 +767,7 @@ def test_nvt_mdrun_outputs_restartable_artifacts(tmp_path: Path) -> None:
 
 
 def test_npt_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("npt_grompp_test"), config_dir=tmp_path)
+    steps = _step_views(default_config("npt_grompp_test"), config_dir=tmp_path)
     npt_grompp = next(step for step in steps if step.name == "npt-grompp")
 
     project_root = tmp_path.resolve()
@@ -782,7 +782,7 @@ def test_npt_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
 
 
 def test_npt_mdrun_outputs_restartable_artifacts(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("npt_test"), config_dir=tmp_path)
+    steps = _step_views(default_config("npt_test"), config_dir=tmp_path)
     npt = next(step for step in steps if step.name == "npt")
 
     project_root = tmp_path.resolve()
@@ -799,7 +799,7 @@ def test_npt_mdrun_outputs_restartable_artifacts(tmp_path: Path) -> None:
 
 
 def test_production_grompp_uses_topology_from_topo_directory(tmp_path: Path) -> None:
-    steps = build_pipeline(
+    steps = _step_views(
         default_config("production_grompp_test"), config_dir=tmp_path
     )
     production_grompp = next(step for step in steps if step.name == "production-grompp")
@@ -819,7 +819,7 @@ def test_production_mdrun_honors_gpu_off(tmp_path: Path) -> None:
     config = default_config("cpu_test")
     config.mdrun.gpu = "off"
 
-    steps = build_pipeline(config, config_dir=tmp_path)
+    steps = _step_views(config, config_dir=tmp_path)
     production = next(step for step in steps if step.name == "production")
 
     assert production.command == [
@@ -838,7 +838,7 @@ def test_production_mdrun_honors_gpu_off(tmp_path: Path) -> None:
 
 
 def test_production_mdrun_outputs_restartable_artifacts(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("production_test"), config_dir=tmp_path)
+    steps = _step_views(default_config("production_test"), config_dir=tmp_path)
     production = next(step for step in steps if step.name == "production")
 
     project_root = tmp_path.resolve()
@@ -853,7 +853,7 @@ def test_production_mdrun_outputs_restartable_artifacts(tmp_path: Path) -> None:
 
 
 def test_pbc_nojump_uses_production_trajectory(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("pbc_nojump_test"), config_dir=tmp_path)
+    steps = _step_views(default_config("pbc_nojump_test"), config_dir=tmp_path)
     pbc_nojump = next(step for step in steps if step.name == "pbc-nojump")
 
     project_root = tmp_path.resolve()
@@ -882,7 +882,7 @@ def test_pbc_center_uses_configured_groups(tmp_path: Path) -> None:
     config.analysis.center_group = "Protein"
     config.analysis.output_group = "System"
 
-    steps = build_pipeline(config, config_dir=tmp_path)
+    steps = _step_views(config, config_dir=tmp_path)
     pbc_center = next(step for step in steps if step.name == "pbc-center")
 
     project_root = tmp_path.resolve()
@@ -914,7 +914,7 @@ def test_fit_uses_configured_groups(tmp_path: Path) -> None:
     config.analysis.fit_group = "Backbone"
     config.analysis.output_group = "System"
 
-    steps = build_pipeline(config, config_dir=tmp_path)
+    steps = _step_views(config, config_dir=tmp_path)
     fit = next(step for step in steps if step.name == "fit")
 
     project_root = tmp_path.resolve()
@@ -942,24 +942,17 @@ def test_mdrun_does_not_add_ntmpi_for_mpi_engine(tmp_path: Path) -> None:
     config = default_config("mpi_test")
     config.mdrun.engine = "gmx_mpi"
 
-    steps = build_pipeline(config, config_dir=tmp_path)
+    steps = _step_views(config, config_dir=tmp_path)
     em = next(step for step in steps if step.name == "em")
 
     assert "-ntmpi" not in em.command
     assert em.command[:4] == ["gmx_mpi", "mdrun", "-v", "-deffnm"]
 
 
-def test_strict_inputs_requires_receptor_and_ligand(tmp_path: Path) -> None:
-    config = default_config("strict_test")
-
-    with pytest.raises(FileNotFoundError):
-        build_pipeline(config, config_dir=tmp_path, strict_inputs=True)
-
-
-def test_non_strict_inputs_allows_missing_receptor_and_ligand(tmp_path: Path) -> None:
+def test_workflow_defers_input_existence_checks_until_validation(tmp_path: Path) -> None:
     config = default_config("non_strict_test")
 
-    steps = build_pipeline(config, config_dir=tmp_path, strict_inputs=False)
+    steps = _step_views(config, config_dir=tmp_path)
 
     project_root = tmp_path.resolve()
     assert steps[0].inputs == [
@@ -969,7 +962,7 @@ def test_non_strict_inputs_allows_missing_receptor_and_ligand(tmp_path: Path) ->
 
 
 def test_pipeline_uses_config_parent_work_directory(tmp_path: Path) -> None:
-    steps = build_pipeline(default_config("workdir_test"), config_dir=tmp_path)
+    steps = _step_views(default_config("workdir_test"), config_dir=tmp_path)
 
     project_root = tmp_path.resolve()
     assert steps[0].workdir == project_root / "work" / "prep"
@@ -979,7 +972,7 @@ def test_pipeline_uses_config_parent_work_directory(tmp_path: Path) -> None:
 def test_analysis_step_uses_explicit_config_path(tmp_path: Path) -> None:
     config_path = tmp_path / "custom.toml"
 
-    steps = build_pipeline(
+    steps = _step_views(
         default_config("custom_config_test"),
         config_dir=tmp_path,
         config_path=config_path,
@@ -1012,7 +1005,7 @@ def test_analysis_step_uses_explicit_config_path(tmp_path: Path) -> None:
 def test_plots_step_uses_analysis_outputs(tmp_path: Path) -> None:
     config_path = tmp_path / "custom.toml"
 
-    steps = build_pipeline(
+    steps = _step_views(
         default_config("plots_test"),
         config_dir=tmp_path,
         config_path=config_path,
@@ -1056,7 +1049,7 @@ def test_plots_step_uses_analysis_outputs(tmp_path: Path) -> None:
 def test_report_step_uses_analysis_outputs_and_plots(tmp_path: Path) -> None:
     config_path = tmp_path / "custom.toml"
 
-    steps = build_pipeline(
+    steps = _step_views(
         default_config("report_test"),
         config_dir=tmp_path,
         config_path=config_path,
@@ -1109,7 +1102,7 @@ def test_pipeline_adds_interaction_energy_when_enabled(tmp_path: Path) -> None:
     config = default_config("interaction_energy_test")
     config.analysis.interaction_energy = True
 
-    steps = build_pipeline(config, config_dir=tmp_path, config_path=config_path)
+    steps = _step_views(config, config_dir=tmp_path, config_path=config_path)
     names = [step.name for step in steps]
     interaction = next(step for step in steps if step.name == "interaction-energy")
     report = steps[-1]
@@ -1146,7 +1139,7 @@ def test_pipeline_adds_sasa_when_enabled(tmp_path: Path) -> None:
     config = default_config("sasa_test")
     config.analysis.sasa = True
 
-    steps = build_pipeline(config, config_dir=tmp_path, config_path=config_path)
+    steps = _step_views(config, config_dir=tmp_path, config_path=config_path)
     names = [step.name for step in steps]
     sasa = next(step for step in steps if step.name == "sasa")
     report = steps[-1]
@@ -1173,7 +1166,7 @@ def test_pipeline_adds_catalytic_outputs_when_configured(tmp_path: Path) -> None
     config = default_config("catalytic_test")
     config.analysis.catalytic_residues = "57,102,195"
 
-    steps = build_pipeline(config, config_dir=tmp_path, config_path=config_path)
+    steps = _step_views(config, config_dir=tmp_path, config_path=config_path)
     analysis = next(step for step in steps if step.name == "analysis")
     plots = next(step for step in steps if step.name == "plots")
     report = steps[-1]
@@ -1217,7 +1210,7 @@ def test_pipeline_adds_sasa_plot_outputs_when_enabled(tmp_path: Path) -> None:
     config = default_config("sasa_plots_test")
     config.analysis.sasa = True
 
-    steps = build_pipeline(config, config_dir=tmp_path, config_path=config_path)
+    steps = _step_views(config, config_dir=tmp_path, config_path=config_path)
     plots = next(step for step in steps if step.name == "plots")
     report = steps[-1]
 

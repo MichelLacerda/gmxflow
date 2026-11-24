@@ -6,8 +6,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, TypeAlias
 
-from pydantic import BaseModel, Field
-
 from gmxflow.config import GmxFlowConfig
 from gmxflow.forcefields import resolve_forcefield
 
@@ -42,18 +40,6 @@ REAL_EXECUTION_STEPS = frozenset(
         "report",
     }
 )
-
-
-class PipelineStep(BaseModel):
-    name: str
-    description: str
-    workdir: Path
-    command: list[str]
-    inputs: list[Path] = Field(default_factory=list)
-    outputs: list[Path] = Field(default_factory=list)
-    stdin: str | None = None
-    env: dict[str, str] = Field(default_factory=dict)
-    state: dict[str, object] = Field(default_factory=dict)
 
 
 def _path_artifact(path: Path) -> Artifact:
@@ -161,21 +147,6 @@ class GromacsCommandStep(ComposableStep):
             env=self.env,
             stdin=self.stdin,
         )
-
-    def to_pipeline_step(self) -> PipelineStep:
-        """Project this typed step into the legacy CLI pipeline definition."""
-        return PipelineStep(
-            name=self.id,
-            description=self.name,
-            workdir=self.workdir,
-            command=list(self.command),
-            inputs=list(self.input_paths),
-            outputs=list(self.output_paths),
-            stdin=self.stdin,
-            env=dict(self.env),
-            state=dict(self.state),
-        )
-
 
 @dataclass
 class PrepareComplexStep(GromacsCommandStep):
@@ -1551,35 +1522,6 @@ def _find_cycle(graph: Mapping[str, set[str]]) -> str | None:
     return None
 
 
-def build_pipeline(
-    config: GmxFlowConfig,
-    config_dir: Path,
-    config_path: Path | None = None,
-    strict_inputs: bool = False,
-) -> list[PipelineStep]:
-    project_root = config_dir.expanduser().resolve()
-    receptor_pdb = _resolve_from_config(config.input.receptor_pdb, project_root)
-    ligand_pdb = _resolve_from_config(config.input.ligand_pdb, project_root)
-    ligand_mol2 = _resolve_from_config(config.input.ligand_mol2, project_root)
-    ligand_str = _resolve_from_config(config.input.ligand_str, project_root)
-    config_path = (
-        (config_path or (project_root / "project.toml")).expanduser().resolve()
-    )
-
-    if strict_inputs:
-        _require_file(receptor_pdb)
-        if config.input.ligand_kind != "none":
-            _require_file(ligand_pdb)
-        if config.input.ligand_kind == "small_molecule":
-            _require_file(ligand_mol2)
-            _require_file(ligand_str)
-
-    return [
-        step.to_pipeline_step()
-        for step in _build_concrete_steps(config, project_root, config_path)
-    ]
-
-
 def _build_concrete_steps(
     config: GmxFlowConfig, project_root: Path, config_path: Path
 ) -> list[GromacsCommandStep]:
@@ -1642,11 +1584,7 @@ def build_workflow(
     from_step: str | None = None,
     until: str | None = None,
 ) -> Sequence:
-    """Compose an API workflow from concrete steps.
-
-    The CLI projects these same concrete steps through ``build_pipeline()``.
-    API selections use concrete Step IDs.
-    """
+    """Compose a project workflow from its concrete Steps."""
     root = config_dir.expanduser().resolve()
     resolved_config = (config_path or root / "project.toml").expanduser().resolve()
     concrete_steps = _build_concrete_steps(config, root, resolved_config)
@@ -1680,9 +1618,6 @@ def _resolve_from_config(value: str, config_dir: Path) -> Path:
     return config_dir / path
 
 
-def _require_file(path: Path) -> None:
-    if not path.is_file():
-        raise FileNotFoundError(f"Arquivo de entrada não encontrado: {path}")
 
 
 def _gmx_command(config: GmxFlowConfig) -> str:
