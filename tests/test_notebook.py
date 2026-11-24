@@ -10,7 +10,6 @@ from matplotlib.figure import Figure
 
 from gmxflow.config import default_config
 from gmxflow.executor import (
-    StepResult,
     WorkflowStepResult,
     WorkflowStepStatus,
 )
@@ -55,22 +54,16 @@ def test_show_execution_displays_native_step_summary(monkeypatch) -> None:
     pandas.option_context = option_context
     monkeypatch.setitem(sys.modules, "IPython.display", display_module)
     monkeypatch.setitem(sys.modules, "pandas", pandas)
-    completed = StepResult(
-        step_name="prepare",
-        command=["gmxflow", "prepare-complex"],
-        workdir=Path("work/prep"),
+    completed = WorkflowStepResult(
+        step_id="prepare",
+        status=WorkflowStepStatus.SUCCEEDED,
         log_path=Path("work/logs/01_prepare.log"),
-        returncode=0,
         elapsed_seconds=1.23456,
     )
-    skipped = StepResult(
-        step_name="topology",
-        command=["gmx", "pdb2gmx"],
-        workdir=Path("work/topo"),
+    skipped = WorkflowStepResult(
+        step_id="topology",
+        status=WorkflowStepStatus.SKIPPED,
         log_path=Path("work/logs/02_topology.log"),
-        returncode=0,
-        elapsed_seconds=0,
-        skipped=True,
     )
 
     show_execution((completed, skipped))
