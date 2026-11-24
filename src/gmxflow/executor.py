@@ -15,8 +15,6 @@ from types import MappingProxyType
 from time import perf_counter
 from typing import Callable
 
-from pydantic import BaseModel
-
 from gmxflow.config import GmxFlowConfig
 from gmxflow.pipeline import (
     Artifact,
@@ -29,20 +27,6 @@ from gmxflow.workspace import ensure_workspace
 
 STATE_VERSION = 1
 HASH_SIZE_LIMIT = 64 * 1024 * 1024
-
-
-class StepResult(BaseModel):
-    step_name: str
-    command: list[str]
-    workdir: Path
-    log_path: Path
-    returncode: int
-    elapsed_seconds: float
-    skipped: bool = False
-
-    @property
-    def succeeded(self) -> bool:
-        return self.returncode == 0
 
 
 class WorkflowStepStatus(StrEnum):
@@ -702,11 +686,10 @@ def _fail_workflow_step(
 def run_workspace_setup(
     config: GmxFlowConfig,
     project_root: Path,
-    index: int = 0,
-) -> StepResult:
+) -> None:
     logs_dir = project_root / "work" / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
-    log_path = logs_dir / f"{index:02d}_workspace.log"
+    log_path = logs_dir / "00_workspace.log"
     command = ["<internal>", "ensure-workspace"]
 
     started = datetime.now(UTC)
@@ -739,14 +722,6 @@ def run_workspace_setup(
         "",
     ]
     log_path.write_text("\n".join(content), encoding="utf-8")
-    return StepResult(
-        step_name="workspace",
-        command=command,
-        workdir=setup.work_root,
-        log_path=log_path,
-        returncode=0,
-        elapsed_seconds=elapsed,
-    )
 
 
 def runtime_command(command: list[str]) -> list[str]:

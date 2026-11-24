@@ -8,7 +8,6 @@ import pytest
 from gmxflow.api import GmxFlowProject
 from gmxflow.config import default_config, to_toml
 from gmxflow.executor import (
-    StepResult,
     WorkflowExecutionReport,
     WorkflowStepResult,
     WorkflowStepStatus,
@@ -690,14 +689,7 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root, **kwargs: StepResult(
-            step_name="workspace",
-            command=["<internal>", "ensure-workspace"],
-            workdir=project_root / "work",
-            log_path=project_root / "work" / "logs" / "00_workspace.log",
-            returncode=0,
-            elapsed_seconds=0.0,
-        ),
+        lambda config, project_root, **kwargs: None,
     )
 
     step_indexes = {
@@ -1161,14 +1153,7 @@ def test_interaction_energy_runs_through_graph_when_enabled(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root, **kwargs: StepResult(
-            step_name="workspace",
-            command=["<internal>", "ensure-workspace"],
-            workdir=project_root / "work",
-            log_path=project_root / "work" / "logs" / "00_workspace.log",
-            returncode=0,
-            elapsed_seconds=0.0,
-        ),
+        lambda config, project_root, **kwargs: None,
     )
 
     calls: list[tuple[str, ...]] = []
@@ -1214,14 +1199,7 @@ def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root, **kwargs: StepResult(
-            step_name="workspace",
-            command=["<internal>", "ensure-workspace"],
-            workdir=project_root / "work",
-            log_path=project_root / "work" / "logs" / "00_workspace.log",
-            returncode=0,
-            elapsed_seconds=0.0,
-        ),
+        lambda config, project_root, **kwargs: None,
     )
 
     calls: list[tuple[str, ...]] = []
@@ -1262,14 +1240,7 @@ def test_plots_runs_through_graph_when_started_directly(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root, **kwargs: StepResult(
-            step_name="workspace",
-            command=["<internal>", "ensure-workspace"],
-            workdir=project_root / "work",
-            log_path=project_root / "work" / "logs" / "00_workspace.log",
-            returncode=0,
-            elapsed_seconds=0.0,
-        ),
+        lambda config, project_root, **kwargs: None,
     )
 
     calls: list[tuple[str, ...]] = []
@@ -1308,14 +1279,7 @@ def test_report_runs_through_graph_when_started_directly(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root, **kwargs: StepResult(
-            step_name="workspace",
-            command=["<internal>", "ensure-workspace"],
-            workdir=project_root / "work",
-            log_path=project_root / "work" / "logs" / "00_workspace.log",
-            returncode=0,
-            elapsed_seconds=0.0,
-        ),
+        lambda config, project_root, **kwargs: None,
     )
 
     calls: list[tuple[str, ...]] = []
@@ -1362,14 +1326,7 @@ def test_small_molecule_assembly_prefix_runs_through_graph(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root, **kwargs: StepResult(
-            step_name="workspace",
-            command=["<internal>", "ensure-workspace"],
-            workdir=project_root / "work",
-            log_path=project_root / "work" / "logs" / "00_workspace.log",
-            returncode=0,
-            elapsed_seconds=0.0,
-        ),
+        lambda config, project_root, **kwargs: None,
     )
 
     calls: list[tuple[str, ...]] = []
@@ -1443,14 +1400,7 @@ def test_small_molecule_analysis_steps_can_start_through_graph(
     monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
     monkeypatch.setattr(
         "gmxflow.api.run_workspace_setup",
-        lambda config, project_root, **kwargs: StepResult(
-            step_name="workspace",
-            command=["<internal>", "ensure-workspace"],
-            workdir=project_root / "work",
-            log_path=project_root / "work" / "logs" / "00_workspace.log",
-            returncode=0,
-            elapsed_seconds=0.0,
-        ),
+        lambda config, project_root, **kwargs: None,
     )
     calls: list[tuple[str, ...]] = []
 

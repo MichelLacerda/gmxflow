@@ -73,14 +73,13 @@ def test_ensure_workspace_renders_only_missing_templates(tmp_path: Path) -> None
 
 
 def test_run_workspace_setup_writes_log_and_mdp_files(tmp_path: Path) -> None:
-    result = run_workspace_setup(default_config("workspace_log_test"), project_root=tmp_path)
+    run_workspace_setup(default_config("workspace_log_test"), project_root=tmp_path)
 
-    assert result.succeeded
-    assert result.step_name == "workspace"
-    assert result.log_path == tmp_path / "work" / "logs" / "00_workspace.log"
+    log_path = tmp_path / "work" / "logs" / "00_workspace.log"
+    assert log_path.is_file()
     assert (tmp_path / "work" / "prod" / "md.mdp").is_file()
 
-    log = result.log_path.read_text(encoding="utf-8")
+    log = log_path.read_text(encoding="utf-8")
     assert "step: workspace" in log
     assert "rendered_templates:" in log
     assert "md.mdp.j2" in log
