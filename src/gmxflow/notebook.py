@@ -7,13 +7,13 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
-from gmxflow.executor import StepResult, WorkflowStepResult, WorkflowStepStatus
+from gmxflow.executor import WorkflowStepResult, WorkflowStepStatus
 
 _DISPLAYED_FIGURES: list[Any] = []
 
 
 def show_execution(
-    results: tuple[StepResult | WorkflowStepResult, ...],
+    results: tuple[WorkflowStepResult, ...],
 ) -> None:
     """Display execution statuses, durations, and log paths in a notebook."""
     try:
@@ -31,26 +31,16 @@ def show_execution(
 
     rows = []
     for result in results:
-        if isinstance(result, WorkflowStepResult):
-            status = {
-                WorkflowStepStatus.PLANNED: "planejada",
-                WorkflowStepStatus.SUCCEEDED: "concluída",
-                WorkflowStepStatus.SKIPPED: "reutilizada (sem alterações)",
-                WorkflowStepStatus.FAILED: "falhou",
-                WorkflowStepStatus.BLOCKED: "bloqueada",
-            }[result.status]
-            name = result.step_id
-        else:
-            if result.skipped:
-                status = "reutilizada (sem alterações)"
-            elif result.succeeded:
-                status = "concluída"
-            else:
-                status = "falhou"
-            name = result.step_name
+        status = {
+            WorkflowStepStatus.PLANNED: "planejada",
+            WorkflowStepStatus.SUCCEEDED: "concluída",
+            WorkflowStepStatus.SKIPPED: "reutilizada (sem alterações)",
+            WorkflowStepStatus.FAILED: "falhou",
+            WorkflowStepStatus.BLOCKED: "bloqueada",
+        }[result.status]
         rows.append(
             {
-                "Etapa": name,
+                "Etapa": result.step_id,
                 "Status": status,
                 "Duração (s)": round(result.elapsed_seconds, 3),
                 "Log": str(result.log_path),
@@ -145,7 +135,9 @@ def _display_report(
         )
     warnings = summary.get("warnings", [])
     if isinstance(warnings, list) and warnings:
-        display(markdown("### Avisos\n" + "\n".join(f"- {warning}" for warning in warnings)))
+        display(
+            markdown("### Avisos\n" + "\n".join(f"- {warning}" for warning in warnings))
+        )
 
     execution = payload.get("execution", {})
     if not isinstance(execution, dict):
@@ -200,9 +192,9 @@ def _display_report(
     plots = payload.get("plots", [])
     displayed_plot = False
     if isinstance(plots, list):
-        names = {
-            Path(plot).stem for plot in plots if isinstance(plot, str)
-        } - {"painel_completo"}
+        names = {Path(plot).stem for plot in plots if isinstance(plot, str)} - {
+            "painel_completo"
+        }
         from matplotlib import pyplot as plt
 
         from gmxflow.plots import create_analysis_figures
@@ -211,9 +203,7 @@ def _display_report(
             plt.close(previous_figure)
         _DISPLAYED_FIGURES.clear()
         with plt.ioff():
-            figures = create_analysis_figures(
-                config, output_dir.parent, names=names
-            )
+            figures = create_analysis_figures(config, output_dir.parent, names=names)
         for name, figure in figures:
             display(markdown(f"### {name.replace('_', ' ').title()}"))
             setattr(figure.canvas, "toolbar_visible", True)

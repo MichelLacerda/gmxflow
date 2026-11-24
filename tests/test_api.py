@@ -5,20 +5,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from gmxflow.api import ExecutionReport, GmxFlowProject
+from gmxflow.api import GmxFlowProject
 from gmxflow.config import default_config, to_toml
 from gmxflow.executor import (
     StepResult,
     WorkflowExecutionReport,
     WorkflowStepResult,
     WorkflowStepStatus,
-    runtime_command,
 )
 from gmxflow.pipeline import (
     Artifact,
     GromacsCommandStep,
     RunContext,
-    Sequence as WorkflowSequence,
     Step,
 )
 
@@ -411,21 +409,8 @@ def test_show_execution_delegates_execution_results(
     tmp_path: Path, monkeypatch
 ) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
-    result = StepResult(
-        step_name="prepare",
-        command=["gmxflow", "prepare-complex"],
-        workdir=project.root / "work" / "prep",
-        log_path=project.root / "work" / "logs" / "01_prepare.log",
-        returncode=0,
-        elapsed_seconds=0.25,
-    )
-    report = ExecutionReport(workspace=result, steps=(result,))
     shown_results: list[tuple[object, ...]] = []
     monkeypatch.setattr("gmxflow.notebook.show_execution", shown_results.append)
-
-    project.show_execution(report)
-
-    assert shown_results == [(result, result)]
 
     workflow_result = WorkflowStepResult(
         step_id="custom-step",
@@ -439,7 +424,7 @@ def test_show_execution_delegates_execution_results(
     )
     project.show_execution(workflow_report)
 
-    assert shown_results[-1] == (workflow_result,)
+    assert shown_results == [(workflow_result,)]
 
 
 def test_clean_removes_work_artifacts_and_preserves_project_data(
@@ -579,305 +564,6 @@ def test_validate_requires_mdanalysis_for_residue_filtering(
 
     with pytest.raises(RuntimeError, match="Instale `mdanalysis`"):
         project.validate()
-
-
-def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) -> None:
-    project_dir = tmp_path / "api_project"
-    config_path = _write_project_config(project_dir)
-    inputs_dir = project_dir / "inputs"
-    inputs_dir.mkdir()
-    (inputs_dir / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (inputs_dir / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    force_field = project_dir / "amber99sb-ildn.ff"
-    force_field.mkdir()
-    (force_field / "forcefield.itp").write_text("; test\n", encoding="utf-8")
-    (force_field / "forcefield.doc").write_text("test\n", encoding="utf-8")
-    project = GmxFlowProject.open(config_path)
-    events: list[str] = []
-    workspace = StepResult(
-        step_name="workspace",
-        command=["<internal>", "ensure-workspace"],
-        workdir=project.root / "work",
-        log_path=project.root / "work" / "logs" / "00_workspace.log",
-        returncode=0,
-        elapsed_seconds=0.1,
-    )
-    step_result = StepResult(
-        step_name="prepare",
-        command=runtime_command(_step_views(project, until="prepare")[0].command),
-        workdir=project.root / "work" / "prep",
-        log_path=project.root / "work" / "logs" / "01_prepare.log",
-        returncode=0,
-        elapsed_seconds=0.2,
-    )
-    topology_result = StepResult(
-        step_name="topology",
-        command=_step_views(project, until="topology")[1].command,
-        workdir=project.root / "work" / "topo",
-        log_path=project.root / "work" / "logs" / "02_topology.log",
-        returncode=0,
-        elapsed_seconds=0.3,
-    )
-    box_result = StepResult(
-        step_name="box",
-        command=runtime_command(_step_views(project, until="box")[2].command),
-        workdir=project.root / "work" / "box",
-        log_path=project.root / "work" / "logs" / "03_box.log",
-        returncode=0,
-        elapsed_seconds=0.4,
-    )
-    solvate_result = StepResult(
-        step_name="solvate",
-        command=runtime_command(_step_views(project, until="solvate")[3].command),
-        workdir=project.root / "work" / "box",
-        log_path=project.root / "work" / "logs" / "04_solvate.log",
-        returncode=0,
-        elapsed_seconds=0.5,
-    )
-    ions_grompp_result = StepResult(
-        step_name="ions-grompp",
-        command=runtime_command(_step_views(project, until="ions-grompp")[4].command),
-        workdir=project.root / "work" / "box",
-        log_path=project.root / "work" / "logs" / "05_ions-grompp.log",
-        returncode=0,
-        elapsed_seconds=0.6,
-    )
-    ions_result = StepResult(
-        step_name="ions",
-        command=runtime_command(_step_views(project, until="ions")[5].command),
-        workdir=project.root / "work" / "box",
-        log_path=project.root / "work" / "logs" / "06_ions.log",
-        returncode=0,
-        elapsed_seconds=0.7,
-    )
-    em_grompp_result = StepResult(
-        step_name="em-grompp",
-        command=runtime_command(_step_views(project, until="em-grompp")[6].command),
-        workdir=project.root / "work" / "em",
-        log_path=project.root / "work" / "logs" / "07_em-grompp.log",
-        returncode=0,
-        elapsed_seconds=0.8,
-    )
-    em_result = StepResult(
-        step_name="em",
-        command=runtime_command(_step_views(project, until="em")[7].command),
-        workdir=project.root / "work" / "em",
-        log_path=project.root / "work" / "logs" / "08_em.log",
-        returncode=0,
-        elapsed_seconds=0.9,
-    )
-    nvt_grompp_result = StepResult(
-        step_name="nvt-grompp",
-        command=runtime_command(_step_views(project, until="nvt-grompp")[8].command),
-        workdir=project.root / "work" / "nvt",
-        log_path=project.root / "work" / "logs" / "09_nvt-grompp.log",
-        returncode=0,
-        elapsed_seconds=1.0,
-    )
-    nvt_result = StepResult(
-        step_name="nvt",
-        command=runtime_command(_step_views(project, until="nvt")[9].command),
-        workdir=project.root / "work" / "nvt",
-        log_path=project.root / "work" / "logs" / "10_nvt.log",
-        returncode=0,
-        elapsed_seconds=1.1,
-    )
-    npt_grompp_result = StepResult(
-        step_name="npt-grompp",
-        command=runtime_command(_step_views(project, until="npt-grompp")[10].command),
-        workdir=project.root / "work" / "npt",
-        log_path=project.root / "work" / "logs" / "11_npt-grompp.log",
-        returncode=0,
-        elapsed_seconds=1.2,
-    )
-    npt_result = StepResult(
-        step_name="npt",
-        command=runtime_command(_step_views(project, until="npt")[11].command),
-        workdir=project.root / "work" / "npt",
-        log_path=project.root / "work" / "logs" / "12_npt.log",
-        returncode=0,
-        elapsed_seconds=1.3,
-    )
-    production_grompp_result = StepResult(
-        step_name="production-grompp",
-        command=runtime_command(
-            _step_views(project, until="production-grompp")[12].command
-        ),
-        workdir=project.root / "work" / "prod",
-        log_path=project.root / "work" / "logs" / "13_production-grompp.log",
-        returncode=0,
-        elapsed_seconds=1.4,
-    )
-    production_result = StepResult(
-        step_name="production",
-        command=runtime_command(_step_views(project, until="production")[13].command),
-        workdir=project.root / "work" / "prod",
-        log_path=project.root / "work" / "logs" / "14_production.log",
-        returncode=0,
-        elapsed_seconds=1.5,
-    )
-    pbc_nojump_result = StepResult(
-        step_name="pbc-nojump",
-        command=runtime_command(_step_views(project, until="pbc-nojump")[14].command),
-        workdir=project.root / "work" / "prod",
-        log_path=project.root / "work" / "logs" / "15_pbc-nojump.log",
-        returncode=0,
-        elapsed_seconds=1.6,
-    )
-    pbc_center_result = StepResult(
-        step_name="pbc-center",
-        command=runtime_command(_step_views(project, until="pbc-center")[15].command),
-        workdir=project.root / "work" / "prod",
-        log_path=project.root / "work" / "logs" / "16_pbc-center.log",
-        returncode=0,
-        elapsed_seconds=1.7,
-    )
-    fit_result = StepResult(
-        step_name="fit",
-        command=runtime_command(_step_views(project, until="fit")[16].command),
-        workdir=project.root / "work" / "prod",
-        log_path=project.root / "work" / "logs" / "17_fit.log",
-        returncode=0,
-        elapsed_seconds=1.8,
-    )
-    analysis_result = StepResult(
-        step_name="analysis",
-        command=runtime_command(_step_views(project, until="analysis")[17].command),
-        workdir=project.root / "work" / "analysis",
-        log_path=project.root / "work" / "logs" / "18_analysis.log",
-        returncode=0,
-        elapsed_seconds=1.9,
-    )
-    thermodynamics_result = StepResult(
-        step_name="thermodynamics",
-        command=runtime_command(
-            _step_views(project, until="thermodynamics")[18].command
-        ),
-        workdir=project.root / "work" / "analysis",
-        log_path=project.root / "work" / "logs" / "19_thermodynamics.log",
-        returncode=0,
-        elapsed_seconds=2.0,
-    )
-
-    monkeypatch.setattr(
-        "gmxflow.api.GmxFlowProject.validate",
-        lambda self: events.append("validate"),
-    )
-
-    def fake_workspace_setup(config, project_root, **kwargs):
-        events.append("workspace")
-        return workspace
-
-    monkeypatch.setattr("gmxflow.api.run_workspace_setup", fake_workspace_setup)
-
-    def fake_run_workflow_graph(graph, **kwargs):
-        events.append("workflow_graph")
-        assert graph.topological_order == (
-            "prepare",
-            "topology",
-            "box",
-            "solvate",
-            "ions-grompp",
-            "ions",
-            "em-grompp",
-            "em",
-            "nvt-grompp",
-            "nvt",
-            "npt-grompp",
-            "npt",
-            "production-grompp",
-            "production",
-            "pbc-nojump",
-            "pbc-center",
-            "fit",
-            "analysis",
-            "thermodynamics",
-        )
-        assert kwargs["project_root"] == project.root
-        step_results = {
-            "prepare": step_result,
-            "topology": topology_result,
-            "box": box_result,
-            "solvate": solvate_result,
-            "ions-grompp": ions_grompp_result,
-            "ions": ions_result,
-            "em-grompp": em_grompp_result,
-            "em": em_result,
-            "nvt-grompp": nvt_grompp_result,
-            "nvt": nvt_result,
-            "npt-grompp": npt_grompp_result,
-            "npt": npt_result,
-            "production-grompp": production_grompp_result,
-            "production": production_result,
-            "pbc-nojump": pbc_nojump_result,
-            "pbc-center": pbc_center_result,
-            "fit": fit_result,
-            "analysis": analysis_result,
-            "thermodynamics": thermodynamics_result,
-        }
-        return WorkflowExecutionReport(
-            results=tuple(
-                WorkflowStepResult(
-                    step_id=step_id,
-                    status=WorkflowStepStatus.SUCCEEDED,
-                    log_path=step_results[step_id].log_path,
-                    elapsed_seconds=step_results[step_id].elapsed_seconds,
-                )
-                for step_id in graph.topological_order
-            ),
-            dependencies=graph.dependencies,
-            artifact_paths=kwargs["artifact_paths"],
-        )
-
-    monkeypatch.setattr("gmxflow.api.run_workflow_graph", fake_run_workflow_graph)
-
-    report = project.run(until="thermodynamics")
-
-    assert events == ["validate", "workspace", "workflow_graph"]
-    assert report.workspace is workspace
-    assert report.steps == (
-        step_result,
-        topology_result,
-        box_result,
-        solvate_result,
-        ions_grompp_result,
-        ions_result,
-        em_grompp_result,
-        em_result,
-        nvt_grompp_result,
-        nvt_result,
-        npt_grompp_result,
-        npt_result,
-        production_grompp_result,
-        production_result,
-        pbc_nojump_result,
-        pbc_center_result,
-        fit_result,
-        analysis_result,
-        thermodynamics_result,
-    )
-    assert report.results == (
-        workspace,
-        step_result,
-        topology_result,
-        box_result,
-        solvate_result,
-        ions_grompp_result,
-        ions_result,
-        em_grompp_result,
-        em_result,
-        nvt_grompp_result,
-        nvt_result,
-        npt_grompp_result,
-        npt_result,
-        production_grompp_result,
-        production_result,
-        pbc_nojump_result,
-        pbc_center_result,
-        fit_result,
-        analysis_result,
-        thermodynamics_result,
-    )
 
 
 def test_graph_prefix_through_plots_executes_and_resumes(
@@ -1785,25 +1471,3 @@ def test_small_molecule_analysis_steps_can_start_through_graph(
     assert [result.step_id for result in report.results] == [step_name]
     assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
     assert all(output.is_file() for output in selected_step.outputs)
-
-
-def test_run_rejects_unreleased_steps_before_workspace_setup(
-    tmp_path: Path, monkeypatch
-) -> None:
-    project = GmxFlowProject.open(_write_project_config(tmp_path / "api_project"))
-    workflow = project.workflow(until="prepare")
-    step = workflow.items[0]
-    assert isinstance(step, GromacsCommandStep)
-    step.id = "experimental-step"
-    monkeypatch.setattr("gmxflow.api.GmxFlowProject.validate", lambda self: None)
-    monkeypatch.setattr(
-        "gmxflow.api.GmxFlowProject.workflow",
-        lambda self, **kwargs: WorkflowSequence(step),
-    )
-    monkeypatch.setattr(
-        "gmxflow.api.run_workspace_setup",
-        lambda *args, **kwargs: pytest.fail("workspace setup must not run"),
-    )
-
-    with pytest.raises(ValueError, match="experimental-step"):
-        project.run()

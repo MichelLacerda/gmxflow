@@ -365,9 +365,10 @@ O estado do grafo e do CLI é gravado em `work/state.json`. Atendido em
 cada fatia. Definir e testar a compatibilidade de identificadores, opções de
 seleção de etapas e estado salvo para projetos existentes.
 
-**Implementação concluída:** `GmxFlowProject.run()` compõe o plano selecionado em
-um único `Sequence` e o executa pelo executor do grafo; não há mais divisão da
-execução por uma allowlist de nomes de etapa. `PrepareComplexStep` é usado em
+**Implementação original (interface depois substituída):** `GmxFlowProject.run()`
+compunha o plano selecionado em um único `Sequence` e o executava pelo executor
+do grafo; não havia divisão da execução por uma allowlist de nomes de etapa.
+`PrepareComplexStep` era usado em
 todos os perfis e, para `small_molecule`, `LigandTopologyStep`,
 `ProteinTopologyStep` e `AssembleComplexStep` também são implementações
 concretas do contrato `Step`. As etapas `box`, `solvate`, `ions-grompp` e
@@ -551,23 +552,24 @@ notebook por receita, a ausência de execução automática e a preservação de
 arquivos existentes. A receita smoke é identificada como teste de integração;
 nenhum resultado dela é apresentado como evidência científica.
 
-#### D. Unificar o caminho de execução, preservando a interface do CLI — migração inicial concluída
+#### D. Unificar o caminho de execução, preservando a interface do CLI — concluída
 
 - Adaptar o CLI para inspecionar e executar o mesmo workflow/grafo, mantendo
   `--project`, `--dry-run`, `--strict-inputs`, `--from-step` e `--until`, além
   das mensagens de progresso, logs e códigos de saída.
 - Fazer o dry-run apresentar os Steps e dependências do grafo; não construir
   outro plano paralelo só para imprimir comandos.
-- Substituir os adaptadores públicos duplicados (`project.run()`, callbacks e
-  `ExecutionReport` versus `WorkflowExecutionReport`) por uma única interface;
-  manter compatibilidade temporária apenas se a política de release exigir.
+- Usar uma única interface Python para compor e executar workflows: `workflow()`
+  seguido de `run_workflow()`, com callbacks e `WorkflowExecutionReport`.
 
 **Implementado nesta fatia:** `gmxflow run` constrói a composição canônica por
 `project.workflow()` e executa/dry-run pelo grafo via `project.run_workflow()`.
 `--project`, `--dry-run`, `--strict-inputs`, `--from-step` e `--until` foram
-preservados; o dry-run agora mostra dependências dos Steps. A unificação dos
-relatórios públicos e callbacks continua pendente. A mudança não altera
-comandos, parâmetros ou ordem científica.
+preservados; o dry-run agora mostra dependências dos Steps. O adaptador
+`project.run()`, seu `ExecutionReport` e os callbacks indexados foram removidos;
+`run_workflow()` é o único executor da API Python e apresenta
+`WorkflowExecutionReport`. A mudança não altera comandos, parâmetros ou ordem
+científica.
 
 #### E. Decidir e testar a migração do estado persistido — política definida; implementação inicial concluída
 

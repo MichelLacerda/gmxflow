@@ -84,12 +84,10 @@ Isso cria a pasta `meu_projeto/` no diretório atual, com `project.toml`, `proje
 
 Para limpar artefatos intermediários pelo próprio notebook, execute `project.clean()`. Por padrão, ele limpa `work/`, preservando os templates `.mdp`, os arquivos em `inputs/` e os resultados em `outputs/`. Use `project.clean(remove_templates=True)` para remover também os templates, ou `project.clean(all_work=True)` para descartar todo o conteúdo de `work/` e recriar suas pastas.
 
-### Projetos existentes e a API de workflow
+### Executar uma pipeline no notebook
 
-Projetos e notebooks anteriores que usam `project.run()` continuam suportados;
-não é necessário alterar `project.toml`, as entradas ou o código para continuar
-usando esse caminho. Para adotar a composição mostrada nos notebooks novos,
-troque a chamada de execução por:
+A execução da API Python é feita por uma pipeline explícita. Abra o projeto,
+obtenha os Steps definidos para ele e execute a composição:
 
 ```python
 workflow = project.workflow()

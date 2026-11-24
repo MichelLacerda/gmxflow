@@ -51,7 +51,6 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     assert "project.validate()" in notebook_code
     assert "workflow = project.workflow()" in notebook_code
     assert "execution_report = project.run_workflow(workflow)" in notebook_code
-    assert "execution_report = project.run()" not in notebook_code
     assert "project.show_execution(execution_report)" in notebook_code
     assert "project.show_report()" in notebook_code
     assert all(not cell.get("outputs") for cell in notebook["cells"])
