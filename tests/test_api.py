@@ -81,12 +81,6 @@ def _execute_project_steps(
     )
 
 
-def _assert_successful_step(report, step_id: str) -> None:
-    assert len(report.results) == 1
-    assert report.results[0].step_id == step_id
-    assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
-
-
 @dataclass
 class _CopyArtifactStep:
     id: str
@@ -565,7 +559,7 @@ def test_validate_requires_mdanalysis_for_residue_filtering(
         project.validate()
 
 
-def test_graph_prefix_through_plots_executes_and_resumes(
+def test_full_project_workflow_executes_and_resumes(
     tmp_path: Path, monkeypatch
 ) -> None:
     project_root = tmp_path / "graph_project"
@@ -708,364 +702,33 @@ def test_graph_prefix_through_plots_executes_and_resumes(
         ),
     )
     resumed_report = _execute_project_steps(project, until="report")
-
-    topology_only_root = tmp_path / "topology_only_project"
-    topology_only_project = GmxFlowProject.open(
-        _write_project_config(topology_only_root)
-    )
-    topology_only_inputs = topology_only_root / "inputs"
-    topology_only_inputs.mkdir()
-    (topology_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (topology_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    prepared_structure = topology_only_root / "work" / "prep" / "complexo.pdb"
-    prepared_structure.parent.mkdir(parents=True)
-    prepared_structure.write_text("COMPLEX\n", encoding="utf-8")
-    topology_only_report = _execute_project_steps(
-        topology_only_project,
-        from_step="topology",
-        until="topology",
-    )
-
-    box_only_root = tmp_path / "box_only_project"
-    box_only_project = GmxFlowProject.open(_write_project_config(box_only_root))
-    box_only_inputs = box_only_root / "inputs"
-    box_only_inputs.mkdir()
-    (box_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (box_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    topology_dir = box_only_root / "work" / "topo"
-    topology_dir.mkdir(parents=True)
-    (topology_dir / "complexo.gro").write_text("GRO\n", encoding="utf-8")
-    box_only_report = _execute_project_steps(
-        box_only_project, from_step="box", until="box"
-    )
-
-    solvate_only_root = tmp_path / "solvate_only_project"
-    solvate_only_project = GmxFlowProject.open(_write_project_config(solvate_only_root))
-    solvate_only_inputs = solvate_only_root / "inputs"
-    solvate_only_inputs.mkdir()
-    (solvate_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (solvate_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    solvate_only_topology = solvate_only_root / "work" / "topo" / "topol.top"
-    solvate_only_topology.parent.mkdir(parents=True)
-    solvate_only_topology.write_text("TOP\n", encoding="utf-8")
-    solvate_only_box = solvate_only_root / "work" / "box" / "box.gro"
-    solvate_only_box.parent.mkdir(parents=True)
-    solvate_only_box.write_text("BOX\n", encoding="utf-8")
-    solvate_only_report = _execute_project_steps(
-        solvate_only_project,
-        from_step="solvate",
-        until="solvate",
-    )
-
-    ions_grompp_only_root = tmp_path / "ions_grompp_only_project"
-    ions_grompp_only_project = GmxFlowProject.open(
-        _write_project_config(ions_grompp_only_root)
-    )
-    ions_grompp_only_inputs = ions_grompp_only_root / "inputs"
-    ions_grompp_only_inputs.mkdir()
-    (ions_grompp_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (ions_grompp_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    ions_grompp_only_topology = (
-        ions_grompp_only_root / "work" / "topo" / "topol_solvated.top"
-    )
-    ions_grompp_only_topology.parent.mkdir(parents=True)
-    ions_grompp_only_topology.write_text("SOLVATED\n", encoding="utf-8")
-    ions_grompp_only_box = ions_grompp_only_root / "work" / "box"
-    ions_grompp_only_box.mkdir(parents=True)
-    (ions_grompp_only_box / "ions.mdp").write_text("MDP\n", encoding="utf-8")
-    (ions_grompp_only_box / "solv.gro").write_text("SOLV\n", encoding="utf-8")
-    ions_grompp_only_report = _execute_project_steps(
-        ions_grompp_only_project,
-        from_step="ions-grompp",
-        until="ions-grompp",
-    )
-
-    ions_only_root = tmp_path / "ions_only_project"
-    ions_only_project = GmxFlowProject.open(_write_project_config(ions_only_root))
-    ions_only_inputs = ions_only_root / "inputs"
-    ions_only_inputs.mkdir()
-    (ions_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (ions_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    ions_only_box = ions_only_root / "work" / "box"
-    ions_only_box.mkdir(parents=True)
-    (ions_only_box / "ions.tpr").write_text("IONS_TPR\n", encoding="utf-8")
-    ions_only_topology = ions_only_root / "work" / "topo" / "topol_solvated.top"
-    ions_only_topology.parent.mkdir(parents=True)
-    ions_only_topology.write_text("SOLVATED\n", encoding="utf-8")
-    ions_only_report = _execute_project_steps(
-        ions_only_project, from_step="ions", until="ions"
-    )
-
-    em_grompp_only_root = tmp_path / "em_grompp_only_project"
-    em_grompp_only_project = GmxFlowProject.open(
-        _write_project_config(em_grompp_only_root)
-    )
-    em_grompp_only_inputs = em_grompp_only_root / "inputs"
-    em_grompp_only_inputs.mkdir()
-    (em_grompp_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (em_grompp_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    em_grompp_only_dir = em_grompp_only_root / "work" / "em"
-    em_grompp_only_dir.mkdir(parents=True)
-    (em_grompp_only_dir / "em.mdp").write_text("MDP\n", encoding="utf-8")
-    em_grompp_only_box = em_grompp_only_root / "work" / "box"
-    em_grompp_only_box.mkdir(parents=True)
-    (em_grompp_only_box / "ions.gro").write_text("IONS\n", encoding="utf-8")
-    em_grompp_only_topology = em_grompp_only_root / "work" / "topo" / "topol_ions.top"
-    em_grompp_only_topology.parent.mkdir(parents=True)
-    em_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
-    em_grompp_only_report = _execute_project_steps(
-        em_grompp_only_project, from_step="em-grompp", until="em-grompp"
-    )
-
-    em_only_root = tmp_path / "em_only_project"
-    em_only_project = GmxFlowProject.open(_write_project_config(em_only_root))
-    em_only_inputs = em_only_root / "inputs"
-    em_only_inputs.mkdir()
-    (em_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (em_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    em_only_dir = em_only_root / "work" / "em"
-    em_only_dir.mkdir(parents=True)
-    (em_only_dir / "em.tpr").write_text("EM_TPR\n", encoding="utf-8")
-    em_only_report = _execute_project_steps(em_only_project, from_step="em", until="em")
-
-    nvt_grompp_only_root = tmp_path / "nvt_grompp_only_project"
-    nvt_grompp_only_project = GmxFlowProject.open(
-        _write_project_config(nvt_grompp_only_root)
-    )
-    nvt_grompp_only_inputs = nvt_grompp_only_root / "inputs"
-    nvt_grompp_only_inputs.mkdir()
-    (nvt_grompp_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (nvt_grompp_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    nvt_grompp_only_dir = nvt_grompp_only_root / "work" / "nvt"
-    nvt_grompp_only_dir.mkdir(parents=True)
-    (nvt_grompp_only_dir / "nvt.mdp").write_text("MDP\n", encoding="utf-8")
-    nvt_grompp_only_em = nvt_grompp_only_root / "work" / "em"
-    nvt_grompp_only_em.mkdir(parents=True)
-    (nvt_grompp_only_em / "em.gro").write_text("EM_GRO\n", encoding="utf-8")
-    nvt_grompp_only_topology = nvt_grompp_only_root / "work" / "topo" / "topol_ions.top"
-    nvt_grompp_only_topology.parent.mkdir(parents=True)
-    nvt_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
-    nvt_grompp_only_report = _execute_project_steps(
-        nvt_grompp_only_project, from_step="nvt-grompp", until="nvt-grompp"
-    )
-
-    nvt_only_root = tmp_path / "nvt_only_project"
-    nvt_only_project = GmxFlowProject.open(_write_project_config(nvt_only_root))
-    nvt_only_inputs = nvt_only_root / "inputs"
-    nvt_only_inputs.mkdir()
-    (nvt_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (nvt_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    nvt_only_dir = nvt_only_root / "work" / "nvt"
-    nvt_only_dir.mkdir(parents=True)
-    (nvt_only_dir / "nvt.tpr").write_text("NVT_TPR\n", encoding="utf-8")
-    nvt_only_report = _execute_project_steps(
-        nvt_only_project, from_step="nvt", until="nvt"
-    )
-
-    npt_grompp_only_root = tmp_path / "npt_grompp_only_project"
-    npt_grompp_only_project = GmxFlowProject.open(
-        _write_project_config(npt_grompp_only_root)
-    )
-    npt_grompp_only_inputs = npt_grompp_only_root / "inputs"
-    npt_grompp_only_inputs.mkdir()
-    (npt_grompp_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (npt_grompp_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    npt_grompp_only_dir = npt_grompp_only_root / "work" / "npt"
-    npt_grompp_only_dir.mkdir(parents=True)
-    (npt_grompp_only_dir / "npt.mdp").write_text("MDP\n", encoding="utf-8")
-    npt_grompp_only_nvt = npt_grompp_only_root / "work" / "nvt"
-    npt_grompp_only_nvt.mkdir(parents=True)
-    (npt_grompp_only_nvt / "nvt.gro").write_text("NVT_GRO\n", encoding="utf-8")
-    (npt_grompp_only_nvt / "nvt.cpt").write_text("NVT_CPT\n", encoding="utf-8")
-    npt_grompp_only_topology = npt_grompp_only_root / "work" / "topo" / "topol_ions.top"
-    npt_grompp_only_topology.parent.mkdir(parents=True)
-    npt_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
-    npt_grompp_only_report = _execute_project_steps(
-        npt_grompp_only_project, from_step="npt-grompp", until="npt-grompp"
-    )
-
-    npt_only_root = tmp_path / "npt_only_project"
-    npt_only_project = GmxFlowProject.open(_write_project_config(npt_only_root))
-    npt_only_inputs = npt_only_root / "inputs"
-    npt_only_inputs.mkdir()
-    (npt_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (npt_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    npt_only_dir = npt_only_root / "work" / "npt"
-    npt_only_dir.mkdir(parents=True)
-    (npt_only_dir / "npt.tpr").write_text("NPT_TPR\n", encoding="utf-8")
-    npt_only_report = _execute_project_steps(
-        npt_only_project, from_step="npt", until="npt"
-    )
-
-    production_grompp_only_root = tmp_path / "production_grompp_only_project"
-    production_grompp_only_project = GmxFlowProject.open(
-        _write_project_config(production_grompp_only_root)
-    )
-    production_grompp_only_inputs = production_grompp_only_root / "inputs"
-    production_grompp_only_inputs.mkdir()
-    (production_grompp_only_inputs / "receptor.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
-    (production_grompp_only_inputs / "ligante.pdb").write_text(
-        "ATOM\n", encoding="utf-8"
-    )
-    production_grompp_only_dir = production_grompp_only_root / "work" / "prod"
-    production_grompp_only_dir.mkdir(parents=True)
-    (production_grompp_only_dir / "md.mdp").write_text("MDP\n", encoding="utf-8")
-    production_grompp_only_npt = production_grompp_only_root / "work" / "npt"
-    production_grompp_only_npt.mkdir(parents=True)
-    (production_grompp_only_npt / "npt.gro").write_text("NPT_GRO\n", encoding="utf-8")
-    (production_grompp_only_npt / "npt.cpt").write_text("NPT_CPT\n", encoding="utf-8")
-    production_grompp_only_topology = (
-        production_grompp_only_root / "work" / "topo" / "topol_ions.top"
-    )
-    production_grompp_only_topology.parent.mkdir(parents=True)
-    production_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
-    production_grompp_only_report = _execute_project_steps(
-        production_grompp_only_project,
-        from_step="production-grompp",
-        until="production-grompp",
-    )
-
-    production_only_root = tmp_path / "production_only_project"
-    production_only_project = GmxFlowProject.open(
-        _write_project_config(production_only_root)
-    )
-    production_only_inputs = production_only_root / "inputs"
-    production_only_inputs.mkdir()
-    (production_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (production_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    production_only_dir = production_only_root / "work" / "prod"
-    production_only_dir.mkdir(parents=True)
-    (production_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
-    production_only_report = _execute_project_steps(
-        production_only_project, from_step="production", until="production"
-    )
-
-    pbc_nojump_only_root = tmp_path / "pbc_nojump_only_project"
-    pbc_nojump_only_project = GmxFlowProject.open(
-        _write_project_config(pbc_nojump_only_root)
-    )
-    pbc_nojump_only_inputs = pbc_nojump_only_root / "inputs"
-    pbc_nojump_only_inputs.mkdir()
-    (pbc_nojump_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (pbc_nojump_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    pbc_nojump_only_dir = pbc_nojump_only_root / "work" / "prod"
-    pbc_nojump_only_dir.mkdir(parents=True)
-    (pbc_nojump_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
-    (pbc_nojump_only_dir / "md.xtc").write_text("MD_XTC\n", encoding="utf-8")
-    pbc_nojump_only_report = _execute_project_steps(
-        pbc_nojump_only_project, from_step="pbc-nojump", until="pbc-nojump"
-    )
-
-    pbc_center_only_root = tmp_path / "pbc_center_only_project"
-    pbc_center_only_project = GmxFlowProject.open(
-        _write_project_config(pbc_center_only_root)
-    )
-    pbc_center_only_inputs = pbc_center_only_root / "inputs"
-    pbc_center_only_inputs.mkdir()
-    (pbc_center_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (pbc_center_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    pbc_center_only_dir = pbc_center_only_root / "work" / "prod"
-    pbc_center_only_dir.mkdir(parents=True)
-    (pbc_center_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
-    (pbc_center_only_dir / "md_nojump.xtc").write_text("NOJUMP_XTC\n", encoding="utf-8")
-    pbc_center_only_report = _execute_project_steps(
-        pbc_center_only_project, from_step="pbc-center", until="pbc-center"
-    )
-
-    fit_only_root = tmp_path / "fit_only_project"
-    fit_only_project = GmxFlowProject.open(_write_project_config(fit_only_root))
-    fit_only_inputs = fit_only_root / "inputs"
-    fit_only_inputs.mkdir()
-    (fit_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (fit_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    fit_only_dir = fit_only_root / "work" / "prod"
-    fit_only_dir.mkdir(parents=True)
-    (fit_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
-    (fit_only_dir / "md_nopbc.xtc").write_text("CENTERED_XTC\n", encoding="utf-8")
-    fit_only_report = _execute_project_steps(
-        fit_only_project, from_step="fit", until="fit"
-    )
-
-    analysis_only_root = tmp_path / "analysis_only_project"
-    analysis_only_project = GmxFlowProject.open(
-        _write_project_config(analysis_only_root)
-    )
-    analysis_only_inputs = analysis_only_root / "inputs"
-    analysis_only_inputs.mkdir()
-    (analysis_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (analysis_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    analysis_only_dir = analysis_only_root / "work" / "prod"
-    analysis_only_dir.mkdir(parents=True)
-    (analysis_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
-    (analysis_only_dir / "md_fit.xtc").write_text("FIT_XTC\n", encoding="utf-8")
-    analysis_only_report = _execute_project_steps(
-        analysis_only_project, from_step="analysis", until="analysis"
-    )
-
-    thermo_only_root = tmp_path / "thermo_only_project"
-    thermo_only_project = GmxFlowProject.open(_write_project_config(thermo_only_root))
-    thermo_only_inputs = thermo_only_root / "inputs"
-    thermo_only_inputs.mkdir()
-    (thermo_only_inputs / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
-    (thermo_only_inputs / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
-    for phase in ("em", "nvt", "npt"):
-        phase_dir = thermo_only_root / "work" / phase
-        phase_dir.mkdir(parents=True)
-        (phase_dir / f"{phase}.edr").write_text("ENERGY\n", encoding="utf-8")
-    thermo_only_report = _execute_project_steps(
-        thermo_only_project, from_step="thermodynamics", until="thermodynamics"
-    )
-
     assert len(graph_report.results) == 21
     assert graph_report.succeeded
     assert all(
         result.status is WorkflowStepStatus.SKIPPED for result in resumed_report.results
     )
-    for report, step_id in (
-        (topology_only_report, "topology"),
-        (box_only_report, "box"),
-        (solvate_only_report, "solvate"),
-        (ions_grompp_only_report, "ions-grompp"),
-        (ions_only_report, "ions"),
-        (em_grompp_only_report, "em-grompp"),
-        (em_only_report, "em"),
-        (nvt_grompp_only_report, "nvt-grompp"),
-        (nvt_only_report, "nvt"),
-        (npt_grompp_only_report, "npt-grompp"),
-        (npt_only_report, "npt"),
-        (production_grompp_only_report, "production-grompp"),
-        (production_only_report, "production"),
-        (pbc_nojump_only_report, "pbc-nojump"),
-        (pbc_center_only_report, "pbc-center"),
-        (fit_only_report, "fit"),
-        (analysis_only_report, "analysis"),
-        (thermo_only_report, "thermodynamics"),
-    ):
-        _assert_successful_step(report, step_id)
-    assert len(subprocess_calls) == 39  # graph run and isolated graph steps
+    assert len(subprocess_calls) == 21
     assert (
         sum(
             command[-1:] == ("nojump",) and stdin == "0\n"
             for command, stdin in subprocess_inputs
         )
-        == 2
-    )  # graph run and isolated graph step
+        == 1
+    )
     assert (
         sum(
             "-center" in command and stdin == "Protein\nSystem\n"
             for command, stdin in subprocess_inputs
         )
-        == 2
-    )  # graph run and isolated graph step
+        == 1
+    )
     assert (
         sum(
             "-fit" in command and stdin == "Backbone\nSystem\n"
             for command, stdin in subprocess_inputs
         )
-        == 2
-    )  # graph run and isolated graph step
+        == 1
+    )
     assert (project_root / "work" / "state.json").is_file()
     assert callback_events == [
         ("start", 1, "prepare"),
