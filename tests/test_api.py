@@ -68,6 +68,28 @@ def _step_views(
     ]
 
 
+def _execute_project_steps(
+    project: GmxFlowProject,
+    *,
+    from_step: str | None = None,
+    until: str | None = None,
+    on_step_start=None,
+    on_step_done=None,
+):
+    workflow = project.workflow(from_step=from_step, until=until)
+    return project.run_workflow(
+        workflow,
+        on_step_start=on_step_start,
+        on_step_done=on_step_done,
+    )
+
+
+def _assert_successful_step(report, step_id: str) -> None:
+    assert len(report.results) == 1
+    assert report.results[0].step_id == step_id
+    assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
+
+
 @dataclass
 class _CopyArtifactStep:
     id: str
@@ -614,9 +636,7 @@ def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) ->
     )
     ions_grompp_result = StepResult(
         step_name="ions-grompp",
-        command=runtime_command(
-            _step_views(project, until="ions-grompp")[4].command
-        ),
+        command=runtime_command(_step_views(project, until="ions-grompp")[4].command),
         workdir=project.root / "work" / "box",
         log_path=project.root / "work" / "logs" / "05_ions-grompp.log",
         returncode=0,
@@ -632,9 +652,7 @@ def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) ->
     )
     em_grompp_result = StepResult(
         step_name="em-grompp",
-        command=runtime_command(
-            _step_views(project, until="em-grompp")[6].command
-        ),
+        command=runtime_command(_step_views(project, until="em-grompp")[6].command),
         workdir=project.root / "work" / "em",
         log_path=project.root / "work" / "logs" / "07_em-grompp.log",
         returncode=0,
@@ -650,9 +668,7 @@ def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) ->
     )
     nvt_grompp_result = StepResult(
         step_name="nvt-grompp",
-        command=runtime_command(
-            _step_views(project, until="nvt-grompp")[8].command
-        ),
+        command=runtime_command(_step_views(project, until="nvt-grompp")[8].command),
         workdir=project.root / "work" / "nvt",
         log_path=project.root / "work" / "logs" / "09_nvt-grompp.log",
         returncode=0,
@@ -668,9 +684,7 @@ def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) ->
     )
     npt_grompp_result = StepResult(
         step_name="npt-grompp",
-        command=runtime_command(
-            _step_views(project, until="npt-grompp")[10].command
-        ),
+        command=runtime_command(_step_views(project, until="npt-grompp")[10].command),
         workdir=project.root / "work" / "npt",
         log_path=project.root / "work" / "logs" / "11_npt-grompp.log",
         returncode=0,
@@ -696,9 +710,7 @@ def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) ->
     )
     production_result = StepResult(
         step_name="production",
-        command=runtime_command(
-            _step_views(project, until="production")[13].command
-        ),
+        command=runtime_command(_step_views(project, until="production")[13].command),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "14_production.log",
         returncode=0,
@@ -706,9 +718,7 @@ def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) ->
     )
     pbc_nojump_result = StepResult(
         step_name="pbc-nojump",
-        command=runtime_command(
-            _step_views(project, until="pbc-nojump")[14].command
-        ),
+        command=runtime_command(_step_views(project, until="pbc-nojump")[14].command),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "15_pbc-nojump.log",
         returncode=0,
@@ -716,9 +726,7 @@ def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) ->
     )
     pbc_center_result = StepResult(
         step_name="pbc-center",
-        command=runtime_command(
-            _step_views(project, until="pbc-center")[15].command
-        ),
+        command=runtime_command(_step_views(project, until="pbc-center")[15].command),
         workdir=project.root / "work" / "prod",
         log_path=project.root / "work" / "logs" / "16_pbc-center.log",
         returncode=0,
@@ -734,9 +742,7 @@ def test_run_validates_then_uses_shared_executor(tmp_path: Path, monkeypatch) ->
     )
     analysis_result = StepResult(
         step_name="analysis",
-        command=runtime_command(
-            _step_views(project, until="analysis")[17].command
-        ),
+        command=runtime_command(_step_views(project, until="analysis")[17].command),
         workdir=project.root / "work" / "analysis",
         log_path=project.root / "work" / "logs" / "18_analysis.log",
         returncode=0,
@@ -941,9 +947,7 @@ def test_graph_prefix_through_plots_executes_and_resumes(
         elif "thermodynamics" in command:
             output_content = {
                 Path(output).name: "THERMODYNAMICS\n"
-                for output in _step_views(project, until="thermodynamics")[
-                    -1
-                ].outputs
+                for output in _step_views(project, until="thermodynamics")[-1].outputs
             }
         elif "plot-analysis" in command:
             output_content = {
@@ -1010,17 +1014,22 @@ def test_graph_prefix_through_plots_executes_and_resumes(
         ),
     )
 
+    step_indexes = {
+        step.name: index
+        for index, step in enumerate(_step_views(project, until="report"), start=1)
+    }
     callback_events: list[tuple[str, int, str]] = []
-    graph_report = project.run(
+    graph_report = _execute_project_steps(
+        project,
         until="report",
-        on_step_start=lambda index, step: callback_events.append(
-            ("start", index, step.id)
+        on_step_start=lambda step: callback_events.append(
+            ("start", step_indexes[step.id], step.id)
         ),
-        on_step_done=lambda index, result: callback_events.append(
-            ("done", index, result.step_name)
+        on_step_done=lambda result: callback_events.append(
+            ("done", step_indexes[result.step_id], result.step_id)
         ),
     )
-    resumed_report = project.run(until="report")
+    resumed_report = _execute_project_steps(project, until="report")
 
     topology_only_root = tmp_path / "topology_only_project"
     topology_only_project = GmxFlowProject.open(
@@ -1033,7 +1042,8 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     prepared_structure = topology_only_root / "work" / "prep" / "complexo.pdb"
     prepared_structure.parent.mkdir(parents=True)
     prepared_structure.write_text("COMPLEX\n", encoding="utf-8")
-    topology_only_report = topology_only_project.run(
+    topology_only_report = _execute_project_steps(
+        topology_only_project,
         from_step="topology",
         until="topology",
     )
@@ -1047,7 +1057,9 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     topology_dir = box_only_root / "work" / "topo"
     topology_dir.mkdir(parents=True)
     (topology_dir / "complexo.gro").write_text("GRO\n", encoding="utf-8")
-    box_only_report = box_only_project.run(from_step="box", until="box")
+    box_only_report = _execute_project_steps(
+        box_only_project, from_step="box", until="box"
+    )
 
     solvate_only_root = tmp_path / "solvate_only_project"
     solvate_only_project = GmxFlowProject.open(_write_project_config(solvate_only_root))
@@ -1061,7 +1073,8 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     solvate_only_box = solvate_only_root / "work" / "box" / "box.gro"
     solvate_only_box.parent.mkdir(parents=True)
     solvate_only_box.write_text("BOX\n", encoding="utf-8")
-    solvate_only_report = solvate_only_project.run(
+    solvate_only_report = _execute_project_steps(
+        solvate_only_project,
         from_step="solvate",
         until="solvate",
     )
@@ -1083,7 +1096,8 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     ions_grompp_only_box.mkdir(parents=True)
     (ions_grompp_only_box / "ions.mdp").write_text("MDP\n", encoding="utf-8")
     (ions_grompp_only_box / "solv.gro").write_text("SOLV\n", encoding="utf-8")
-    ions_grompp_only_report = ions_grompp_only_project.run(
+    ions_grompp_only_report = _execute_project_steps(
+        ions_grompp_only_project,
         from_step="ions-grompp",
         until="ions-grompp",
     )
@@ -1100,7 +1114,9 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     ions_only_topology = ions_only_root / "work" / "topo" / "topol_solvated.top"
     ions_only_topology.parent.mkdir(parents=True)
     ions_only_topology.write_text("SOLVATED\n", encoding="utf-8")
-    ions_only_report = ions_only_project.run(from_step="ions", until="ions")
+    ions_only_report = _execute_project_steps(
+        ions_only_project, from_step="ions", until="ions"
+    )
 
     em_grompp_only_root = tmp_path / "em_grompp_only_project"
     em_grompp_only_project = GmxFlowProject.open(
@@ -1119,8 +1135,8 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     em_grompp_only_topology = em_grompp_only_root / "work" / "topo" / "topol_ions.top"
     em_grompp_only_topology.parent.mkdir(parents=True)
     em_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
-    em_grompp_only_report = em_grompp_only_project.run(
-        from_step="em-grompp", until="em-grompp"
+    em_grompp_only_report = _execute_project_steps(
+        em_grompp_only_project, from_step="em-grompp", until="em-grompp"
     )
 
     em_only_root = tmp_path / "em_only_project"
@@ -1132,7 +1148,7 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     em_only_dir = em_only_root / "work" / "em"
     em_only_dir.mkdir(parents=True)
     (em_only_dir / "em.tpr").write_text("EM_TPR\n", encoding="utf-8")
-    em_only_report = em_only_project.run(from_step="em", until="em")
+    em_only_report = _execute_project_steps(em_only_project, from_step="em", until="em")
 
     nvt_grompp_only_root = tmp_path / "nvt_grompp_only_project"
     nvt_grompp_only_project = GmxFlowProject.open(
@@ -1151,8 +1167,8 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     nvt_grompp_only_topology = nvt_grompp_only_root / "work" / "topo" / "topol_ions.top"
     nvt_grompp_only_topology.parent.mkdir(parents=True)
     nvt_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
-    nvt_grompp_only_report = nvt_grompp_only_project.run(
-        from_step="nvt-grompp", until="nvt-grompp"
+    nvt_grompp_only_report = _execute_project_steps(
+        nvt_grompp_only_project, from_step="nvt-grompp", until="nvt-grompp"
     )
 
     nvt_only_root = tmp_path / "nvt_only_project"
@@ -1164,7 +1180,9 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     nvt_only_dir = nvt_only_root / "work" / "nvt"
     nvt_only_dir.mkdir(parents=True)
     (nvt_only_dir / "nvt.tpr").write_text("NVT_TPR\n", encoding="utf-8")
-    nvt_only_report = nvt_only_project.run(from_step="nvt", until="nvt")
+    nvt_only_report = _execute_project_steps(
+        nvt_only_project, from_step="nvt", until="nvt"
+    )
 
     npt_grompp_only_root = tmp_path / "npt_grompp_only_project"
     npt_grompp_only_project = GmxFlowProject.open(
@@ -1184,8 +1202,8 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     npt_grompp_only_topology = npt_grompp_only_root / "work" / "topo" / "topol_ions.top"
     npt_grompp_only_topology.parent.mkdir(parents=True)
     npt_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
-    npt_grompp_only_report = npt_grompp_only_project.run(
-        from_step="npt-grompp", until="npt-grompp"
+    npt_grompp_only_report = _execute_project_steps(
+        npt_grompp_only_project, from_step="npt-grompp", until="npt-grompp"
     )
 
     npt_only_root = tmp_path / "npt_only_project"
@@ -1197,7 +1215,9 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     npt_only_dir = npt_only_root / "work" / "npt"
     npt_only_dir.mkdir(parents=True)
     (npt_only_dir / "npt.tpr").write_text("NPT_TPR\n", encoding="utf-8")
-    npt_only_report = npt_only_project.run(from_step="npt", until="npt")
+    npt_only_report = _execute_project_steps(
+        npt_only_project, from_step="npt", until="npt"
+    )
 
     production_grompp_only_root = tmp_path / "production_grompp_only_project"
     production_grompp_only_project = GmxFlowProject.open(
@@ -1223,8 +1243,10 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     )
     production_grompp_only_topology.parent.mkdir(parents=True)
     production_grompp_only_topology.write_text("IONIZED\n", encoding="utf-8")
-    production_grompp_only_report = production_grompp_only_project.run(
-        from_step="production-grompp", until="production-grompp"
+    production_grompp_only_report = _execute_project_steps(
+        production_grompp_only_project,
+        from_step="production-grompp",
+        until="production-grompp",
     )
 
     production_only_root = tmp_path / "production_only_project"
@@ -1238,8 +1260,8 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     production_only_dir = production_only_root / "work" / "prod"
     production_only_dir.mkdir(parents=True)
     (production_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
-    production_only_report = production_only_project.run(
-        from_step="production", until="production"
+    production_only_report = _execute_project_steps(
+        production_only_project, from_step="production", until="production"
     )
 
     pbc_nojump_only_root = tmp_path / "pbc_nojump_only_project"
@@ -1254,8 +1276,8 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     pbc_nojump_only_dir.mkdir(parents=True)
     (pbc_nojump_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
     (pbc_nojump_only_dir / "md.xtc").write_text("MD_XTC\n", encoding="utf-8")
-    pbc_nojump_only_report = pbc_nojump_only_project.run(
-        from_step="pbc-nojump", until="pbc-nojump"
+    pbc_nojump_only_report = _execute_project_steps(
+        pbc_nojump_only_project, from_step="pbc-nojump", until="pbc-nojump"
     )
 
     pbc_center_only_root = tmp_path / "pbc_center_only_project"
@@ -1270,8 +1292,8 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     pbc_center_only_dir.mkdir(parents=True)
     (pbc_center_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
     (pbc_center_only_dir / "md_nojump.xtc").write_text("NOJUMP_XTC\n", encoding="utf-8")
-    pbc_center_only_report = pbc_center_only_project.run(
-        from_step="pbc-center", until="pbc-center"
+    pbc_center_only_report = _execute_project_steps(
+        pbc_center_only_project, from_step="pbc-center", until="pbc-center"
     )
 
     fit_only_root = tmp_path / "fit_only_project"
@@ -1284,7 +1306,9 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     fit_only_dir.mkdir(parents=True)
     (fit_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
     (fit_only_dir / "md_nopbc.xtc").write_text("CENTERED_XTC\n", encoding="utf-8")
-    fit_only_report = fit_only_project.run(from_step="fit", until="fit")
+    fit_only_report = _execute_project_steps(
+        fit_only_project, from_step="fit", until="fit"
+    )
 
     analysis_only_root = tmp_path / "analysis_only_project"
     analysis_only_project = GmxFlowProject.open(
@@ -1298,8 +1322,8 @@ def test_graph_prefix_through_plots_executes_and_resumes(
     analysis_only_dir.mkdir(parents=True)
     (analysis_only_dir / "md.tpr").write_text("MD_TPR\n", encoding="utf-8")
     (analysis_only_dir / "md_fit.xtc").write_text("FIT_XTC\n", encoding="utf-8")
-    analysis_only_report = analysis_only_project.run(
-        from_step="analysis", until="analysis"
+    analysis_only_report = _execute_project_steps(
+        analysis_only_project, from_step="analysis", until="analysis"
     )
 
     thermo_only_root = tmp_path / "thermo_only_project"
@@ -1312,49 +1336,36 @@ def test_graph_prefix_through_plots_executes_and_resumes(
         phase_dir = thermo_only_root / "work" / phase
         phase_dir.mkdir(parents=True)
         (phase_dir / f"{phase}.edr").write_text("ENERGY\n", encoding="utf-8")
-    thermo_only_report = thermo_only_project.run(
-        from_step="thermodynamics", until="thermodynamics"
+    thermo_only_report = _execute_project_steps(
+        thermo_only_project, from_step="thermodynamics", until="thermodynamics"
     )
 
-    assert len(graph_report.steps) == 21
-    assert all(result.returncode == 0 for result in graph_report.steps)
-    assert all(result.skipped for result in resumed_report.steps)
-    assert topology_only_report.steps[0].step_name == "topology"
-    assert topology_only_report.steps[0].returncode == 0
-    assert box_only_report.steps[0].step_name == "box"
-    assert box_only_report.steps[0].returncode == 0
-    assert solvate_only_report.steps[0].step_name == "solvate"
-    assert solvate_only_report.steps[0].returncode == 0
-    assert ions_grompp_only_report.steps[0].step_name == "ions-grompp"
-    assert ions_grompp_only_report.steps[0].returncode == 0
-    assert ions_only_report.steps[0].step_name == "ions"
-    assert ions_only_report.steps[0].returncode == 0
-    assert em_grompp_only_report.steps[0].step_name == "em-grompp"
-    assert em_grompp_only_report.steps[0].returncode == 0
-    assert em_only_report.steps[0].step_name == "em"
-    assert em_only_report.steps[0].returncode == 0
-    assert nvt_grompp_only_report.steps[0].step_name == "nvt-grompp"
-    assert nvt_grompp_only_report.steps[0].returncode == 0
-    assert nvt_only_report.steps[0].step_name == "nvt"
-    assert nvt_only_report.steps[0].returncode == 0
-    assert npt_grompp_only_report.steps[0].step_name == "npt-grompp"
-    assert npt_grompp_only_report.steps[0].returncode == 0
-    assert npt_only_report.steps[0].step_name == "npt"
-    assert npt_only_report.steps[0].returncode == 0
-    assert production_grompp_only_report.steps[0].step_name == "production-grompp"
-    assert production_grompp_only_report.steps[0].returncode == 0
-    assert production_only_report.steps[0].step_name == "production"
-    assert production_only_report.steps[0].returncode == 0
-    assert pbc_nojump_only_report.steps[0].step_name == "pbc-nojump"
-    assert pbc_nojump_only_report.steps[0].returncode == 0
-    assert pbc_center_only_report.steps[0].step_name == "pbc-center"
-    assert pbc_center_only_report.steps[0].returncode == 0
-    assert fit_only_report.steps[0].step_name == "fit"
-    assert fit_only_report.steps[0].returncode == 0
-    assert analysis_only_report.steps[0].step_name == "analysis"
-    assert analysis_only_report.steps[0].returncode == 0
-    assert thermo_only_report.steps[0].step_name == "thermodynamics"
-    assert thermo_only_report.steps[0].returncode == 0
+    assert len(graph_report.results) == 21
+    assert graph_report.succeeded
+    assert all(
+        result.status is WorkflowStepStatus.SKIPPED for result in resumed_report.results
+    )
+    for report, step_id in (
+        (topology_only_report, "topology"),
+        (box_only_report, "box"),
+        (solvate_only_report, "solvate"),
+        (ions_grompp_only_report, "ions-grompp"),
+        (ions_only_report, "ions"),
+        (em_grompp_only_report, "em-grompp"),
+        (em_only_report, "em"),
+        (nvt_grompp_only_report, "nvt-grompp"),
+        (nvt_only_report, "nvt"),
+        (npt_grompp_only_report, "npt-grompp"),
+        (npt_only_report, "npt"),
+        (production_grompp_only_report, "production-grompp"),
+        (production_only_report, "production"),
+        (pbc_nojump_only_report, "pbc-nojump"),
+        (pbc_center_only_report, "pbc-center"),
+        (fit_only_report, "fit"),
+        (analysis_only_report, "analysis"),
+        (thermo_only_report, "thermodynamics"),
+    ):
+        _assert_successful_step(report, step_id)
     assert len(subprocess_calls) == 39  # graph run and isolated graph steps
     assert (
         sum(
@@ -1478,9 +1489,7 @@ def test_interaction_energy_runs_through_graph_when_enabled(
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
-        for output in _step_views(project, until="interaction-energy")[
-            -1
-        ].outputs:
+        for output in _step_views(project, until="interaction-energy")[-1].outputs:
             (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -1545,8 +1554,7 @@ def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> No
     assert report.results[0].step_id == "sasa"
     assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
     assert all(
-        output.is_file()
-        for output in _step_views(project, until="sasa")[-1].outputs
+        output.is_file() for output in _step_views(project, until="sasa")[-1].outputs
     )
 
 
