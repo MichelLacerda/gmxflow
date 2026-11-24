@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from gmxflow.api import GmxFlowProject
+from gmxflow.executor import WorkflowStepStatus
 
 
 @pytest.mark.gromacs
@@ -33,17 +34,18 @@ def test_smoke_project_runs_and_resumes_in_an_isolated_copy(
     )
     project = GmxFlowProject.open(project_dir / "project.toml")
 
-    first_run = project.run()
-    second_run = project.run()
+    workflow = project.workflow()
+    first_run = project.run_workflow(workflow)
+    second_run = project.run_workflow(workflow)
 
     assert first_run.results
-    assert all(result.succeeded for result in first_run.results)
+    assert first_run.succeeded
     assert all(result.log_path.is_file() for result in first_run.results)
-    assert all(not result.skipped for result in first_run.steps)
-    assert all(result.skipped for result in second_run.steps)
     assert all(
-        "skipped: true" in result.log_path.read_text(encoding="utf-8")
-        for result in second_run.steps
+        result.status is WorkflowStepStatus.SUCCEEDED for result in first_run.results
+    )
+    assert all(
+        result.status is WorkflowStepStatus.SKIPPED for result in second_run.results
     )
     assert all(
         (project_dir / "work" / "analysis" / filename).is_file()
