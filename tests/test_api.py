@@ -23,14 +23,8 @@ from gmxflow.pipeline import (
 @dataclass(frozen=True)
 class _CommandStepView:
     name: str
-    description: str
-    workdir: Path
-    command: list[str]
     inputs: list[Path]
     outputs: list[Path]
-    stdin: str | None
-    env: Mapping[str, str]
-    state: Mapping[str, object]
 
 
 def _write_project_config(project_dir: Path) -> Path:
@@ -51,34 +45,12 @@ def _step_views(
     return [
         _CommandStepView(
             name=step.id,
-            description=step.name,
-            workdir=step.workdir,
-            command=list(step.command),
             inputs=list(step.input_paths),
             outputs=list(step.output_paths),
-            stdin=step.stdin,
-            env=step.env,
-            state=step.state,
         )
         for step in workflow.items
         if isinstance(step, GromacsCommandStep)
     ]
-
-
-def _execute_project_steps(
-    project: GmxFlowProject,
-    *,
-    from_step: str | None = None,
-    until: str | None = None,
-    on_step_start=None,
-    on_step_done=None,
-):
-    workflow = project.workflow(from_step=from_step, until=until)
-    return project.run_workflow(
-        workflow,
-        on_step_start=on_step_start,
-        on_step_done=on_step_done,
-    )
 
 
 @dataclass
@@ -691,9 +663,8 @@ def test_full_project_workflow_executes_and_resumes(
         for index, step in enumerate(_step_views(project, until="report"), start=1)
     }
     callback_events: list[tuple[str, int, str]] = []
-    graph_report = _execute_project_steps(
-        project,
-        until="report",
+    graph_report = project.run_workflow(
+        project.workflow(until="report"),
         on_step_start=lambda step: callback_events.append(
             ("start", step_indexes[step.id], step.id)
         ),
@@ -701,7 +672,7 @@ def test_full_project_workflow_executes_and_resumes(
             ("done", step_indexes[result.step_id], result.step_id)
         ),
     )
-    resumed_report = _execute_project_steps(project, until="report")
+    resumed_report = project.run_workflow(project.workflow(until="report"))
     assert len(graph_report.results) == 21
     assert graph_report.succeeded
     assert all(
