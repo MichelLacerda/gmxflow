@@ -101,7 +101,7 @@ def test_create_generates_and_opens_project(tmp_path: Path) -> None:
     assert (project.root / "README.md").is_file()
 
 
-def test_project_workflow_uses_shared_default_state_file(tmp_path: Path) -> None:
+def test_project_workflow_uses_default_state_file(tmp_path: Path) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "default_state"))
     source_path = project.root / "inputs" / "source.txt"
     source_path.parent.mkdir()
@@ -121,8 +121,6 @@ def test_project_workflow_uses_shared_default_state_file(tmp_path: Path) -> None
 
     assert report.succeeded
     assert (project.root / "work" / "state.json").is_file()
-    assert not (project.root / "work" / "project-workflow.json").exists()
-    assert not (project.root / "work" / "workflow_state.json").exists()
 
 
 def test_project_workflow_builds_concrete_steps_for_composition(

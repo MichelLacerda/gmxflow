@@ -483,9 +483,9 @@ composição e um só executor. Não apagar código por contagem de linhas: cada
 remoção precisa decorrer de uma dependência eliminada e de testes substitutos
 que preservem comportamento, retomada e segurança dos arquivos.
 
-**Auditoria atual:** `GmxFlowProject.workflow()`, `validate()` e `run()` usam
-Steps concretos. A API e o CLI constroem e executam pelo grafo; o método
-intermediário `build_workflow(..., selected_steps=...)`, o método redundante
+**Auditoria atual:** `GmxFlowProject.workflow()`, `validate()` e
+`run_workflow()` usam Steps concretos. A API e o CLI constroem e executam pelo
+grafo; o método intermediário `build_workflow(..., selected_steps=...)`, o método redundante
 `project.plan()`, os executores lineares e a projeção `PipelineStep`/
 `build_pipeline()` foram removidos. Os testes de comandos agora inspecionam
 diretamente os Steps concretos.
@@ -593,6 +593,17 @@ removidos por essa mudança.
 dos testes exclusivos ou comparativos da implementação linear. A suíte mantém
 verificações de comandos, artefatos, execução pelo grafo, retomada, seleção e
 logs com subprocessos simulados.
+
+Na limpeza de `tests/test_api.py`, também foram removidos os cenários isolados
+redundantes de execução por etapa, o helper que ocultava a composição pública e
+um dry-run customizado duplicado. O teste ponta a ponta e os casos de composição,
+dry-run e retomada continuam cobrindo a API atual; referências a nomes de estado
+que a implementação não usa foram retiradas.
+
+Nesta revisão, a suíte completa (190 testes), Ruff e o teste smoke com GROMACS
+passaram. `mypy src` ainda reporta 25 erros em código vendor e nos módulos
+`report.py`, `project.py` e `cli.py`; por isso o aceite final desta etapa segue
+pendente.
 
 **Aceite final:** busca de referências confirma que não há chamadas/imports do
 executor antigo; testes completos, lint, tipos e smoke de integração aprovados;
