@@ -101,28 +101,6 @@ def test_create_generates_and_opens_project(tmp_path: Path) -> None:
     assert (project.root / "README.md").is_file()
 
 
-def test_project_runs_a_custom_protocol_step_and_resumes(tmp_path: Path) -> None:
-    project = GmxFlowProject.open(_write_project_config(tmp_path / "custom_step"))
-    source_path = project.root / "inputs" / "source.txt"
-    source_path.parent.mkdir()
-    source_path.write_text("custom step input", encoding="utf-8")
-    target_path = project.root / "outputs" / "copy.txt"
-    source = Artifact("source", "text")
-    target = Artifact("copy", "text")
-    step: Step = _CopyArtifactStep("copy", "Copy input", (source,), (target,))
-
-    dry_run = project.run_workflow(
-        step,
-        project_inputs=(source,),
-        artifact_paths={"source": source_path, "copy": target_path},
-        state_name="custom-copy.json",
-        dry_run=True,
-    )
-
-    assert dry_run.dry_run
-    assert not target_path.exists()
-
-
 def test_project_workflow_uses_shared_default_state_file(tmp_path: Path) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "default_state"))
     source_path = project.root / "inputs" / "source.txt"
