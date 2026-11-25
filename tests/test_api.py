@@ -20,13 +20,6 @@ from gmxflow.pipeline import (
 )
 
 
-@dataclass(frozen=True)
-class _CommandStepView:
-    name: str
-    inputs: list[Path]
-    outputs: list[Path]
-
-
 def _write_project_config(project_dir: Path) -> Path:
     project_dir.mkdir(parents=True)
     config_path = project_dir / "project.toml"
@@ -34,20 +27,16 @@ def _write_project_config(project_dir: Path) -> Path:
     return config_path
 
 
-def _step_views(
+def _command_steps(
     project: GmxFlowProject,
     *,
     from_step: str | None = None,
     until: str | None = None,
-) -> list[_CommandStepView]:
-    """Expose concrete command data in a compact form for assertions."""
+) -> list[GromacsCommandStep]:
+    """Select GROMACS command steps from a project workflow."""
     workflow = project.workflow(from_step=from_step, until=until)
     return [
-        _CommandStepView(
-            name=step.id,
-            inputs=list(step.input_paths),
-            outputs=list(step.output_paths),
-        )
+        step
         for step in workflow.items
         if isinstance(step, GromacsCommandStep)
     ]
@@ -593,26 +582,26 @@ def test_full_project_workflow_executes_and_resumes(
         elif "analyze" in command:
             output_content = {
                 Path(output).name: "ANALYSIS\n"
-                for output in _step_views(project, until="analysis")[-1].outputs
+                for output in _command_steps(project, until="analysis")[-1].output_paths
             }
         elif "thermodynamics" in command:
             output_content = {
                 Path(output).name: "THERMODYNAMICS\n"
-                for output in _step_views(project, until="thermodynamics")[-1].outputs
+                for output in _command_steps(project, until="thermodynamics")[-1].output_paths
             }
         elif "plot-analysis" in command:
             output_content = {
                 Path(output).name: "PLOT\n"
-                for output in _step_views(project, until="plots")[-1].outputs
+                for output in _command_steps(project, until="plots")[-1].output_paths
             }
         elif "report" in command:
-            report_step = _step_views(project, until="report")[-1]
-            for output in report_step.outputs:
+            report_step = _command_steps(project, until="report")[-1]
+            for output in report_step.output_paths:
                 if not output.suffix:
                     (Path(cwd) / output.name).mkdir(exist_ok=True)
             output_content = {
                 output.name: "REPORT\n"
-                for output in report_step.outputs
+                for output in report_step.output_paths
                 if output.suffix
             }
         elif "trjconv" in command:
@@ -659,8 +648,8 @@ def test_full_project_workflow_executes_and_resumes(
     )
 
     step_indexes = {
-        step.name: index
-        for index, step in enumerate(_step_views(project, until="report"), start=1)
+        step.id: index
+        for index, step in enumerate(_command_steps(project, until="report"), start=1)
     }
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run_workflow(
@@ -794,7 +783,7 @@ def test_interaction_energy_runs_through_graph_when_enabled(
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
-        for output in _step_views(project, until="interaction-energy")[-1].outputs:
+        for output in _command_steps(project, until="interaction-energy")[-1].output_paths:
             (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -809,7 +798,7 @@ def test_interaction_energy_runs_through_graph_when_enabled(
     assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
     assert all(
         output.is_file()
-        for output in _step_views(project, until="interaction-energy")[-1].outputs
+        for output in _command_steps(project, until="interaction-energy")[-1].output_paths
     )
 
 
@@ -840,7 +829,7 @@ def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> No
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
-        for output in _step_views(project, until="sasa")[-1].outputs:
+        for output in _command_steps(project, until="sasa")[-1].output_paths:
             (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -852,7 +841,7 @@ def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> No
     assert report.results[0].step_id == "sasa"
     assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
     assert all(
-        output.is_file() for output in _step_views(project, until="sasa")[-1].outputs
+        output.is_file() for output in _command_steps(project, until="sasa")[-1].output_paths
     )
 
 
@@ -866,8 +855,8 @@ def test_plots_runs_through_graph_when_started_directly(
     (inputs_dir / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
     (inputs_dir / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
 
-    plots_step = _step_views(project, until="plots")[-1]
-    for input_path in plots_step.inputs:
+    plots_step = _command_steps(project, until="plots")[-1]
+    for input_path in plots_step.input_paths:
         input_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.write_text("PLOT_INPUT\n", encoding="utf-8")
 
@@ -881,7 +870,7 @@ def test_plots_runs_through_graph_when_started_directly(
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
-        for output in plots_step.outputs:
+        for output in plots_step.output_paths:
             (Path(cwd) / output.name).write_text("PLOT\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -892,7 +881,7 @@ def test_plots_runs_through_graph_when_started_directly(
     assert len(calls) == 1
     assert report.results[0].step_id == "plots"
     assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
-    assert all(output.is_file() for output in plots_step.outputs)
+    assert all(output.is_file() for output in plots_step.output_paths)
 
 
 def test_report_runs_through_graph_when_started_directly(
@@ -905,8 +894,8 @@ def test_report_runs_through_graph_when_started_directly(
     (inputs_dir / "receptor.pdb").write_text("ATOM\n", encoding="utf-8")
     (inputs_dir / "ligante.pdb").write_text("ATOM\n", encoding="utf-8")
 
-    report_step = _step_views(project, until="report")[-1]
-    for input_path in report_step.inputs:
+    report_step = _command_steps(project, until="report")[-1]
+    for input_path in report_step.input_paths:
         input_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.write_text("REPORT_INPUT\n", encoding="utf-8")
 
@@ -920,7 +909,7 @@ def test_report_runs_through_graph_when_started_directly(
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
-        for output in report_step.outputs:
+        for output in report_step.output_paths:
             path = Path(cwd) / output.name
             if not output.suffix:
                 path.mkdir(exist_ok=True)
@@ -935,7 +924,7 @@ def test_report_runs_through_graph_when_started_directly(
     assert len(calls) == 1
     assert report.results[0].step_id == "report"
     assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
-    assert all(output.exists() for output in report_step.outputs)
+    assert all(output.exists() for output in report_step.output_paths)
 
 
 def test_small_molecule_assembly_prefix_runs_through_graph(
@@ -970,13 +959,13 @@ def test_small_molecule_assembly_prefix_runs_through_graph(
         calls.append(tuple(command))
         subprocess_inputs.append(kwargs.get("input"))
         if "prepare-complex" in command:
-            outputs = _step_views(project, until="prepare")[0].outputs
+            outputs = _command_steps(project, until="prepare")[0].output_paths
         elif "pdb2gmx" in command:
-            outputs = _step_views(project, until="protein-topology")[-1].outputs
+            outputs = _command_steps(project, until="protein-topology")[-1].output_paths
         elif "assemble-complex" in command:
-            outputs = _step_views(project, until="assemble-complex")[-1].outputs
+            outputs = _command_steps(project, until="assemble-complex")[-1].output_paths
         else:
-            outputs = _step_views(project, until="ligand-topology")[-1].outputs
+            outputs = _command_steps(project, until="ligand-topology")[-1].output_paths
         for output in outputs:
             (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
@@ -1000,7 +989,7 @@ def test_small_molecule_assembly_prefix_runs_through_graph(
     assert subprocess_inputs[-2] == "0\n0\n"
     assert all(
         output.is_file()
-        for output in _step_views(project, until="assemble-complex")[-1].outputs
+        for output in _command_steps(project, until="assemble-complex")[-1].output_paths
     )
 
 
@@ -1021,13 +1010,13 @@ def test_small_molecule_analysis_steps_can_start_through_graph(
     config_path = project_root / "project.toml"
     config_path.write_text(to_toml(config), encoding="utf-8")
     project = GmxFlowProject.open(config_path)
-    selected_step = _step_views(project, from_step=step_name, until=step_name)[0]
+    selected_step = _command_steps(project, from_step=step_name, until=step_name)[0]
 
     inputs_dir = project_root / "inputs"
     inputs_dir.mkdir()
     for filename in ("receptor.pdb", "ligante.pdb", "ligand.mol2", "ligand.str"):
         (inputs_dir / filename).write_text("INPUT\n", encoding="utf-8")
-    for input_path in selected_step.inputs:
+    for input_path in selected_step.input_paths:
         input_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.write_text("INPUT\n", encoding="utf-8")
 
@@ -1040,7 +1029,7 @@ def test_small_molecule_analysis_steps_can_start_through_graph(
 
     def fake_subprocess_run(command, *, cwd, **kwargs):
         calls.append(tuple(command))
-        for output in selected_step.outputs:
+        for output in selected_step.output_paths:
             (Path(cwd) / output.name).write_text("SIMULATED\n", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -1054,4 +1043,4 @@ def test_small_molecule_analysis_steps_can_start_through_graph(
     assert command_name in calls[0]
     assert [result.step_id for result in report.results] == [step_name]
     assert report.results[0].status is WorkflowStepStatus.SUCCEEDED
-    assert all(output.is_file() for output in selected_step.outputs)
+    assert all(output.is_file() for output in selected_step.output_paths)
