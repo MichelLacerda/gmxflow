@@ -135,26 +135,25 @@ class GmxFlowProject:
             all_work=all_work,
         )
 
-    def workflow(
+    def steps(
         self,
         *,
         from_step: str | None = None,
         until: str | None = None,
-    ) -> WorkflowSequence:
-        """Return concrete project Steps, ready to compose with custom Steps.
+    ) -> Mapping[str, GromacsCommandStep]:
+        """Return configured concrete Steps indexed by their stable IDs.
 
-        The returned workflow is newly built and can be split, reordered, or
-        combined with ``Sequence``, ``Parallel``, and the ``|`` operator.
-        Creating it does not validate files, initialize workspaces, or execute
-        any commands.
+        This only creates step objects; it does not compose, validate, or run
+        them. Compose the desired order explicitly with ``|``.
         """
-        return build_workflow(
+        workflow = build_workflow(
             self.config,
             self.root,
             config_path=self.config_path,
             from_step=from_step,
             until=until,
         )
+        return {step.id: step for step in workflow.items}
 
     def validate(self) -> ValidationReport:
         """Check required input files, force field, and GROMACS executable.
@@ -163,7 +162,7 @@ class GmxFlowProject:
         It raises ``FileNotFoundError`` with the missing prerequisite when a
         required input, force field, or executable cannot be found.
         """
-        workflow = self.workflow()
+        workflow = WorkflowSequence(*self.steps().values())
         graph, _ = _project_workflow_graph(workflow)
         input_paths = _configured_input_paths(self.config, self.root)
         for path in input_paths:

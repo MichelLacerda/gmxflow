@@ -34,7 +34,10 @@ def test_smoke_project_runs_and_resumes_in_an_isolated_copy(
     )
     project = GmxFlowProject.open(project_dir / "project.toml")
 
-    workflow = project.workflow()
+    steps = project.steps()
+    workflow = steps["prepare"]
+    for step in tuple(steps.values())[1:]:
+        workflow = workflow | step
     first_run = project.run_workflow(workflow)
     second_run = project.run_workflow(workflow)
 

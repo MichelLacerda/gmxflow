@@ -32,7 +32,11 @@ from gmxflow.forcefields import (
     validate_forcefield_directory,
 )
 from gmxflow.ligand import prepare_ligand as prepare_ligand_files
-from gmxflow.pipeline import GromacsCommandStep, REAL_EXECUTION_STEPS
+from gmxflow.pipeline import (
+    GromacsCommandStep,
+    REAL_EXECUTION_STEPS,
+    Sequence as WorkflowSequence,
+)
 from gmxflow.preparation import prepare_complex as prepare_complex_files
 from gmxflow.project import available_templates, create_project
 from gmxflow.report import generate_report
@@ -785,16 +789,12 @@ def run(
     loaded = project.config
 
     try:
-        workflow = project.workflow(
+        steps = project.steps(
             from_step=from_step,
             until=until,
         )
-        steps = tuple(workflow.items)
-        if any(not isinstance(step, GromacsCommandStep) for step in steps):
-            raise TypeError("O workflow padrão do CLI requer etapas GROMACS concretas.")
-        concrete_steps = tuple(
-            step for step in steps if isinstance(step, GromacsCommandStep)
-        )
+        concrete_steps = tuple(steps.values())
+        workflow = WorkflowSequence(*concrete_steps)
         if strict_inputs:
             required_inputs = [loaded.input.receptor_pdb]
             if loaded.input.ligand_kind != "none":

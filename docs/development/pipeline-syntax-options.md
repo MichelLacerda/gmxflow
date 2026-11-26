@@ -626,10 +626,11 @@ projetos criados com a versão anterior.
 
 #### G. Migrar o template e os notebooks de exemplo para composição explícita — pendente
 
-**Dependência:** fechar a decisão de A sobre como obter Steps concretos a partir
-do projeto sem montar a sequência automaticamente. A migração não deve copiar
-para os notebooks uma API provisória nem manter duas formas públicas de
-composição.
+**Dependência (decidida):** `project.steps()` retorna um mapeamento ordenado
+`{step_id: Step}` com instâncias configuradas, sem compô-las. O notebook escolhe
+as etapas pelo ID e conecta explicitamente com `|`; `project.workflow()` deixa
+de ser uma API pública. O CLI e a validação podem compor internamente a
+sequência padrão.
 
 **Escopo:** atualizar primeiro `src/gmxflow/templates/project.ipynb` e seus
 testes; depois migrar os `project.ipynb` de `examples/` e alinhar a
@@ -641,9 +642,9 @@ resultante a `project.run_workflow(...)`.
 exemplos; reescrever notebooks de referência que não sejam gerados pelo gmxflow.
 
 **Aceite:** testes verificam que template e exemplos exibem a composição,
-preservam a sequência científica configurada e não chamam `project.workflow()`
-para montar silenciosamente o workflow completo. A execução smoke continua
-sendo apenas validação de integração do software.
+preservam a sequência científica configurada e não montam silenciosamente o
+workflow completo. A execução smoke continua sendo apenas validação de
+integração do software.
 
 ### Decisões adiadas
 

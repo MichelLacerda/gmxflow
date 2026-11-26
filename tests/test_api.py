@@ -34,12 +34,20 @@ def _command_steps(
     until: str | None = None,
 ) -> list[GromacsCommandStep]:
     """Select GROMACS command steps from a project workflow."""
-    workflow = project.workflow(from_step=from_step, until=until)
-    return [
-        step
-        for step in workflow.items
-        if isinstance(step, GromacsCommandStep)
-    ]
+    return list(project.steps(from_step=from_step, until=until).values())
+
+
+def _project_workflow(
+    project: GmxFlowProject,
+    *,
+    from_step: str | None = None,
+    until: str | None = None,
+):
+    steps = tuple(project.steps(from_step=from_step, until=until).values())
+    workflow = steps[0]
+    for step in steps[1:]:
+        workflow = workflow | step
+    return workflow
 
 
 @dataclass
@@ -123,18 +131,15 @@ def test_project_workflow_uses_default_state_file(tmp_path: Path) -> None:
     assert (project.root / "work" / "state.json").is_file()
 
 
-def test_project_workflow_builds_concrete_steps_for_composition(
+def test_project_steps_exposes_concrete_steps_without_composing(
     tmp_path: Path,
 ) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "workflow_api"))
 
-    workflow = project.workflow(until="topology")
-    steps = tuple(
-        step for step in workflow.items if isinstance(step, GromacsCommandStep)
-    )
+    steps = project.steps(until="topology")
 
-    assert len(steps) == len(workflow.items)
-    assert [step.id for step in steps] == ["prepare", "topology"]
+    assert list(steps) == ["prepare", "topology"]
+    assert all(isinstance(step, GromacsCommandStep) for step in steps.values())
     assert not (project.root / "work").exists()
 
 
@@ -142,8 +147,7 @@ def test_project_workflow_composes_and_runs_custom_protocol_step(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "mixed_workflow"))
-    base_workflow = project.workflow(from_step="solvate", until="solvate")
-    solvate_step = base_workflow.items[0]
+    solvate_step = project.steps(from_step="solvate", until="solvate")["solvate"]
     assert isinstance(solvate_step, GromacsCommandStep)
     source = next(
         artifact for artifact in solvate_step.outputs if artifact.kind == "gro"
@@ -152,7 +156,7 @@ def test_project_workflow_composes_and_runs_custom_protocol_step(
     custom_step: Step = _CopyArtifactStep(
         "custom-copy", "Copy solvated coordinates", (source,), (target,)
     )
-    workflow = base_workflow | custom_step
+    workflow = solvate_step | custom_step
     for input_path in solvate_step.input_paths:
         input_path.parent.mkdir(parents=True, exist_ok=True)
         input_path.write_text("GROMACS INPUT\n", encoding="utf-8")
@@ -203,11 +207,10 @@ def test_composed_project_workflow_dry_run_does_not_prepare_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project = GmxFlowProject.open(_write_project_config(tmp_path / "dry_workflow"))
-    base_workflow = project.workflow(from_step="topology", until="topology")
-    topology_step = base_workflow.items[0]
+    topology_step = project.steps(from_step="topology", until="topology")["topology"]
     assert isinstance(topology_step, GromacsCommandStep)
     target = Artifact("custom:dry-copy", "gro")
-    workflow = base_workflow | _CopyArtifactStep(
+    workflow = topology_step | _CopyArtifactStep(
         "custom-copy",
         "Copy topology coordinates",
         (next(item for item in topology_step.outputs if item.kind == "gro"),),
@@ -629,7 +632,7 @@ def test_full_project_workflow_executes_and_resumes(
     }
     callback_events: list[tuple[str, int, str]] = []
     graph_report = project.run_workflow(
-        project.workflow(until="report"),
+        _project_workflow(project, until="report"),
         on_step_start=lambda step: callback_events.append(
             ("start", step_indexes[step.id], step.id)
         ),
@@ -637,7 +640,7 @@ def test_full_project_workflow_executes_and_resumes(
             ("done", step_indexes[result.step_id], result.step_id)
         ),
     )
-    resumed_report = project.run_workflow(project.workflow(until="report"))
+    resumed_report = project.run_workflow(_project_workflow(project, until="report"))
     assert len(graph_report.results) == 21
     assert graph_report.succeeded
     assert all(
@@ -766,7 +769,7 @@ def test_interaction_energy_runs_through_graph_when_enabled(
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
     report = project.run_workflow(
-        project.workflow(from_step="interaction-energy", until="interaction-energy")
+        _project_workflow(project, from_step="interaction-energy", until="interaction-energy")
     )
 
     assert len(calls) == 1
@@ -811,7 +814,7 @@ def test_sasa_runs_through_graph_when_enabled(tmp_path: Path, monkeypatch) -> No
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run_workflow(project.workflow(from_step="sasa", until="sasa"))
+    report = project.run_workflow(_project_workflow(project, from_step="sasa", until="sasa"))
 
     assert len(calls) == 1
     assert report.results[0].step_id == "sasa"
@@ -852,7 +855,7 @@ def test_plots_runs_through_graph_when_started_directly(
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run_workflow(project.workflow(from_step="plots", until="plots"))
+    report = project.run_workflow(_project_workflow(project, from_step="plots", until="plots"))
 
     assert len(calls) == 1
     assert report.results[0].step_id == "plots"
@@ -895,7 +898,7 @@ def test_report_runs_through_graph_when_started_directly(
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run_workflow(project.workflow(from_step="report", until="report"))
+    report = project.run_workflow(_project_workflow(project, from_step="report", until="report"))
 
     assert len(calls) == 1
     assert report.results[0].step_id == "report"
@@ -948,7 +951,7 @@ def test_small_molecule_assembly_prefix_runs_through_graph(
 
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
-    report = project.run_workflow(project.workflow(until="assemble-complex"))
+    report = project.run_workflow(_project_workflow(project, until="assemble-complex"))
 
     assert len(calls) == 4
     assert [result.step_id for result in report.results] == [
@@ -1012,7 +1015,7 @@ def test_small_molecule_analysis_steps_can_start_through_graph(
     monkeypatch.setattr("gmxflow.executor.subprocess.run", fake_subprocess_run)
 
     report = project.run_workflow(
-        project.workflow(from_step=step_name, until=step_name)
+        _project_workflow(project, from_step=step_name, until=step_name)
     )
 
     assert len(calls) == 1
