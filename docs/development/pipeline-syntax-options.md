@@ -455,8 +455,9 @@ Retrocompatibilidade com a projeção antiga não é requisito para esta versão
 ainda não publicada.
 
 **Estado atual:** exemplos e template de novos projetos usam a API composta.
-Os passos F e G continuam em andamento até a remoção dos adaptadores públicos
-redundantes e a atualização final da documentação e dos exemplos.
+Os passos F e G continuam em andamento: F remove código e testes redundantes;
+G migra o template e os notebooks de exemplo depois que a API para obter Steps
+concretos estiver definida.
 
 O uso atual de `project.workflow()` seguido de `project.run_workflow()` é uma
 ponte intermediária: a primeira chamada esconde a lista de etapas que deveria
@@ -508,6 +509,14 @@ diretamente os Steps concretos.
 - Resolver explicitamente como um Step que satisfaz o `Protocol` participa do
   operador `|` — por mixin/base composável ou outra decisão única — antes de
   declarar o contrato estável. Não manter duas sintaxes públicas equivalentes.
+
+**Situação verificada no código:** `Step` é um `Protocol` estrutural e
+`ComposableStep` é um mixin que fornece `__or__`. As etapas GROMACS concretas
+herdam esse mixin; uma extensão que precise iniciar uma expressão com
+`custom_step | ...` também precisa implementá-lo ou herdá-lo. Ainda falta
+definir como o projeto expõe Steps concretos nomeados sem compor
+automaticamente um workflow. Essa decisão de API não deve ser inventada durante
+a migração dos notebooks.
 
 **Aceite:** o notebook gerado deixa visíveis as classes/etapas, sua ordem,
 ramos de `Parallel` e artefatos; os parâmetros científicos ficam explícitos
@@ -614,6 +623,27 @@ nunca evidência científica.
 **Critério de aceite:** suíte completa aprovada, documentação distingue
 funcionalidade disponível de planos futuros, e há orientação clara para
 projetos criados com a versão anterior.
+
+#### G. Migrar o template e os notebooks de exemplo para composição explícita — pendente
+
+**Dependência:** fechar a decisão de A sobre como obter Steps concretos a partir
+do projeto sem montar a sequência automaticamente. A migração não deve copiar
+para os notebooks uma API provisória nem manter duas formas públicas de
+composição.
+
+**Escopo:** atualizar primeiro `src/gmxflow/templates/project.ipynb` e seus
+testes; depois migrar os `project.ipynb` de `examples/` e alinhar a
+documentação gerada. Os notebooks devem listar a composição realmente
+executada com `|` e `Parallel(...)`, quando aplicável, e passar o objeto
+resultante a `project.run_workflow(...)`.
+
+**Fora de escopo:** mudar parâmetros científicos ou a ordem das etapas dos
+exemplos; reescrever notebooks de referência que não sejam gerados pelo gmxflow.
+
+**Aceite:** testes verificam que template e exemplos exibem a composição,
+preservam a sequência científica configurada e não chamam `project.workflow()`
+para montar silenciosamente o workflow completo. A execução smoke continua
+sendo apenas validação de integração do software.
 
 ### Decisões adiadas
 
