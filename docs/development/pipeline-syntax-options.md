@@ -624,7 +624,7 @@ nunca evidência científica.
 funcionalidade disponível de planos futuros, e há orientação clara para
 projetos criados com a versão anterior.
 
-#### G. Migrar o template e os notebooks de exemplo para composição explícita — pendente
+#### G. Migrar o template e os notebooks de exemplo para composição explícita — em andamento
 
 **Dependência (decidida):** `project.steps()` retorna um mapeamento ordenado
 `{step_id: Step}` com instâncias configuradas, sem compô-las. O notebook escolhe
@@ -637,6 +637,11 @@ testes; depois migrar os `project.ipynb` de `examples/` e alinhar a
 documentação gerada. Os notebooks devem listar a composição realmente
 executada com `|` e `Parallel(...)`, quando aplicável, e passar o objeto
 resultante a `project.run_workflow(...)`.
+
+**Progresso:** o template e o README gerado agora mostram a sequência com
+`project.steps()` e `|`, incluindo os caminhos condicionais de topologia para
+moléculas pequenas e as análises opcionais. Os notebooks de `examples/` ainda
+estão pendentes.
 
 **Fora de escopo:** mudar parâmetros científicos ou a ordem das etapas dos
 exemplos; reescrever notebooks de referência que não sejam gerados pelo gmxflow.

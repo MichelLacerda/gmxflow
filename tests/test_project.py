@@ -46,10 +46,26 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     )
+    compile(notebook_code, str(notebook_path), "exec")
     assert "GmxFlowProject.open('project.toml')" in notebook_code
     assert "project.edit_config()" in notebook_code
     assert "project.validate()" in notebook_code
-    assert "workflow = project.workflow()" in notebook_code
+    assert 'steps = project.steps()' in notebook_code
+    assert 'steps["prepare"]' in notebook_code
+    assert 'steps["topology"]' in notebook_code
+    assert 'steps["ligand-topology"]' in notebook_code
+    assert 'steps["interaction-energy"]' in notebook_code
+    assert 'steps["sasa"]' in notebook_code
+    assert 'steps["plots"]' in notebook_code
+    assert " | " in notebook_code
+    assert "project.workflow()" not in notebook_code
+    assert notebook_code.index('steps["prepare"]') < notebook_code.index('steps["box"]')
+    assert notebook_code.index('steps["box"]') < notebook_code.index('steps["solvate"]')
+    assert notebook_code.index('steps["solvate"]') < notebook_code.index('steps["production"]')
+    assert notebook_code.index('steps["production"]') < notebook_code.index('steps["analysis"]')
+    assert notebook_code.index('steps["analysis"]') < notebook_code.index('steps["thermodynamics"]')
+    assert notebook_code.index('steps["thermodynamics"]') < notebook_code.index('steps["plots"]')
+    assert notebook_code.index('steps["plots"]') < notebook_code.index('steps["report"]')
     assert "execution_report = project.run_workflow(workflow)" in notebook_code
     assert "project.show_execution(execution_report)" in notebook_code
     assert "project.show_report()" in notebook_code
@@ -79,6 +95,7 @@ def test_create_project_writes_expected_files(tmp_path: Path) -> None:
     assert "## Como usar" in readme_text
     assert "## Configuração" in readme_text
     assert "project.show_report()" in readme_text
+    assert "project.steps()" in readme_text
     assert "project.run_workflow(workflow)" in readme_text
     assert "outputs/report.html" in readme_text
     assert "gmxflow prepare-complex --project project.toml" in readme_text
