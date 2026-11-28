@@ -39,6 +39,7 @@ from gmxflow.pipeline import (
     ThermodynamicsStep,
     NvtEquilibrationStep,
     WorkflowGraph,
+    Workflow,
     build_workflow,
 )
 
@@ -172,6 +173,41 @@ def test_workflow_graph_builds_sequence_dependencies_from_artifacts() -> None:
         "topology": "topology",
     }
     assert graph.topological_order == ("prepare", "topology")
+
+
+def test_workflow_is_immutable_and_info_is_structured() -> None:
+    source = Artifact("source.pdb", "pdb")
+    result = Artifact("result.gro", "gro")
+    workflow = Workflow(
+        Sequence(
+            _GraphStep("prepare", "Prepare", (source,), (result,)),
+            _GraphStep("analyze", "Analyze", (result,), ()),
+        )
+    )
+
+    assert workflow.info() == {
+        "steps": [
+            {
+                "id": "prepare",
+                "name": "Prepare",
+                "inputs": ["source.pdb"],
+                "outputs": ["result.gro"],
+            },
+            {
+                "id": "analyze",
+                "name": "Analyze",
+                "inputs": ["result.gro"],
+                "outputs": [],
+            },
+        ]
+    }
+    with pytest.raises(AttributeError):
+        workflow.steps = ()
+
+
+def test_workflow_rejects_parallel_items() -> None:
+    with pytest.raises(TypeError, match="não aceita Parallel"):
+        Workflow(Parallel(_GraphStep("left", "Left"), _GraphStep("right", "Right")))
 
 
 def test_workflow_graph_parallel_branches_join_before_following_step() -> None:

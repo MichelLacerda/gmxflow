@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from gmxflow.config import default_config
-from gmxflow.project import available_templates, create_project, render_template
+from gmxflow.project import Project, available_templates, create_project, render_template
 
 
 def test_available_templates_contains_mdp_templates() -> None:
@@ -18,6 +18,17 @@ def test_available_templates_contains_mdp_templates() -> None:
         "md.mdp.j2",
         "rerun.mdp.j2",
     }.issubset(templates)
+
+
+def test_domain_project_open_loads_config_and_resolves_root(tmp_path: Path) -> None:
+    config_path = tmp_path / "project.toml"
+    config_path.write_text('[project]\nname = "domain-test"\n', encoding="utf-8")
+
+    project = Project.open(config_path)
+
+    assert project.config.project.name == "domain-test"
+    assert project.config_path == config_path.resolve()
+    assert project.root == tmp_path.resolve()
 
 
 def test_render_md_template_uses_computed_production_steps() -> None:

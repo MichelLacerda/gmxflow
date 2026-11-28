@@ -1,11 +1,30 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
-from gmxflow.config import GmxFlowConfig, default_config, to_toml
+from gmxflow.config import GmxFlowConfig, default_config, load_config, to_toml
+
+
+@dataclass(frozen=True)
+class Project:
+    """Domain view of a project configuration and its filesystem location."""
+
+    config_path: Path
+    config: GmxFlowConfig
+
+    @classmethod
+    def open(cls, config_path: str | Path = "project.toml") -> Project:
+        path = Path(config_path).expanduser().resolve()
+        return cls(config_path=path, config=load_config(path))
+
+    @property
+    def root(self) -> Path:
+        return self.config_path.parent
+
 
 PROJECT_DIRS = (
     "inputs",

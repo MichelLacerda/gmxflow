@@ -1274,6 +1274,62 @@ WorkflowItem: TypeAlias = Step | Sequence | Parallel
 
 
 @dataclass(frozen=True)
+class WorkflowStepDescription:
+    id: str
+    name: str
+    inputs: tuple[str, ...]
+    outputs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Workflow:
+    """Immutable, inspectable description of an explicitly composed workflow.
+
+    This description does not execute steps or perform filesystem operations.
+    """
+
+    steps: tuple[WorkflowStepDescription, ...]
+
+    def __init__(self, workflow: WorkflowItem) -> None:
+        descriptions = tuple(
+            WorkflowStepDescription(
+                id=step.id,
+                name=step.name,
+                inputs=tuple(artifact.key for artifact in step.inputs),
+                outputs=tuple(artifact.key for artifact in step.outputs),
+            )
+            for step in _flatten_workflow_items(workflow)
+        )
+        object.__setattr__(self, "steps", descriptions)
+        if not descriptions:
+            raise ValueError("Workflow precisa conter ao menos uma etapa")
+
+    def info(self) -> dict[str, object]:
+        """Return a structured summary without running or modifying the workflow."""
+        return {
+            "steps": [
+                {
+                    "id": step.id,
+                    "name": step.name,
+                    "inputs": list(step.inputs),
+                    "outputs": list(step.outputs),
+                }
+                for step in self.steps
+            ]
+        }
+
+
+def _flatten_workflow_items(workflow: WorkflowItem) -> Iterable[Step]:
+    if isinstance(workflow, Sequence):
+        for item in workflow.items:
+            yield from _flatten_workflow_items(item)
+    elif isinstance(workflow, Parallel):
+        raise TypeError("Workflow linear não aceita Parallel")
+    else:
+        yield workflow
+
+
+@dataclass(frozen=True)
 class WorkflowGraph:
     """Validated dependency graph consumed by the workflow executor."""
 

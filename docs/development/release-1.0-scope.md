@@ -247,6 +247,12 @@ implementação e efeitos externos.
 colaterais; erros/valores de retorno documentados; testes unitários para
 contratos e serialização de estado relevante.
 
+O primeiro recorte implementa `Project.open()` e a descrição imutável
+`Workflow.info()` para etapas já compostas. `Project.pipeline` fica para a
+Etapa 2: antes do catálogo explícito de métodos, ele apenas duplicaria a
+composição completa feita por `build_workflow()` e manteria dois caminhos de
+composição ativos.
+
 ### Etapa 2 — Criar `PipelineBuilder` lazy e linear
 
 **Escopo:** `Project.open("project.toml")`, `project.pipeline`, métodos
